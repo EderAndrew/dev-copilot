@@ -5,7 +5,7 @@ teste **não confidenciais** (Art. IV.16).
 
 ## 1. Pré-requisitos
 
-- Node.js >= 24, pnpm 11, Rust estável (edition 2024).
+- Node.js >= 24, pnpm 11, Rust estável (edition 2024), CMake ≥ 3.5 (compila o whisper.cpp do `whisper-rs`).
 - Dependências de sistema do Tauri 2 para o SO.
 - Linux: `libwebkit2gtk-4.1-dev`, `libasound2-dev`, `libpulse-dev` (spike S1), um provedor de Secret Service
   ativo (GNOME Keyring ou KWallet) — sem ele o app bloqueia a captura por design (FR-039a).
@@ -70,4 +70,17 @@ Registrar resultados na matriz `specs/001-meeting-sessions/acceptance-matrix.md`
 
 ## 5. Hardware de referência (SC-005)
 
-A definir no spike S2 e registrar aqui: modelo de CPU/GPU, RAM, versão do SO e modelo de transcrição por SO.
+Spike S2 (T067, detalhes em `docs/adr/ADR-003.md`). Medir com:
+
+```sh
+DEVCOPILOT_MODEL_DOWNLOAD_DIR=/tmp/models \
+  cargo test -p devcopilot-intelligence --release --test whisper_local pinned_model_downloads_from_origin -- --ignored --nocapture
+DEVCOPILOT_WHISPER_MODEL=/tmp/models/ggml-base.bin \
+  cargo test -p devcopilot-intelligence --release --test whisper_local -- --ignored --nocapture --test-threads=1
+```
+
+| SO | CPU/GPU | RAM | Versão do SO | Modelo | Resultado |
+|----|---------|-----|--------------|--------|-----------|
+| macOS | Apple M4 | 16 GB | 27.0.1 | `base` | parcial ≈ 2,3 s após início da fala; final ≈ 0,2 s após fechar a janela — atende |
+| Windows | a medir | | | | |
+| Linux | a medir | | | | |

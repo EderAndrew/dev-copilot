@@ -79,6 +79,32 @@ export type ProviderSetDefaultDto = {
   providerId: string;
 };
 
+// Local transcription models (contracts/ipc-commands.md "Provedores e autorização") ---------
+
+export type LocalModelDto = {
+  /** Catalog id; the `model` of a `whisper_local` provider. */
+  id: string;
+  displayName: string;
+  /** Host the file is downloaded from. */
+  origin: string;
+  sizeBytes: number;
+  downloaded: boolean;
+  downloading: boolean;
+};
+
+export type LocalModelDownloadDto = { modelId: string };
+export type JobIdDto = { jobId: string };
+
+export type ModelDownloadEvent =
+  | {
+      type: "progress";
+      jobId: string;
+      receivedBytes: number;
+      totalBytes: number;
+    }
+  | { type: "completed"; jobId: string }
+  | { type: "failed"; jobId: string; messageKey: string };
+
 // Session events (contracts/ipc-events.md) ------------------------------------------------------
 
 export type SessionState =

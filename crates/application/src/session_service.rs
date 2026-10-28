@@ -1,6 +1,9 @@
 //! Session use cases: create, start, cancel start, stop, and startup recovery (FR-001–FR-012,
 //! FR-039a, FR-045a). Pause and resume arrive with US9 (T145).
 //!
+//! While capturing, the audio queue feeds the session's [`Transcription`], which persists
+//! finals and gaps as they arrive (US2).
+//!
 //! Controls never wait for audio or providers (SC-006): `start` checks the preconditions,
 //! moves the session to `starting` and returns while a background task asks for permission and
 //! opens the sources; `stop` closes the sources, switches the indicator off and returns while
@@ -10,25 +13,27 @@
 //! one lock together with its pipeline; every state change is persisted and published while
 //! that lock is held, so events reflect the order of transitions.
 
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
 use devcopilot_domain::ids::SessionId;
 use devcopilot_domain::language::SessionLanguage;
 use devcopilot_domain::session::{FailureReason, Session, SessionState};
 use devcopilot_domain::text::Title;
+use devcopilot_domain::transcript::GapReason;
 use tokio::runtime::Handle;
-use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use crate::capture_pipeline::{self, CapturePipeline, FaultStream, OpenError, indicator};
+use crate::capture_pipeline::{CapturePipeline, FaultStream, OpenError, indicator};
 use crate::error::ApplicationError;
-use crate::events::{SessionEvent, SourceStatus};
+use crate::events::{ProviderStage, SessionEvent, SourceStatus};
 use crate::ports::{
-    AudioError, AudioSource, Clock, EventPublisher, SecretStore, SessionRepository, SourceFault,
+    AudioError, AudioSource, Clock, EventPublisher, SecretStore, SegmentRepository,
+    SessionRepository, SourceFault, Transcriber, TranscriberFactory,
 };
 use crate::provider_service::ProviderService;
 use crate::settings_service::SettingsService;
+use crate::transcription::{Transcription, TranscriptionDeps};
 
 /// How long `stop` lets in-flight processing finish before cancelling it (SC-002).
 pub const DRAIN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
@@ -40,6 +45,10 @@ const STORAGE_ERROR_KEY: &str = "errors.storageError";
 pub struct SessionDeps {
     /// Session storage.
     pub sessions: Arc<dyn SessionRepository>,
+    /// Transcript storage.
+    pub segments: Arc<dyn SegmentRepository>,
+    /// Builds the transcriber of the resolved provider (FR-045a).
+    pub transcribers: Arc<dyn TranscriberFactory>,
     /// Resolves the transcription provider (FR-045a).
     pub providers: Arc<ProviderService>,
     /// Consent-reminder preference (FR-012).
@@ -80,7 +89,7 @@ struct Active {
     session: Session,
     cancel: CancellationToken,
     pipeline: Option<CapturePipeline>,
-    consumer: Option<JoinHandle<()>>,
+    transcription: Option<Transcription>,
 }
 
 struct Inner {
@@ -238,7 +247,15 @@ impl SessionService {
             });
         }
         inner.deps.secrets.check_available()?;
-        inner.deps.providers.resolve_transcriber()?;
+        let provider = inner.deps.providers.resolve_transcriber()?;
+        let transcriber = inner
+            .deps
+            .transcribers
+            .create(&provider, session.language())
+            .map_err(|err| {
+                tracing::warn!(session = %id, provider = %provider.id(), error = %err, "transcriber unavailable");
+                ApplicationError::NoTranscriber
+            })?;
         let sources = session
             .sources()
             .iter()
@@ -258,12 +275,12 @@ impl SessionService {
             session: session.clone(),
             cancel: cancel.clone(),
             pipeline: None,
-            consumer: None,
+            transcription: None,
         });
         inner.publish_state(&session);
         drop(active);
         tracing::info!(session = %id, "session starting");
-        runtime.spawn(Arc::clone(inner).finish_start(id, cancel, sources));
+        runtime.spawn(Arc::clone(inner).finish_start(id, cancel, sources, transcriber));
         Ok(session)
     }
 
@@ -321,14 +338,19 @@ impl SessionService {
         let session = active.session.clone();
         inner.persist(&session);
         inner.publish_state(&session);
-        let consumer = active.consumer.take();
+        let transcription = active.transcription.take();
         drop(guard);
         tracing::info!(session = %id, "session stopping");
-        match Handle::try_current() {
-            Ok(runtime) => {
-                runtime.spawn(Arc::clone(inner).drain(id, consumer));
+        match (Handle::try_current(), transcription) {
+            (Ok(runtime), transcription) => {
+                runtime.spawn(Arc::clone(inner).drain(id, transcription));
             }
-            Err(_) => inner.finish_drain(id),
+            (Err(_), transcription) => {
+                if let Some(transcription) = transcription {
+                    transcription.abort(Some(GapReason::CancelledOnStop));
+                }
+                inner.finish_drain(id);
+            }
         }
         Ok(session)
     }
@@ -434,6 +456,16 @@ impl Inner {
         if let Some(mut pipeline) = active.pipeline.take() {
             pipeline.close_all();
         }
+        if let Some(transcription) = active.transcription.take() {
+            // Audio not yet finalized is lost with the source; storage and transcriber
+            // failures already recorded what they could.
+            let gap = matches!(
+                reason,
+                FailureReason::SourceUnavailable | FailureReason::PermissionDenied
+            )
+            .then_some(GapReason::SourceLost);
+            transcription.abort(gap);
+        }
         if active.session.fail(reason, self.deps.clock.now()).is_err() {
             return;
         }
@@ -451,6 +483,7 @@ impl Inner {
         id: SessionId,
         cancel: CancellationToken,
         sources: Vec<Arc<dyn AudioSource>>,
+        transcriber: Arc<dyn Transcriber>,
     ) {
         for source in &sources {
             if source.permission().is_granted() {
@@ -468,7 +501,7 @@ impl Inner {
         if cancel.is_cancelled() {
             return;
         }
-        if let Some(faults) = self.open_sources(id, &cancel, &sources) {
+        if let Some(faults) = self.open_sources(id, &cancel, &sources, transcriber) {
             Arc::clone(&self).supervise(id, cancel, faults).await;
         }
     }
@@ -476,10 +509,11 @@ impl Inner {
     /// Opens the sources and moves the session to `capturing`; the fault stream to supervise
     /// on success.
     fn open_sources(
-        &self,
+        self: &Arc<Self>,
         id: SessionId,
         cancel: &CancellationToken,
         sources: &[Arc<dyn AudioSource>],
+        transcriber: Arc<dyn Transcriber>,
     ) -> Option<FaultStream> {
         // Opening may take a moment on real devices; the lock is not held meanwhile, so a
         // cancel can still land. Anything opened is closed if it did.
@@ -501,9 +535,31 @@ impl Inner {
             self.fail_active(&mut guard, FailureReason::Internal);
             return None;
         }
+        let first_seq = match self.deps.segments.next_seq(id) {
+            Ok(seq) => seq,
+            Err(err) => {
+                tracing::error!(session = %id, error = %err, "transcript unavailable");
+                self.fail_active(&mut guard, FailureReason::StorageError);
+                return None;
+            }
+        };
+        let descriptor = transcriber.descriptor();
         let sources = pipeline.active_sources();
         active.pipeline = Some(pipeline);
-        active.consumer = Some(capture_pipeline::discard_audio(streams.chunks));
+        active.transcription = Some(Transcription::spawn(
+            TranscriptionDeps {
+                session_id: id,
+                session_sources: active.session.sources().to_vec(),
+                // Offsets continue after earlier captures of the session (pause, US9).
+                offset_base: active.session.active_duration(),
+                first_seq,
+                transcriber,
+                segments: Arc::clone(&self.deps.segments),
+                events: Arc::clone(&self.deps.events),
+                on_fatal: self.fatal_handler(id, cancel.clone()),
+            },
+            streams.chunks,
+        ));
         let session = active.session.clone();
         if !self.persist(&session) {
             self.fail_active(&mut guard, FailureReason::StorageError);
@@ -511,8 +567,44 @@ impl Inner {
         }
         self.publish_state(&session);
         self.publish(id, indicator(true, false, sources));
+        self.publish(
+            id,
+            SessionEvent::ProviderInUse {
+                stage: ProviderStage::Transcription,
+                locality: descriptor.locality,
+                provider_id: descriptor.id,
+            },
+        );
         tracing::info!(session = %id, "session capturing");
         Some(streams.faults)
+    }
+
+    /// Lets the transcription fail the session it belongs to, while that session still
+    /// captures (a failure during the stop drain leaves the session to end normally).
+    fn fatal_handler(
+        self: &Arc<Self>,
+        id: SessionId,
+        cancel: CancellationToken,
+    ) -> crate::transcription::FatalHandler {
+        let weak: Weak<Self> = Arc::downgrade(self);
+        Arc::new(move |reason| {
+            let Some(inner) = weak.upgrade() else {
+                return;
+            };
+            let mut guard = inner.lock();
+            let current = guard
+                .as_ref()
+                .filter(|active| active.session.id() == id)
+                .map(|active| active.session.state());
+            if !cancel.is_cancelled()
+                && matches!(
+                    current,
+                    Some(SessionState::Capturing | SessionState::Paused)
+                )
+            {
+                inner.fail_active(&mut guard, reason);
+            }
+        })
     }
 
     fn fail_starting(&self, cancel: &CancellationToken, reason: FailureReason) {
@@ -585,16 +677,9 @@ impl Inner {
     }
 
     /// Background part of `stop`.
-    async fn drain(self: Arc<Self>, id: SessionId, consumer: Option<JoinHandle<()>>) {
-        if let Some(consumer) = consumer {
-            let abort = consumer.abort_handle();
-            if tokio::time::timeout(DRAIN_DEADLINE, consumer)
-                .await
-                .is_err()
-            {
-                abort.abort();
-                tracing::warn!(session = %id, "drain deadline reached");
-            }
+    async fn drain(self: Arc<Self>, id: SessionId, transcription: Option<Transcription>) {
+        if let Some(transcription) = transcription {
+            transcription.drain(DRAIN_DEADLINE).await;
         }
         self.finish_drain(id);
     }

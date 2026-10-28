@@ -7,6 +7,9 @@ import type {
   AudioSourceKind,
   ErrorCode,
   IpcError,
+  JobIdDto,
+  LocalModelDto,
+  ModelDownloadEvent,
   PermissionHelpDto,
   PermissionState,
   ProviderDto,
@@ -70,6 +73,19 @@ export const ipc = {
     call<ProviderDto>("provider_upsert", { request }),
   providerSetDefault: (request: ProviderSetDefaultDto) =>
     call<void>("provider_set_default", { request }),
+  localModelList: () => call<LocalModelDto[]>("local_model_list"),
+  /** Downloads a catalog model by explicit user action; progress goes to `onEvent`. */
+  localModelDownload: (
+    modelId: string,
+    onEvent: (event: ModelDownloadEvent) => void,
+  ) => {
+    const channel = new Channel<ModelDownloadEvent>();
+    channel.onmessage = onEvent;
+    return call<JobIdDto>("local_model_download", {
+      request: { modelId },
+      channel,
+    });
+  },
   sessionCreate: (request: SessionCreateDto) =>
     call<SessionDto>("session_create", { request }),
   sessionStart: (request: SessionStartDto) =>

@@ -117,6 +117,51 @@
     "authorizationRequired": "Este provedor remoto precisa da sua autorização antes de receber dados.",
     "providerError": "O provedor falhou. Tente novamente mais tarde.",
     "storageError": "Não foi possível gravar os dados localmente.",
-    "internal": "Ocorreu um erro inesperado."
+    "internal": "Ocorreu um erro inesperado.",
+    "modelDownloadNetwork": "Não foi possível baixar o modelo. Verifique a conexão e tente de novo.",
+    "modelVerificationFailed": "O arquivo baixado não confere com o modelo esperado e foi descartado.",
+    "modelDownloadStorage": "Não foi possível gravar o modelo no disco.",
+    "modelDownloadCancelled": "Download cancelado."
+  },
+  "transcript": {
+    "title": "Transcrição",
+    "regionLabel": "Transcrição da sessão",
+    "empty": "A transcrição aparece aqui assim que alguém falar.",
+    "at": "aos {{time}}",
+    "partialLabel": "Parcial, ainda em reconhecimento:",
+    "gap": "Lacuna na transcrição ({{duration}}): {{reason}}",
+    "gapReason": {
+      "paused": "captura pausada",
+      "overload": "áudio descartado por sobrecarga",
+      "provider_failure": "falha do provedor de transcrição",
+      "cancelled_on_stop": "transcrição interrompida ao parar",
+      "source_lost": "fonte de áudio perdida",
+      "interrupted": "aplicativo encerrado durante a captura"
+    },
+    "lag": "A transcrição está atrasada cerca de {{seconds}} s em relação ao áudio.",
+    "followLatest": "Voltar ao trecho mais recente"
+  },
+  "providerInUse": {
+    "label": "Provedores em uso",
+    "item": "{{stage}}: {{locality}}",
+    "stage": {
+      "transcription": "Transcrição",
+      "analysis": "Análise",
+      "questions": "Perguntas"
+    },
+    "locality": {
+      "local": "local (neste computador)",
+      "remote": "remoto"
+    }
+  },
+  "models": {
+    "title": "Modelos locais de transcrição",
+    "help": "A transcrição local usa um modelo baixado uma única vez. O download só começa quando você pede e não envia nenhum dado das sessões.",
+    "size": "{{size}} MB",
+    "origin": "origem: {{origin}}",
+    "inUse": "(em uso)",
+    "download": "Baixar {{name}}",
+    "downloading": "Baixando…",
+    "use": "Usar {{name}} para transcrever"
   }
 }

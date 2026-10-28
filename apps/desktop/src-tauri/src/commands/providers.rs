@@ -1,4 +1,5 @@
-//! `provider_list`, `provider_upsert` (local providers) and `provider_set_default`.
+//! `provider_list`, `provider_upsert` (local providers), `provider_set_default`, and the local
+//! model commands `local_model_list` and `local_model_download`.
 //!
 //! Remote providers, secrets and authorization commands arrive with US7 (T140).
 
@@ -11,10 +12,12 @@ use devcopilot_domain::provider::{
 };
 use serde::{Deserialize, Serialize};
 use tauri::State;
+use tauri::ipc::Channel;
 
 use super::IpcError;
 use crate::composition::AppState;
 use crate::dto::Code;
+use crate::models::{LocalModelDto, LocalModels, ModelDownloadEvent};
 
 /// Provider as listed to the UI; never contains secrets.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,6 +151,55 @@ pub async fn provider_set_default(
     let id = ProviderId::parse(&request.provider_id)?;
     state.core()?.providers.set_default(request.role.0, id)?;
     Ok(())
+}
+
+/// `local_model_download` input.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[allow(missing_docs)]
+pub struct LocalModelDownloadDto {
+    pub model_id: String,
+}
+
+/// `local_model_download` output.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[allow(missing_docs)]
+pub struct JobIdDto {
+    pub job_id: String,
+}
+
+fn models(state: &AppState) -> Result<&std::sync::Arc<LocalModels>, IpcError> {
+    state.models.as_ref().ok_or_else(|| {
+        IpcError::from(devcopilot_application::ApplicationError::Internal(
+            "app data directory unavailable".into(),
+        ))
+    })
+}
+
+/// Downloadable transcription models with origin, size and local state.
+///
+/// # Errors
+///
+/// `internal` without an app data directory.
+#[tauri::command]
+pub async fn local_model_list(state: State<'_, AppState>) -> Result<Vec<LocalModelDto>, IpcError> {
+    Ok(models(&state)?.list())
+}
+
+/// Downloads a catalog model by explicit user action; progress arrives on `channel`.
+///
+/// # Errors
+///
+/// `invalid_input` for ids outside the catalog; `invalid_state` while it is downloading.
+#[tauri::command]
+pub async fn local_model_download(
+    state: State<'_, AppState>,
+    request: LocalModelDownloadDto,
+    channel: Channel<ModelDownloadEvent>,
+) -> Result<JobIdDto, IpcError> {
+    let job_id = models(&state)?.start_download(&request.model_id, Box::new(channel))?;
+    Ok(JobIdDto { job_id })
 }
 
 #[cfg(test)]

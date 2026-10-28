@@ -24,12 +24,19 @@ serde_json.workspace = true
 devcopilot-application.workspace = true
 devcopilot-audio.workspace = true
 devcopilot-domain.workspace = true
+devcopilot-intelligence.workspace = true
 devcopilot-persistence.workspace = true
+tokio = { workspace = true, features = ["rt"] }
+tokio-util.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
+devcopilot-intelligence = { workspace = true, features = ["test-support"] }
+sha2.workspace = true
+wiremock.workspace = true
 devcopilot-application = { workspace = true, features = ["test-support"] }
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Layout, type Page } from "./components/Layout";
+import { LocalModels } from "./features/providers/LocalModels";
 import { CaptureIndicator } from "./features/sessions/CaptureIndicator";
 import { SessionsPage } from "./features/sessions/SessionsPage";
 import { useSessionStore } from "./features/sessions/sessionStore";
@@ -52,7 +53,7 @@ function App() {
       {page === "providers" && (
         <section aria-labelledby="providers-title">
           <h1 id="providers-title">{t("providers.title")}</h1>
-          <p>{t("providers.empty")}</p>
+          <LocalModels />
         </section>
       )}
       {page === "settings" && (

@@ -2,8 +2,8 @@
 //! per-session [`CancellationToken`] and reports source faults (research R3, Art. V.3).
 //!
 //! The session service owns the pipeline and turns its signals into state changes and
-//! indicator events. Transcription is attached to the audio queue by US2 (T073); until then
-//! the queue is drained and the audio discarded — it is never persisted (FR-020).
+//! indicator events. The audio queue feeds the [`Transcription`] stage
+//! ([`crate::transcription`]); audio is never persisted (FR-020).
 
 use std::future::{Future, poll_fn};
 use std::pin::Pin;
@@ -12,7 +12,6 @@ use std::task::Poll;
 
 use devcopilot_domain::audio_source::AudioSourceKind;
 use tokio::sync::oneshot;
-use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::events::SessionEvent;
@@ -168,14 +167,6 @@ impl FaultStream {
         })
         .await
     }
-}
-
-/// Consumes the audio queue until every source has closed, discarding the audio.
-///
-/// Placeholder consumer until US2 (T073) feeds the queue to the transcriber.
-#[must_use]
-pub fn discard_audio(mut chunks: AudioChunkStream) -> JoinHandle<()> {
-    tokio::spawn(async move { while chunks.recv().await.is_some() {} })
 }
 
 /// What the capture indicator shows (SC-002, SC-003).

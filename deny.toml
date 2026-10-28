@@ -31,6 +31,10 @@ exceptions = [
     # Bundled SQLCipher sources (ADR-004): SQLite is public domain ("blessing") and the embedded
     # libtomcrypt is WTFPL. Both are permissive; allowed for this crate only.
     { crate = "sqlcipher-src", allow = ["blessing", "WTFPL"] },
+    # Local transcription bindings (ADR-003): Unlicense is a public-domain dedication; the
+    # bundled whisper.cpp/GGML sources are MIT. Allowed for these crates only.
+    { crate = "whisper-rs", allow = ["Unlicense"] },
+    { crate = "whisper-rs-sys", allow = ["Unlicense"] },
 ]
 
 # Workspace crates are `publish = false`; they carry no license field.

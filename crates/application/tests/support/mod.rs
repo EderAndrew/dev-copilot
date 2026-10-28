@@ -13,8 +13,9 @@ use devcopilot_application::provider_service::ProviderService;
 use devcopilot_application::session_service::{NewSession, SessionDeps, SessionService};
 use devcopilot_application::settings_service::{SettingsService, SettingsUpdate};
 use devcopilot_application::testing::{
-    FakeClock, InMemoryProviderRepository, InMemorySessionRepository, InMemorySettingsRepository,
-    RecordingEventPublisher, ScriptedAudioSource, ToggleableSecretStore,
+    FakeClock, InMemoryProviderRepository, InMemorySegmentRepository, InMemorySessionRepository,
+    InMemorySettingsRepository, RecordingEventPublisher, ScriptedAudioSource, ScriptedTranscriber,
+    ScriptedTranscriberFactory, ToggleableSecretStore,
 };
 use devcopilot_domain::audio_source::AudioSourceKind;
 use devcopilot_domain::ids::{ProviderId, SessionId};
@@ -26,6 +27,9 @@ use devcopilot_domain::text::Title;
 pub struct Fixture {
     pub service: SessionService,
     pub sessions: Arc<InMemorySessionRepository>,
+    pub segments: Arc<InMemorySegmentRepository>,
+    pub transcriber: Arc<ScriptedTranscriber>,
+    pub transcribers: Arc<ScriptedTranscriberFactory>,
     pub providers: Arc<ProviderService>,
     pub settings: Arc<SettingsService>,
     pub secrets: Arc<ToggleableSecretStore>,
@@ -46,6 +50,9 @@ pub fn fixture() -> Fixture {
 /// [`fixture`] with no transcription provider configured.
 pub fn fixture_without_transcriber() -> Fixture {
     let sessions = Arc::new(InMemorySessionRepository::default());
+    let segments = Arc::new(InMemorySegmentRepository::default());
+    let transcriber = Arc::new(ScriptedTranscriber::local(Vec::new()));
+    let transcribers = Arc::new(ScriptedTranscriberFactory::new(transcriber.clone()));
     let settings_repo = Arc::new(InMemorySettingsRepository::default());
     let providers = Arc::new(ProviderService::new(
         Arc::new(InMemoryProviderRepository::default()),
@@ -59,6 +66,8 @@ pub fn fixture_without_transcriber() -> Fixture {
     let events = Arc::new(RecordingEventPublisher::default());
     let service = SessionService::new(SessionDeps {
         sessions: sessions.clone(),
+        segments: segments.clone(),
+        transcribers: transcribers.clone(),
         providers: providers.clone(),
         settings: settings.clone(),
         secrets: secrets.clone(),
@@ -72,6 +81,9 @@ pub fn fixture_without_transcriber() -> Fixture {
     Fixture {
         service,
         sessions,
+        segments,
+        transcriber,
+        transcribers,
         providers,
         settings,
         secrets,

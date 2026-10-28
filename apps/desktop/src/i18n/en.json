@@ -117,6 +117,51 @@
     "authorizationRequired": "This remote provider needs your authorization before it receives data.",
     "providerError": "The provider failed. Try again later.",
     "storageError": "Data could not be saved locally.",
-    "internal": "An unexpected error occurred."
+    "internal": "An unexpected error occurred.",
+    "modelDownloadNetwork": "The model could not be downloaded. Check your connection and try again.",
+    "modelVerificationFailed": "The downloaded file does not match the expected model and was discarded.",
+    "modelDownloadStorage": "The model could not be written to disk.",
+    "modelDownloadCancelled": "Download cancelled."
+  },
+  "transcript": {
+    "title": "Transcript",
+    "regionLabel": "Session transcript",
+    "empty": "The transcript appears here as soon as someone speaks.",
+    "at": "at {{time}}",
+    "partialLabel": "Partial, still being recognized:",
+    "gap": "Transcript gap ({{duration}}): {{reason}}",
+    "gapReason": {
+      "paused": "capture paused",
+      "overload": "audio dropped due to overload",
+      "provider_failure": "transcription provider failed",
+      "cancelled_on_stop": "transcription cut off when stopping",
+      "source_lost": "audio source lost",
+      "interrupted": "app closed during capture"
+    },
+    "lag": "The transcript is about {{seconds}} s behind the audio.",
+    "followLatest": "Jump to the latest segment"
+  },
+  "providerInUse": {
+    "label": "Providers in use",
+    "item": "{{stage}}: {{locality}}",
+    "stage": {
+      "transcription": "Transcription",
+      "analysis": "Analysis",
+      "questions": "Questions"
+    },
+    "locality": {
+      "local": "local (on this computer)",
+      "remote": "remote"
+    }
+  },
+  "models": {
+    "title": "Local transcription models",
+    "help": "Local transcription uses a model downloaded once. The download only starts when you ask for it and sends no session data.",
+    "size": "{{size}} MB",
+    "origin": "source: {{origin}}",
+    "inUse": "(in use)",
+    "download": "Download {{name}}",
+    "downloading": "Downloading…",
+    "use": "Use {{name}} for transcription"
   }
 }

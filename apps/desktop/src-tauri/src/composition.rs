@@ -8,22 +8,26 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use devcopilot_application::ApplicationError;
-use devcopilot_application::ports::{AudioSource, Clock, EventPublisher, SecretStore};
+use devcopilot_application::ports::{
+    AudioSource, Clock, EventPublisher, SecretStore, TranscriberFactory,
+};
 use devcopilot_application::provider_service::ProviderService;
 use devcopilot_application::session_service::{SessionDeps, SessionService};
 use devcopilot_application::settings_service::SettingsService;
 use devcopilot_audio::{CpalMicrophone, UnavailableSource};
 use devcopilot_domain::audio_source::{AudioSourceKind, UnavailableReason};
 use devcopilot_domain::time::Timestamp;
+use devcopilot_intelligence::WhisperTranscriberFactory;
 use devcopilot_persistence::{
-    Database, KeyringSecretStore, SqliteProviderRepository, SqliteSessionRepository,
-    SqliteSettingsRepository,
+    Database, KeyringSecretStore, SqliteProviderRepository, SqliteSegmentRepository,
+    SqliteSessionRepository, SqliteSettingsRepository,
 };
 use tauri::{AppHandle, Manager, Runtime};
 use tracing_appender::non_blocking::WorkerGuard;
 
 use crate::commands::IpcError;
 use crate::events::ChannelEventPublisher;
+use crate::models::LocalModels;
 
 /// Services that need the encrypted database.
 pub struct Core {
@@ -45,6 +49,8 @@ pub struct Platform {
     pub clock: Arc<dyn Clock>,
     /// Session event delivery.
     pub events: Arc<dyn EventPublisher>,
+    /// Builds transcribers for configured providers.
+    pub transcribers: Arc<dyn TranscriberFactory>,
 }
 
 /// Wall clock from the OS.
@@ -74,11 +80,20 @@ pub fn platform_sources() -> Vec<Arc<dyn AudioSource>> {
     ]
 }
 
+/// Where downloaded transcription models live: `<app data>/models`. Model files are not
+/// session content and are not encrypted.
+#[must_use]
+pub fn models_dir(data_dir: &Path) -> std::path::PathBuf {
+    data_dir.join("models")
+}
+
 /// Managed Tauri state.
 pub struct AppState {
     core: Result<Core, ApplicationError>,
     /// Session event routing; independent of storage.
     pub events: Arc<ChannelEventPublisher>,
+    /// Local model catalog and downloads; `None` without an app data directory.
+    pub models: Option<Arc<LocalModels>>,
     _log_guard: Option<WorkerGuard>,
 }
 
@@ -106,11 +121,14 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
     let db = Arc::new(Database::open_in(data_dir, platform.secrets.as_ref())?);
     let settings_repo = Arc::new(SqliteSettingsRepository::new(Arc::clone(&db)));
     let provider_repo = Arc::new(SqliteProviderRepository::new(Arc::clone(&db)));
-    let session_repo = Arc::new(SqliteSessionRepository::new(db));
+    let session_repo = Arc::new(SqliteSessionRepository::new(Arc::clone(&db)));
+    let segment_repo = Arc::new(SqliteSegmentRepository::new(db));
     let settings = Arc::new(SettingsService::new(settings_repo.clone()));
     let providers = Arc::new(ProviderService::new(provider_repo, settings_repo));
     let sessions = SessionService::new(SessionDeps {
         sessions: session_repo,
+        segments: segment_repo,
+        transcribers: platform.transcribers,
         providers: Arc::clone(&providers),
         settings: Arc::clone(&settings),
         secrets: platform.secrets,
@@ -161,17 +179,24 @@ fn init_tracing(log_dir: Option<&Path>) -> Option<WorkerGuard> {
 pub fn build<R: Runtime>(app: &AppHandle<R>) -> AppState {
     let log_guard = init_tracing(app.path().app_log_dir().ok().as_deref());
     let events = Arc::new(ChannelEventPublisher::default());
-    let platform = Platform {
-        secrets: Arc::new(KeyringSecretStore::new()),
-        sources: platform_sources(),
-        clock: Arc::new(SystemClock),
-        events: Arc::clone(&events) as Arc<dyn EventPublisher>,
-    };
-    let core = app
+    let data_dir = app
         .path()
         .app_data_dir()
-        .map_err(|_| ApplicationError::Internal("app data directory unavailable".into()))
-        .and_then(|dir| compose_core(&dir, platform));
+        .map_err(|_| ApplicationError::Internal("app data directory unavailable".into()));
+    let models = data_dir
+        .as_ref()
+        .ok()
+        .map(|dir| Arc::new(LocalModels::new(models_dir(dir))));
+    let core = data_dir.and_then(|dir| {
+        let platform = Platform {
+            secrets: Arc::new(KeyringSecretStore::new()),
+            sources: platform_sources(),
+            clock: Arc::new(SystemClock),
+            events: Arc::clone(&events) as Arc<dyn EventPublisher>,
+            transcribers: Arc::new(WhisperTranscriberFactory::new(models_dir(&dir))),
+        };
+        compose_core(&dir, platform)
+    });
     match &core {
         Ok(_) => tracing::info!("storage ready"),
         Err(err) => {
@@ -181,6 +206,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> AppState {
     AppState {
         core,
         events,
+        models,
         _log_guard: log_guard,
     }
 }

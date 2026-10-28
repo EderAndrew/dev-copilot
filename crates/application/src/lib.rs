@@ -10,6 +10,7 @@ pub mod ports;
 pub mod provider_service;
 pub mod session_service;
 pub mod settings_service;
+pub mod transcription;
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod testing;

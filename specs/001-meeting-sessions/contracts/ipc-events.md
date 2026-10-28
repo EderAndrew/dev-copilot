@@ -24,6 +24,10 @@ Garantias:
 - `capture_indicator.active = false` é emitido em até 1 s após `session_stop` (SC-002).
 - `partial_segment` nunca é persistido; é substituído pelo `final_segment` de mesmo `startMs` ou por um `gap`.
 - `provider_in_use` é emitido no início e em qualquer troca de provedor (FR-050, FR-045b).
-- `transcription_lag` é emitido quando o atraso entre o áudio captado e o último trecho final passa de 15 s
-  (SC-005), e de novo com `lagMs = 0` quando volta ao normal (FR-018 "atraso", US2.4).
+- `transcription_lag` é emitido quando o áudio captado e ainda não entregue ao transcritor passa de 15 s
+  (SC-005), e de novo com `lagMs = 0` quando volta a ≤ 5 s (FR-018 "atraso", US2.4). Silêncio não conta como
+  atraso: o transcritor consome o áudio mesmo quando não há fala.
+- `final_segment` e `gap` só são emitidos depois de persistidos; `segment.source` e `partial_segment.source`
+  aparecem apenas em sessões com duas fontes (FR-016). Lacunas podem chegar fora da ordem de `startMs` em
+  relação aos finais (ex.: `overload` é gravada no descarte); o frontend ordena por `startMs`.
 - Nenhum evento carrega segredos; conteúdo de sessão só é enviado à janela `main`.

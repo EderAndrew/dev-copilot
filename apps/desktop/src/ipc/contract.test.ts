@@ -11,6 +11,7 @@ import type {
   FailureReason,
   GapReason,
   Locality,
+  ModelDownloadEvent,
   PermissionState,
   ProviderAdapterKind,
   ProviderRole,
@@ -240,6 +241,21 @@ const eventShapes: Record<SessionEvent["type"], Shape> = {
   storage_error: event("storage_error", { required: { messageKey: str } }),
 };
 
+const downloadEventShapes: Record<ModelDownloadEvent["type"], Shape> = {
+  progress: {
+    required: {
+      type: literal("progress"),
+      jobId: str,
+      receivedBytes: nonNegativeInt,
+      totalBytes: nonNegativeInt,
+    },
+  },
+  completed: { required: { type: literal("completed"), jobId: str } },
+  failed: {
+    required: { type: literal("failed"), jobId: str, messageKey: str },
+  },
+};
+
 const dtoShapes: Record<string, (value: unknown) => string[]> = {
   IpcError: (v) =>
     problems(v, {
@@ -317,6 +333,27 @@ const dtoShapes: Record<string, (value: unknown) => string[]> = {
       optional: { unavailableReason },
     }),
   PermissionHelpDto: (v) => problems(v, { required: { messageKey: str } }),
+  LocalModelDto: (v) =>
+    problems(v, {
+      required: {
+        id: str,
+        displayName: str,
+        origin: str,
+        sizeBytes: nonNegativeInt,
+        downloaded: bool,
+        downloading: bool,
+      },
+    }),
+  LocalModelDownloadDto: (v) => problems(v, { required: { modelId: str } }),
+  JobIdDto: (v) => problems(v, { required: { jobId: str } }),
+  ModelDownloadEvent: (v) => {
+    const type = (v as { type?: unknown } | null)?.type;
+    const shape =
+      typeof type === "string"
+        ? downloadEventShapes[type as ModelDownloadEvent["type"]]
+        : undefined;
+    return shape ? problems(v, shape) : [`unknown event type ${String(type)}`];
+  },
   SessionEvent: (v) => {
     const type = (v as { type?: unknown } | null)?.type;
     const shape =

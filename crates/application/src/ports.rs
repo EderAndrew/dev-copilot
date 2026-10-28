@@ -4,7 +4,7 @@
 //! points return [`BoxFuture`] so they stay object-safe and can be composed as `Arc<dyn _>`.
 //!
 //! Repository ports for entities introduced by user stories grow with those stories:
-//! `SegmentRepository` (T069), `RecordRepository` (T088),
+//! `RecordRepository` (T088),
 //! `QuestionRepository` (T113); `AnalysisProvider::analyze`/`answer` arrive with T089–T091 and
 //! T114; authorizations on `ProviderRepository` with T135.
 
@@ -15,10 +15,12 @@ use std::sync::{Arc, Mutex, PoisonError};
 use devcopilot_domain::Redacted;
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
 use devcopilot_domain::ids::{ProviderId, SessionId};
+use devcopilot_domain::language::SessionLanguage;
 use devcopilot_domain::provider::{CredentialRef, DataCategory, Locality, Provider};
 use devcopilot_domain::session::Session;
 use devcopilot_domain::text::SegmentText;
 use devcopilot_domain::time::{Duration, Timestamp};
+use devcopilot_domain::transcript::TranscriptSegment;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -281,6 +283,25 @@ pub trait Transcriber: Send + Sync {
     ) -> BoxFuture<'_, Result<(), ProviderError>>;
 }
 
+/// Builds the [`Transcriber`] for a configured transcription provider.
+///
+/// `create` must be cheap (no model loading or network I/O): it runs on the `session_start`
+/// path, which answers within 500 ms (SC-006). Heavy work happens inside
+/// [`Transcriber::run`].
+pub trait TranscriberFactory: Send + Sync {
+    /// Transcriber for `provider` transcribing `language`.
+    ///
+    /// # Errors
+    ///
+    /// [`ProviderError::Unavailable`] when the provider cannot transcribe on this machine
+    /// (e.g. its local model is not downloaded).
+    fn create(
+        &self,
+        provider: &Provider,
+        language: SessionLanguage,
+    ) -> Result<Arc<dyn Transcriber>, ProviderError>;
+}
+
 /// Technical analysis and contextual questions (methods added by T089–T091 and T114).
 pub trait AnalysisProvider: Send + Sync {
     /// Non-sensitive description.
@@ -376,6 +397,35 @@ pub trait SessionRepository: Send + Sync {
     ///
     /// [`RepositoryError::NotFound`] when absent.
     fn save_interrupted(&self, session: &Session) -> Result<(), RepositoryError>;
+}
+
+/// Final segments and gaps of a session's transcript. Each append is its own transaction, so
+/// a later failure or crash never removes what was stored (FR-017).
+pub trait SegmentRepository: Send + Sync {
+    /// Stores a final segment or gap.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the session does not exist; [`RepositoryError::Storage`]
+    /// (e.g. disk full, or a duplicate `seq`).
+    fn append(&self, segment: &TranscriptSegment) -> Result<(), RepositoryError>;
+
+    /// Every segment of `session`, in `seq` order.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn list_by_session(
+        &self,
+        session: SessionId,
+    ) -> Result<Vec<TranscriptSegment>, RepositoryError>;
+
+    /// The `seq` the next segment of `session` takes (0 for an empty transcript).
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn next_seq(&self, session: SessionId) -> Result<u64, RepositoryError>;
 }
 
 /// Configured providers (authorizations are added with US7, T135).

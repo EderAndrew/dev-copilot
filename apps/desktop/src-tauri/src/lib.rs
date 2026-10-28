@@ -7,6 +7,7 @@ pub mod commands;
 pub mod composition;
 pub mod dto;
 pub mod events;
+pub mod models;
 
 use tauri::Manager;
 
@@ -30,6 +31,8 @@ pub fn run() -> tauri::Result<()> {
             commands::providers::provider_list,
             commands::providers::provider_upsert,
             commands::providers::provider_set_default,
+            commands::providers::local_model_list,
+            commands::providers::local_model_download,
             commands::sessions::session_create,
             commands::sessions::session_start,
             commands::sessions::session_cancel_start,

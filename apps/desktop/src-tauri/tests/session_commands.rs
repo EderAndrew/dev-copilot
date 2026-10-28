@@ -9,7 +9,8 @@ use std::sync::Arc;
 
 use devcopilot_application::ports::{AudioSource, EventPublisher};
 use devcopilot_application::testing::{
-    FakeClock, RecordingEventPublisher, ScriptedAudioSource, ToggleableSecretStore,
+    FakeClock, RecordingEventPublisher, ScriptedAudioSource, ScriptedTranscriber,
+    ScriptedTranscriberFactory, ToggleableSecretStore,
 };
 use devcopilot_desktop_lib::commands::IpcError;
 use devcopilot_desktop_lib::commands::audio::{self, AvailabilityDto};
@@ -47,6 +48,9 @@ fn harness() -> Harness {
             ],
             clock: Arc::new(FakeClock::default()),
             events: Arc::new(RecordingEventPublisher::default()) as Arc<dyn EventPublisher>,
+            transcribers: Arc::new(ScriptedTranscriberFactory::new(Arc::new(
+                ScriptedTranscriber::local(Vec::new()),
+            ))),
         },
     )
     .unwrap();
@@ -264,6 +268,9 @@ async fn interrupted_sessions_are_failed_on_startup() {
         ],
         clock: Arc::new(FakeClock::default()),
         events: Arc::new(RecordingEventPublisher::default()) as Arc<dyn EventPublisher>,
+        transcribers: Arc::new(ScriptedTranscriberFactory::new(Arc::new(
+            ScriptedTranscriber::local(Vec::new()),
+        ))),
     };
     let id = {
         let core = compose_core(dir.path(), platform()).unwrap();

@@ -85,7 +85,8 @@ type IpcError = {
 | `provider_authorize` | `{ providerId, accepted: true }` | `ProviderAuthorizationDto` | |
 | `provider_revoke` | `{ providerId }` | `ProviderAuthorizationDto` | envios novos cessam imediatamente (FR-047) |
 | `provider_set_default` | `{ role, providerId }` | `{}` | |
-| `local_model_download` | `{ modelId }` | `{ jobId }` | ação explícita; URL e hash fixos no app; progresso via evento |
+| `local_model_list` | `{}` | `LocalModelDto[]` — `{ id, displayName, origin, sizeBytes, downloaded, downloading }` | catálogo fixo (ADR-003); não faz requisição de rede |
+| `local_model_download` | `{ modelId }` + argumento de topo `channel: Channel<ModelDownloadEvent>` | `{ jobId }` | ação explícita; URL (revisão fixa) e SHA-256 fixos no app; `GET` sem dados de sessão; `invalid_input` fora do catálogo, `invalid_state` se já baixando; progresso pelo canal: `{ type: "progress", jobId, receivedBytes, totalBytes }` \| `{ type: "completed", jobId }` \| `{ type: "failed", jobId, messageKey }` |
 
 ## Configurações
 

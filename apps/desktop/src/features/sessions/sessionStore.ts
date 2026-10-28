@@ -7,11 +7,21 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import type { IpcClient } from "../../ipc/client";
 import type {
   AudioSourceKind,
+  Locality,
   SessionDto,
   SessionEvent,
 } from "../../ipc/types";
+import {
+  applyTranscriptEvent,
+  emptyTranscript,
+  type TranscriptState,
+} from "../transcript/transcriptState";
 
 export type SourceHealth = "ok" | "lost" | "permission_revoked";
+
+export type ProviderStage = "transcription" | "analysis" | "questions";
+
+export type ProviderInUse = { locality: Locality; providerId: string };
 
 export type CaptureIndicatorState = {
   active: boolean;
@@ -26,6 +36,9 @@ export type SessionViewState = {
   indicator: CaptureIndicatorState;
   sourceHealth: Partial<Record<AudioSourceKind, SourceHealth>>;
   storageErrorKey: string | null;
+  transcript: TranscriptState;
+  /** Provider used per stage, from `provider_in_use` (FR-050). */
+  providers: Partial<Record<ProviderStage, ProviderInUse>>;
 };
 
 export type SessionAction =
@@ -45,6 +58,8 @@ export const initialSessionState: SessionViewState = {
   indicator: INDICATOR_OFF,
   sourceHealth: {},
   storageErrorKey: null,
+  transcript: emptyTranscript,
+  providers: {},
 };
 
 function applyEvent(
@@ -52,7 +67,11 @@ function applyEvent(
   event: SessionEvent,
 ): SessionViewState {
   if (event.seq <= state.lastSeq) return state;
-  const next = { ...state, lastSeq: event.seq };
+  const next = {
+    ...state,
+    lastSeq: event.seq,
+    transcript: applyTranscriptEvent(state.transcript, event),
+  };
   switch (event.type) {
     case "state_changed":
       return next.session
@@ -81,8 +100,19 @@ function applyEvent(
       };
     case "storage_error":
       return { ...next, storageErrorKey: event.messageKey };
+    case "provider_in_use":
+      return {
+        ...next,
+        providers: {
+          ...next.providers,
+          [event.role]: {
+            locality: event.locality,
+            providerId: event.providerId,
+          },
+        },
+      };
     default:
-      // Transcript, analysis and provider events are handled by later stories.
+      // Transcript events are folded in above; analysis events arrive with US3.
       return next;
   }
 }

@@ -9,9 +9,11 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use devcopilot_domain::Redacted;
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
 use devcopilot_domain::ids::{ProviderId, SessionId};
+use devcopilot_domain::language::SessionLanguage;
 use devcopilot_domain::provider::{CredentialRef, DataCategory, Locality, Provider};
 use devcopilot_domain::session::Session;
 use devcopilot_domain::time::{Duration, Timestamp};
+use devcopilot_domain::transcript::TranscriptSegment;
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 
@@ -20,8 +22,8 @@ use crate::ports::{
     AnalysisProvider, AudioChunk, AudioChunkStream, AudioError, AudioSource, AuthorizationError,
     BoundedAudioSink, BoxFuture, CaptureHandle, Clock, EventPublisher, ProviderDescriptor,
     ProviderError, ProviderRepository, RemoteGate, RepositoryError, SecretStore, SecretStoreError,
-    SessionRepository, SettingsRepository, SourceFault, SourceFaultNotifier, Transcriber,
-    TranscriptSink, TranscriptUpdate,
+    SegmentRepository, SessionRepository, SettingsRepository, SinkError, SourceFault,
+    SourceFaultNotifier, Transcriber, TranscriberFactory, TranscriptSink, TranscriptUpdate,
 };
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -85,6 +87,8 @@ struct CaptureState {
     stopped: Arc<AtomicBool>,
     cancel: Option<CancellationToken>,
     faults: Option<SourceFaultNotifier>,
+    /// Shared with the handle, which drops it on stop so the pipeline's queue closes.
+    sink: Arc<Mutex<Option<BoundedAudioSink>>>,
 }
 
 /// Audio source whose permission, availability and captured chunks are scripted.
@@ -165,6 +169,20 @@ impl ScriptedAudioSource {
         *lock(&self.start_error) = error;
     }
 
+    /// Pushes a chunk from the running capture, as the platform callback would.
+    ///
+    /// # Errors
+    ///
+    /// [`SinkError::Closed`] when not capturing; otherwise the sink's error.
+    pub fn push_chunk(&self, chunk: AudioChunk) -> Result<(), SinkError> {
+        if !self.is_capturing() {
+            return Err(SinkError::Closed);
+        }
+        let sink = Arc::clone(&lock(&self.capture).sink);
+        let sink = lock(&sink).clone();
+        sink.ok_or(SinkError::Closed)?.try_send(chunk)
+    }
+
     /// Chunks pushed into the sink on `start`.
     pub fn script_chunks(&self, chunks: Vec<AudioChunk>) {
         *lock(&self.chunks) = chunks;
@@ -191,17 +209,19 @@ impl ScriptedAudioSource {
 
 struct ScriptedCaptureHandle {
     stopped: Arc<AtomicBool>,
+    sink: Arc<Mutex<Option<BoundedAudioSink>>>,
 }
 
 impl CaptureHandle for ScriptedCaptureHandle {
     fn stop(self: Box<Self>) {
-        self.stopped.store(true, Ordering::SeqCst);
+        drop(self);
     }
 }
 
 impl Drop for ScriptedCaptureHandle {
     fn drop(&mut self) {
         self.stopped.store(true, Ordering::SeqCst);
+        lock(&self.sink).take();
     }
 }
 
@@ -255,6 +275,7 @@ impl AudioSource for ScriptedAudioSource {
             capture.stopped = Arc::clone(&stopped);
             capture.cancel = Some(cancel);
             capture.faults = Some(faults);
+            capture.sink = Arc::new(Mutex::new(Some(sink.clone())));
         }
         for chunk in lock(&self.chunks).iter().cloned() {
             // Overload policy belongs to the pipeline; the fake just stops at capacity.
@@ -262,7 +283,8 @@ impl AudioSource for ScriptedAudioSource {
                 break;
             }
         }
-        Ok(Box::new(ScriptedCaptureHandle { stopped }))
+        let sink = Arc::clone(&lock(&self.capture).sink);
+        Ok(Box::new(ScriptedCaptureHandle { stopped, sink }))
     }
 }
 
@@ -282,24 +304,39 @@ fn descriptor_for(
     }
 }
 
-/// What a [`ScriptedTranscriber`] does after emitting its updates.
+/// What one run of a [`ScriptedTranscriber`] does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TranscriberEnd {
-    /// Waits until the input closes or the token is cancelled, then returns `Ok`.
+    /// Emits updates as they are scripted and consumes input until it closes (then emits the
+    /// [`ScriptedTranscriber::emit_on_close`] updates and returns `Ok`) or the token is
+    /// cancelled.
     WaitForInput,
-    /// Returns the error.
+    /// Emits the updates already scripted, then returns the error.
     Fail(ProviderError),
-    /// Never returns and ignores cancellation (SC-006: controls must not wait for it).
+    /// Emits the updates already scripted, then never returns, ignores cancellation and stops
+    /// reading input (SC-006: controls must not wait for it).
     Hang,
 }
 
-/// Transcriber that emits scripted updates.
+#[derive(Debug, Default)]
+struct TranscriberScript {
+    updates: VecDeque<TranscriptUpdate>,
+    on_close: Vec<TranscriptUpdate>,
+    ends: VecDeque<TranscriberEnd>,
+    default_end: Option<TranscriberEnd>,
+    runs: usize,
+    received: Vec<AudioChunk>,
+    fail_now: Option<ProviderError>,
+}
+
+/// Transcriber driven by the test: updates can be scripted before or during a run, input
+/// consumption can be held to simulate a slow provider, and each run can end differently.
 #[derive(Debug)]
 pub struct ScriptedTranscriber {
     descriptor: ProviderDescriptor,
-    updates: Mutex<VecDeque<TranscriptUpdate>>,
-    end: Mutex<TranscriberEnd>,
-    runs: Mutex<usize>,
+    script: Mutex<TranscriberScript>,
+    held: AtomicBool,
+    wake: Notify,
 }
 
 impl ScriptedTranscriber {
@@ -308,21 +345,67 @@ impl ScriptedTranscriber {
     pub fn local(updates: Vec<TranscriptUpdate>) -> Self {
         Self {
             descriptor: descriptor_for(ProviderId::new(), Locality::Local, &[DataCategory::Audio]),
-            updates: Mutex::new(updates.into()),
-            end: Mutex::new(TranscriberEnd::WaitForInput),
-            runs: Mutex::new(0),
+            script: Mutex::new(TranscriberScript {
+                updates: updates.into(),
+                ..TranscriberScript::default()
+            }),
+            held: AtomicBool::new(false),
+            wake: Notify::new(),
         }
     }
 
-    /// Changes what happens after the updates.
+    /// Sets what every run without a queued end does (default: [`TranscriberEnd::WaitForInput`]).
     pub fn set_end(&self, end: TranscriberEnd) {
-        *lock(&self.end) = end;
+        lock(&self.script).default_end = Some(end);
+    }
+
+    /// Queues the end of the next run that has not started yet.
+    pub fn end_next_run(&self, end: TranscriberEnd) {
+        lock(&self.script).ends.push_back(end);
+    }
+
+    /// Emits `update` from the running (or next) run.
+    pub fn emit(&self, update: TranscriptUpdate) {
+        lock(&self.script).updates.push_back(update);
+        self.wake.notify_one();
+    }
+
+    /// Updates emitted when the input closes, as a real transcriber flushes its last window.
+    pub fn emit_on_close(&self, updates: Vec<TranscriptUpdate>) {
+        lock(&self.script).on_close = updates;
+    }
+
+    /// Makes the running run return `error` (a crash of the provider mid-stream).
+    pub fn fail_now(&self, error: ProviderError) {
+        lock(&self.script).fail_now = Some(error);
+        self.wake.notify_one();
+    }
+
+    /// Stops reading input, as a provider slower than real time would.
+    pub fn hold_input(&self) {
+        self.held.store(true, Ordering::SeqCst);
+    }
+
+    /// Resumes reading input.
+    pub fn release_input(&self) {
+        self.held.store(false, Ordering::SeqCst);
+        self.wake.notify_one();
     }
 
     /// Number of `run` calls.
     #[must_use]
     pub fn run_count(&self) -> usize {
-        *lock(&self.runs)
+        lock(&self.script).runs
+    }
+
+    /// Audio received so far, over every run.
+    #[must_use]
+    pub fn received(&self) -> Vec<AudioChunk> {
+        lock(&self.script).received.clone()
+    }
+
+    fn next_update(&self) -> Option<TranscriptUpdate> {
+        lock(&self.script).updates.pop_front()
     }
 }
 
@@ -337,26 +420,94 @@ impl Transcriber for ScriptedTranscriber {
         out: TranscriptSink,
         cancel: CancellationToken,
     ) -> BoxFuture<'_, Result<(), ProviderError>> {
-        *lock(&self.runs) += 1;
-        let updates: Vec<_> = lock(&self.updates).drain(..).collect();
-        let end = lock(&self.end).clone();
+        let end = {
+            let mut script = lock(&self.script);
+            script.runs += 1;
+            script
+                .ends
+                .pop_front()
+                .or_else(|| script.default_end.clone())
+                .unwrap_or(TranscriberEnd::WaitForInput)
+        };
         Box::pin(async move {
-            for update in updates {
-                if out.send(update).await.is_err() {
-                    return Ok(());
+            loop {
+                while let Some(update) = self.next_update() {
+                    if out.send(update).await.is_err() {
+                        return Ok(());
+                    }
+                }
+                if let Some(error) = lock(&self.script).fail_now.take() {
+                    return Err(error);
+                }
+                match &end {
+                    TranscriberEnd::Fail(error) => return Err(error.clone()),
+                    TranscriberEnd::Hang => std::future::pending::<()>().await,
+                    TranscriberEnd::WaitForInput => {}
+                }
+                let held = self.held.load(Ordering::SeqCst);
+                tokio::select! {
+                    () = cancel.cancelled() => return Err(ProviderError::Cancelled),
+                    () = self.wake.notified() => {}
+                    chunk = input.recv(), if !held => match chunk {
+                        Some(chunk) => lock(&self.script).received.push(chunk),
+                        None => {
+                            let on_close = std::mem::take(&mut lock(&self.script).on_close);
+                            for update in on_close {
+                                if out.send(update).await.is_err() {
+                                    break;
+                                }
+                            }
+                            return Ok(());
+                        }
+                    },
                 }
             }
-            match end {
-                TranscriberEnd::Fail(error) => Err(error),
-                TranscriberEnd::Hang => std::future::pending().await,
-                TranscriberEnd::WaitForInput => loop {
-                    tokio::select! {
-                        () = cancel.cancelled() => return Err(ProviderError::Cancelled),
-                        chunk = input.recv() => if chunk.is_none() { return Ok(()) },
-                    }
-                },
-            }
         })
+    }
+}
+
+/// Factory handing out one shared [`ScriptedTranscriber`].
+#[derive(Debug)]
+pub struct ScriptedTranscriberFactory {
+    transcriber: Arc<ScriptedTranscriber>,
+    unavailable: AtomicBool,
+    languages: Mutex<Vec<SessionLanguage>>,
+}
+
+impl ScriptedTranscriberFactory {
+    /// Factory returning `transcriber` for every provider.
+    #[must_use]
+    pub fn new(transcriber: Arc<ScriptedTranscriber>) -> Self {
+        Self {
+            transcriber,
+            unavailable: AtomicBool::new(false),
+            languages: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Makes `create` fail with [`ProviderError::Unavailable`] (e.g. model not downloaded).
+    pub fn set_unavailable(&self, unavailable: bool) {
+        self.unavailable.store(unavailable, Ordering::SeqCst);
+    }
+
+    /// Languages requested so far.
+    #[must_use]
+    pub fn languages(&self) -> Vec<SessionLanguage> {
+        lock(&self.languages).clone()
+    }
+}
+
+impl TranscriberFactory for ScriptedTranscriberFactory {
+    fn create(
+        &self,
+        _provider: &Provider,
+        language: SessionLanguage,
+    ) -> Result<Arc<dyn Transcriber>, ProviderError> {
+        if self.unavailable.load(Ordering::SeqCst) {
+            return Err(ProviderError::Unavailable);
+        }
+        lock(&self.languages).push(language);
+        Ok(Arc::clone(&self.transcriber) as Arc<dyn Transcriber>)
     }
 }
 
@@ -511,6 +662,65 @@ impl SessionRepository for InMemorySessionRepository {
             lock(&self.interrupted_gaps).push(session.id());
         }
         Ok(())
+    }
+}
+
+/// In-memory segment repository whose appends can be made to fail (e.g. disk full).
+#[derive(Debug, Default)]
+pub struct InMemorySegmentRepository {
+    segments: Mutex<Vec<TranscriptSegment>>,
+    fail_appends: Mutex<Option<RepositoryError>>,
+}
+
+impl InMemorySegmentRepository {
+    /// Makes `append` fail with `error` (`None` restores it).
+    pub fn fail_appends_with(&self, error: Option<RepositoryError>) {
+        *lock(&self.fail_appends) = error;
+    }
+
+    /// Every stored segment, in insertion order.
+    #[must_use]
+    pub fn all(&self) -> Vec<TranscriptSegment> {
+        lock(&self.segments).clone()
+    }
+}
+
+impl SegmentRepository for InMemorySegmentRepository {
+    fn append(&self, segment: &TranscriptSegment) -> Result<(), RepositoryError> {
+        if let Some(error) = lock(&self.fail_appends).clone() {
+            return Err(error);
+        }
+        let mut segments = lock(&self.segments);
+        if segments
+            .iter()
+            .any(|s| s.session_id() == segment.session_id() && s.seq() == segment.seq())
+        {
+            return Err(RepositoryError::Storage("duplicate seq".into()));
+        }
+        segments.push(segment.clone());
+        Ok(())
+    }
+
+    fn list_by_session(
+        &self,
+        session: SessionId,
+    ) -> Result<Vec<TranscriptSegment>, RepositoryError> {
+        let mut segments: Vec<_> = lock(&self.segments)
+            .iter()
+            .filter(|s| s.session_id() == session)
+            .cloned()
+            .collect();
+        segments.sort_by_key(TranscriptSegment::seq);
+        Ok(segments)
+    }
+
+    fn next_seq(&self, session: SessionId) -> Result<u64, RepositoryError> {
+        Ok(lock(&self.segments)
+            .iter()
+            .filter(|s| s.session_id() == session)
+            .map(|s| s.seq() + 1)
+            .max()
+            .unwrap_or(0))
     }
 }
 

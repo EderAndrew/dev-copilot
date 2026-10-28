@@ -165,29 +165,39 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 
 ### Tests for User Story 2 (REQUIRED) ⚠️
 
-- [ ] T061 [P] [US2] Domain tests for TranscriptSegment (final/gap, offsets, source required with 2 sources) in `crates/domain/src/transcript.rs` test module
-- [ ] T062 [P] [US2] Pipeline tests: partials never persisted, finals persisted on arrival, overload drops oldest and emits `gap(overload)`, provider failure emits `gap(provider_failure)`, stop drains ≤ 5 s then `gap(cancelled_on_stop)`, controls respond while transcriber hangs (SC-006), `transcription_lag` emitted above 15 s and cleared on recovery (US2.4), storage write failure (disk full) emits `storage_error` and stops capture as `failed(storage_error)` with prior finals intact, in `crates/application/tests/transcription_pipeline.rs`
-- [ ] T063 [P] [US2] Segment repository tests incl. crash-safety (write, reopen, read) in `crates/persistence/tests/segment_repo.rs`
-- [ ] T064 [P] [US2] Model download tests: rejects hash mismatch, requires explicit call, no session data in request, in `crates/intelligence/tests/model_download.rs`
-- [ ] T065 [P] [US2] Whisper adapter test on a short non-confidential fixture (ignored unless model path env var set) in `crates/intelligence/tests/whisper_local.rs`
-- [ ] T066 [P] [US2] Frontend transcript tests: partial styling distinct, gap rendering, lag indicator, timestamps, screen-reader labels in `apps/desktop/src/features/transcript/TranscriptView.test.tsx`
+- [X] T061 [P] [US2] Domain tests for TranscriptSegment (final/gap, offsets, source required with 2 sources) in `crates/domain/src/transcript.rs` test module
+- [X] T062 [P] [US2] Pipeline tests: partials never persisted, finals persisted on arrival, overload drops oldest and emits `gap(overload)`, provider failure emits `gap(provider_failure)`, stop drains ≤ 5 s then `gap(cancelled_on_stop)`, controls respond while transcriber hangs (SC-006), `transcription_lag` emitted above 15 s and cleared on recovery (US2.4), storage write failure (disk full) emits `storage_error` and stops capture as `failed(storage_error)` with prior finals intact, in `crates/application/tests/transcription_pipeline.rs`
+- [X] T063 [P] [US2] Segment repository tests incl. crash-safety (write, reopen, read) in `crates/persistence/tests/segment_repo.rs`
+- [X] T064 [P] [US2] Model download tests: rejects hash mismatch, requires explicit call, no session data in request, in `crates/intelligence/tests/model_download.rs`
+- [X] T065 [P] [US2] Whisper adapter test on a short non-confidential fixture (ignored unless model path env var set) in `crates/intelligence/tests/whisper_local.rs`
+- [X] T066 [P] [US2] Frontend transcript tests: partial styling distinct, gap rendering, lag indicator, timestamps, screen-reader labels in `apps/desktop/src/features/transcript/TranscriptView.test.tsx`
 
 ### Implementation for User Story 2
 
-- [ ] T067 [US2] Spike S2: measure partial/final latency of whisper models on reference hardware per OS; record reference hardware in `specs/001-meeting-sessions/quickstart.md` and decision in `docs/adr/ADR-003.md` (provedores de transcrição e IA)
-- [ ] T068 [P] [US2] Implement TranscriptSegment, SegmentKind, GapReason (incl. `interrupted`) in `crates/domain/src/transcript.rs`
-- [ ] T069 [P] [US2] Implement SegmentRepository (append_final, append_gap in transactions, list_by_session) in `crates/persistence/src/repos/segment_repo.rs`
-- [ ] T070 [P] [US2] Implement energy-based VAD and sliding-window chunker (partial every ~2 s, final on pause or ~25 s) in `crates/intelligence/src/vad.rs` with unit tests
-- [ ] T071 [US2] Implement `Transcriber` over whisper-rs (model load from user-selected path, language from session, cancellation) in `crates/intelligence/src/whisper_local.rs`
-- [ ] T072 [P] [US2] Implement explicit model download with pinned URL list and SHA-256 verification in `crates/intelligence/src/model_download.rs`
-- [ ] T073 [US2] Extend `capture_pipeline` with resample → bounded chunk channel (~30 s) → transcriber → partial/final/gap events and persistence in `crates/application/src/capture_pipeline.rs`
-- [ ] T074 [US2] Wire whisper provider registration and `local_model_download` command with progress events in `apps/desktop/src-tauri/src/composition.rs` and `apps/desktop/src-tauri/src/commands/providers.rs`
-- [ ] T075 [P] [US2] Implement TranscriptView (auto-scroll with pause on user scroll, partial/final/gap, lag indicator from `transcription_lag`, source tags) in `apps/desktop/src/features/transcript/TranscriptView.tsx`
-- [ ] T076 [P] [US2] Implement LocalModels screen (choose/download model, shows origin and size) in `apps/desktop/src/features/providers/LocalModels.tsx`
-- [ ] T077 [P] [US2] Show `provider_in_use` (local/remote per stage: transcription, analysis, questions) in `apps/desktop/src/features/sessions/ProviderBadge.tsx` (FR-050)
-- [ ] T078 [US2] Add US2 strings to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
+- [X] T067 [US2] Spike S2: measure partial/final latency of whisper models on reference hardware per OS; record reference hardware in `specs/001-meeting-sessions/quickstart.md` and decision in `docs/adr/ADR-003.md` (provedores de transcrição e IA)
+- [X] T068 [P] [US2] Implement TranscriptSegment, SegmentKind, GapReason (incl. `interrupted`) in `crates/domain/src/transcript.rs`
+- [X] T069 [P] [US2] Implement SegmentRepository (append_final, append_gap in transactions, list_by_session) in `crates/persistence/src/repos/segment_repo.rs`
+- [X] T070 [P] [US2] Implement energy-based VAD and sliding-window chunker (partial every ~2 s, final on pause or ~25 s) in `crates/intelligence/src/vad.rs` with unit tests
+- [X] T071 [US2] Implement `Transcriber` over whisper-rs (model load from user-selected path, language from session, cancellation) in `crates/intelligence/src/whisper_local.rs`
+- [X] T072 [P] [US2] Implement explicit model download with pinned URL list and SHA-256 verification in `crates/intelligence/src/model_download.rs`
+- [X] T073 [US2] Extend `capture_pipeline` with resample → bounded chunk channel (~30 s) → transcriber → partial/final/gap events and persistence in `crates/application/src/capture_pipeline.rs`
+- [X] T074 [US2] Wire whisper provider registration and `local_model_download` command with progress events in `apps/desktop/src-tauri/src/composition.rs` and `apps/desktop/src-tauri/src/commands/providers.rs`
+- [X] T075 [P] [US2] Implement TranscriptView (auto-scroll with pause on user scroll, partial/final/gap, lag indicator from `transcription_lag`, source tags) in `apps/desktop/src/features/transcript/TranscriptView.tsx`
+- [X] T076 [P] [US2] Implement LocalModels screen (choose/download model, shows origin and size) in `apps/desktop/src/features/providers/LocalModels.tsx`
+- [X] T077 [P] [US2] Show `provider_in_use` (local/remote per stage: transcription, analysis, questions) in `apps/desktop/src/features/sessions/ProviderBadge.tsx` (FR-050)
+- [X] T078 [US2] Add US2 strings to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
 
 **Checkpoint**: US1 + US2 form the first demonstrable increment (capture + live transcript)
+
+**Phase 4 notes** (2026-10-28):
+- The transcription stage lives in `crates/application/src/transcription.rs` (spawned by `session_service`, fed by the `capture_pipeline` audio queue) rather than inside `capture_pipeline.rs`. Resampling stays in the audio adapter (`audio::resample`, T052): chunks reach the pipeline already 16 kHz mono.
+- New ports: `TranscriberFactory` (cheap build of the resolved provider's transcriber; `Unavailable` → `no_transcriber` at start) and `SegmentRepository::{append, list_by_session, next_seq}` (one append for finals and gaps, each its own transaction).
+- Overload policy: backlog ≤ 30 s; on overflow the oldest 15 s are dropped at once and `gap(overload)` is written immediately. Lag = audio captured but not yet handed to the transcriber (> 15 s reported, cleared at ≤ 5 s). Provider failure writes `gap(provider_failure)` and restarts the transcriber; 3 failures in a row without a final fail the session as `no_transcriber`. Losing the only source writes `gap(source_lost)` for unfinalized audio.
+- Whisper models come from a pinned catalog (revision `5359861c…`, SHA-256 per file) and are stored in `<app data>/models`; "user-selected" model = chosen from the catalog in `LocalModels`, so the frontend needs no `fs`/open-dialog capability. Commands `local_model_list` and `local_model_download` (progress over a `Channel`) are in `contracts/ipc-commands.md`.
+- `whisper-rs` 0.16 `set_abort_callback_safe` is broken (every inference aborts with −6); not used. Cancel returns immediately and the window in flight finishes in the background (ADR-003).
+- T067: ADR-003 stays *Proposto* until spike S2 runs on Windows and Linux reference hardware (macOS/M4 measured: partial ≈ 2.3 s after speech onset, final ≈ 0.2 s after the window closes, `base` model).
+- Build now needs CMake (whisper.cpp); `deny.toml` allows Unlicense for `whisper-rs`/`whisper-rs-sys` only.
+- Fixtures `crates/intelligence/tests/fixtures/audio/*.wav` are synthetic macOS TTS voices, not recordings of people.
 
 ---
 

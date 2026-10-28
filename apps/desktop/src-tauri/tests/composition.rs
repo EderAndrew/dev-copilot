@@ -8,7 +8,10 @@ use std::sync::Arc;
 use devcopilot_application::ApplicationError;
 use devcopilot_application::ports::{EventPublisher, SecretStore};
 use devcopilot_application::settings_service::{AppSettings, SettingsUpdate};
-use devcopilot_application::testing::{FakeClock, RecordingEventPublisher, ToggleableSecretStore};
+use devcopilot_application::testing::{
+    FakeClock, RecordingEventPublisher, ScriptedTranscriber, ScriptedTranscriberFactory,
+    ToggleableSecretStore,
+};
 use devcopilot_desktop_lib::composition::{Platform, compose_core, platform_sources};
 use devcopilot_domain::language::UiLanguage;
 
@@ -18,6 +21,9 @@ fn platform(secrets: Arc<ToggleableSecretStore>) -> Platform {
         sources: platform_sources(),
         clock: Arc::new(FakeClock::default()),
         events: Arc::new(RecordingEventPublisher::default()) as Arc<dyn EventPublisher>,
+        transcribers: Arc::new(ScriptedTranscriberFactory::new(Arc::new(
+            ScriptedTranscriber::local(Vec::new()),
+        ))),
     }
 }
 

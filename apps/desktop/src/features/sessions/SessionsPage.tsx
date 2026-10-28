@@ -11,7 +11,9 @@ import type {
 } from "../../ipc/types";
 import { ConsentReminderDialog } from "./ConsentReminderDialog";
 import { NewSessionForm } from "./NewSessionForm";
+import { TranscriptView } from "../transcript/TranscriptView";
 import { PermissionHelp } from "./PermissionHelp";
+import { ProviderBadge } from "./ProviderBadge";
 import { SessionControls } from "./SessionControls";
 import type { SessionStore } from "./sessionStore";
 
@@ -33,7 +35,7 @@ type SessionsPageProps = {
   client?: SessionsClient;
 };
 
-/** Create a session and control its capture (US1). */
+/** Create a session, control its capture (US1) and follow its transcript (US2). */
 export function SessionsPage({
   store,
   defaultLanguage,
@@ -136,6 +138,13 @@ export function SessionsPage({
             }
             onStop={() => void run(() => client.sessionStop(session.id))}
           />
+          <ProviderBadge providers={store.state.providers} />
+          {session.state !== "idle" && (
+            <TranscriptView
+              transcript={store.state.transcript}
+              showSources={session.sources.length > 1}
+            />
+          )}
           {permissionProblem &&
             session.sources.map((kind) => (
               <PermissionHelp key={kind} kind={kind} client={client} />

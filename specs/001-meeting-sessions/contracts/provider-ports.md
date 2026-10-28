@@ -27,6 +27,12 @@ pub trait Transcriber: Send + Sync {
         -> Result<(), ProviderError>;
 }
 
+/// Constrói o `Transcriber` do provedor resolvido. Barato (sem carregar modelo nem rede): roda no caminho de
+/// `session_start` (≤ 500 ms, SC-006). `Unavailable` (ex.: modelo local não baixado) → `no_transcriber`.
+pub trait TranscriberFactory: Send + Sync {
+    fn create(&self, provider: &Provider, language: SessionLanguage) -> Result<Arc<dyn Transcriber>, ProviderError>;
+}
+
 /// Análise técnica e perguntas. Implementações: `intelligence::{anthropic, openai_compatible_chat, ollama}`.
 pub trait AnalysisProvider: Send + Sync {
     fn descriptor(&self) -> ProviderDescriptor;
@@ -42,7 +48,7 @@ pub trait RemoteGate: Send + Sync {
 }
 
 pub trait SessionRepository { /* create, get, update_state, list, delete_cascade, mark_interrupted_on_startup */ }
-pub trait SegmentRepository { /* append_final, append_gap, list_by_session */ }
+pub trait SegmentRepository { /* append (final ou gap, transação própria), list_by_session, next_seq */ }
 pub trait RecordRepository  { /* insert_proposed, apply_user_change (com RecordChange), list_by_session */ }
 pub trait QuestionRepository { /* insert, set_answer, list_by_session */ }
 pub trait ProviderRepository { /* providers + authorizations */ }

@@ -9,13 +9,14 @@ use std::path::{Path, PathBuf};
 use devcopilot_desktop_lib::commands::IpcError;
 use devcopilot_desktop_lib::commands::audio::{AudioSourceDto, PermissionHelpDto};
 use devcopilot_desktop_lib::commands::providers::{
-    ProviderDto, ProviderSetDefaultDto, ProviderUpsertDto,
+    JobIdDto, LocalModelDownloadDto, ProviderDto, ProviderSetDefaultDto, ProviderUpsertDto,
 };
 use devcopilot_desktop_lib::commands::sessions::{
     SessionCreateDto, SessionDto, SessionIdDto, SessionStartDto,
 };
 use devcopilot_desktop_lib::commands::settings::{SettingsDto, SettingsUpdateDto};
 use devcopilot_desktop_lib::events::IpcSessionEvent;
+use devcopilot_desktop_lib::models::{LocalModelDto, ModelDownloadEvent};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -72,6 +73,14 @@ fn providers() {
 }
 
 #[test]
+fn local_models() {
+    assert_round_trip::<LocalModelDto>("LocalModelDto");
+    assert_round_trip::<LocalModelDownloadDto>("LocalModelDownloadDto");
+    assert_round_trip::<JobIdDto>("JobIdDto");
+    assert_round_trip::<ModelDownloadEvent>("ModelDownloadEvent");
+}
+
+#[test]
 fn sessions() {
     assert_round_trip::<SessionDto>("SessionDto");
     assert_round_trip::<SessionCreateDto>("SessionCreateDto");
@@ -95,6 +104,10 @@ fn every_fixture_directory_is_covered() {
     let covered = [
         "AudioSourceDto",
         "IpcError",
+        "JobIdDto",
+        "LocalModelDownloadDto",
+        "LocalModelDto",
+        "ModelDownloadEvent",
         "PermissionHelpDto",
         "ProviderDto",
         "ProviderSetDefaultDto",
