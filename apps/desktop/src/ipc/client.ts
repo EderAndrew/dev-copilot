@@ -4,6 +4,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 
 import type {
   AudioSourceDto,
+  AuthorizationPreviewDto,
   AudioSourceKind,
   ErrorCode,
   ExportResultDto,
@@ -15,6 +16,7 @@ import type {
   PermissionHelpDto,
   PermissionState,
   PlanDto,
+  ProviderAuthorizationDto,
   ProviderDto,
   QuestionAskDto,
   QuestionDto,
@@ -87,6 +89,23 @@ export const ipc = {
     call<ProviderDto>("provider_upsert", { request }),
   providerSetDefault: (request: ProviderSetDefaultDto) =>
     call<void>("provider_set_default", { request }),
+  /** Sends the API key straight to the OS credential store; it is never read back. */
+  providerSetSecret: (providerId: string, secret: string) =>
+    call<void>("provider_set_secret", { request: { providerId, secret } }),
+  providerAuthorizationPreview: (providerId: string) =>
+    call<AuthorizationPreviewDto>("provider_authorization_preview", {
+      request: { providerId },
+    }),
+  /** Records the user's explicit acceptance of the preview (FR-046). */
+  providerAuthorize: (providerId: string) =>
+    call<ProviderAuthorizationDto>("provider_authorize", {
+      request: { providerId, accepted: true },
+    }),
+  /** New sends stop immediately (FR-047). */
+  providerRevoke: (providerId: string) =>
+    call<ProviderAuthorizationDto>("provider_revoke", {
+      request: { providerId },
+    }),
   localModelList: () => call<LocalModelDto[]>("local_model_list"),
   /** Downloads a catalog model by explicit user action; progress goes to `onEvent`. */
   localModelDownload: (

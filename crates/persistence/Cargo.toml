@@ -23,6 +23,7 @@ rusqlite = { workspace = true, features = ["bundled-sqlcipher-vendored-openssl"]
 [dev-dependencies]
 devcopilot-application = { workspace = true, features = ["test-support"] }
 tempfile.workspace = true
+tracing-subscriber.workspace = true
 
 [lints]
 workspace = true

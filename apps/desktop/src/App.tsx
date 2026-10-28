@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Layout, type Page } from "./components/Layout";
-import { LocalModels } from "./features/providers/LocalModels";
+import { ProvidersPage } from "./features/providers/ProvidersPage";
 import { CaptureIndicator } from "./features/sessions/CaptureIndicator";
 import { SessionDetail } from "./features/sessions/SessionDetail";
 import { SessionHistory } from "./features/sessions/SessionHistory";
@@ -66,12 +66,7 @@ function App() {
         ) : (
           <SessionHistory client={ipc} onOpen={setOpenSession} />
         ))}
-      {page === "providers" && (
-        <section aria-labelledby="providers-title">
-          <h1 id="providers-title">{t("providers.title")}</h1>
-          <LocalModels />
-        </section>
-      )}
+      {page === "providers" && <ProvidersPage />}
       {page === "settings" && (
         <SettingsPage onLanguageChange={changeLanguage} />
       )}

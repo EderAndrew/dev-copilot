@@ -24,6 +24,7 @@ fn platform(secrets: Arc<ToggleableSecretStore>) -> Platform {
         transcribers: Arc::new(ScriptedTranscriberFactory::new(Arc::new(
             ScriptedTranscriber::local(Vec::new()),
         ))),
+        gate: Arc::default(),
         analyzers: Arc::new(ScriptedAnalysisProviderFactory::new(Arc::new(
             ScriptedAnalysisProvider::local(),
         ))),

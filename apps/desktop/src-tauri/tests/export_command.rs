@@ -77,6 +77,7 @@ fn harness() -> Harness {
             transcribers: Arc::new(ScriptedTranscriberFactory::new(Arc::new(
                 ScriptedTranscriber::local(Vec::new()),
             ))),
+            gate: Arc::default(),
             analyzers: Arc::new(ScriptedAnalysisProviderFactory::new(Arc::new(
                 ScriptedAnalysisProvider::local(),
             ))),

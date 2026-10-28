@@ -10,7 +10,9 @@ use devcopilot_desktop_lib::commands::IpcError;
 use devcopilot_desktop_lib::commands::audio::{AudioSourceDto, PermissionHelpDto};
 use devcopilot_desktop_lib::commands::export::{ExportResultDto, ExportSessionDto};
 use devcopilot_desktop_lib::commands::providers::{
-    JobIdDto, LocalModelDownloadDto, ProviderDto, ProviderSetDefaultDto, ProviderUpsertDto,
+    AuthorizationPreviewDto, JobIdDto, LocalModelDownloadDto, ProviderAuthorizationDto,
+    ProviderAuthorizeDto, ProviderDto, ProviderIdDto, ProviderSetDefaultDto, ProviderSetSecretDto,
+    ProviderUpsertDto,
 };
 use devcopilot_desktop_lib::commands::questions::{
     QuestionAskDto, QuestionDto, QuestionToRecordDto,
@@ -88,6 +90,15 @@ fn providers() {
 }
 
 #[test]
+fn remote_authorization() {
+    assert_round_trip::<ProviderSetSecretDto>("ProviderSetSecretDto");
+    assert_round_trip::<ProviderIdDto>("ProviderIdDto");
+    assert_round_trip::<ProviderAuthorizeDto>("ProviderAuthorizeDto");
+    assert_round_trip::<AuthorizationPreviewDto>("AuthorizationPreviewDto");
+    assert_round_trip::<ProviderAuthorizationDto>("ProviderAuthorizationDto");
+}
+
+#[test]
 fn local_models() {
     assert_round_trip::<LocalModelDto>("LocalModelDto");
     assert_round_trip::<LocalModelDownloadDto>("LocalModelDownloadDto");
@@ -143,6 +154,7 @@ fn session_events() {
 fn every_fixture_directory_is_covered() {
     let covered = [
         "AudioSourceDto",
+        "AuthorizationPreviewDto",
         "ExportResultDto",
         "ExportSessionDto",
         "IpcError",
@@ -152,8 +164,12 @@ fn every_fixture_directory_is_covered() {
         "ModelDownloadEvent",
         "PermissionHelpDto",
         "PlanDto",
+        "ProviderAuthorizationDto",
+        "ProviderAuthorizeDto",
         "ProviderDto",
+        "ProviderIdDto",
         "ProviderSetDefaultDto",
+        "ProviderSetSecretDto",
         "ProviderUpsertDto",
         "QuestionAskDto",
         "QuestionDto",

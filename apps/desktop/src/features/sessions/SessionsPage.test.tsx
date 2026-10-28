@@ -5,6 +5,8 @@ import { axe } from "vitest-axe";
 
 import type {
   AudioSourceDto,
+  AuthorizationPreviewDto,
+  ProviderAuthorizationDto,
   QuestionDto,
   SessionDto,
   SessionEvent,
@@ -70,6 +72,26 @@ function setup(overrides: Partial<SettingsDto> = {}) {
       Promise.reject(new Error("unused")),
     ),
     questionToRecord: vi.fn(() => Promise.reject(new Error("unused"))),
+    providerAuthorizationPreview: vi.fn(
+      (): Promise<AuthorizationPreviewDto> =>
+        Promise.resolve({
+          providerId: "p1",
+          destination: "stt.example.com",
+          dataCategories: ["audio"],
+          retentionNotice: "Retido conforme os termos do serviço.",
+        }),
+    ),
+    providerAuthorize: vi.fn(
+      (): Promise<ProviderAuthorizationDto> =>
+        Promise.resolve({
+          providerId: "p1",
+          state: "granted",
+          destination: "stt.example.com",
+          dataCategories: ["audio"],
+          retentionNotice: "Retido conforme os termos do serviço.",
+          grantedAt: 1,
+        }),
+    ),
     sessionStart: vi.fn(() =>
       Promise.resolve({ ...idle, state: "starting" as const }),
     ),
@@ -264,6 +286,55 @@ describe("SessionsPage", () => {
       "Permissão de captura negada",
     );
     expect(screen.getByText("ociosa")).toBeTruthy();
+  });
+
+  it("asks to authorize an unauthorized remote transcriber, then starts (US7.2)", async () => {
+    const user = userEvent.setup();
+    const { client } = setup({ consentReminderDismissed: true });
+    client.sessionStart.mockRejectedValueOnce({
+      code: "authorization_required",
+      messageKey: "errors.authorizationRequired",
+      details: { providerId: "p1" },
+    });
+    await user.type(await screen.findByLabelText("Título"), "Daily");
+    await user.click(screen.getByRole("button", { name: "Criar sessão" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Iniciar captura" }),
+    );
+    await screen.findByRole("dialog", {
+      name: "Autorizar envio de dados para stt.example.com?",
+    });
+    expect(client.providerAuthorizationPreview).toHaveBeenCalledWith("p1");
+    expect(client.sessionStart).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Autorizar" }));
+    expect(client.providerAuthorize).toHaveBeenCalledWith("p1");
+    expect(client.sessionStart).toHaveBeenCalledTimes(2);
+    expect(client.sessionStart).toHaveBeenLastCalledWith({
+      sessionId: "s1",
+      consentAcknowledged: true,
+    });
+  });
+
+  it("announces a local fallback (FR-045b)", async () => {
+    const user = userEvent.setup();
+    const { emit } = setup({ consentReminderDismissed: true });
+    await user.type(await screen.findByLabelText("Título"), "Daily");
+    await user.click(screen.getByRole("button", { name: "Criar sessão" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Iniciar captura" }),
+    );
+    emit({
+      type: "provider_fallback",
+      seq: 50,
+      role: "transcription",
+      fromProviderId: "remote",
+      toProviderId: "local",
+    });
+    expect(
+      screen.getByText(
+        "O provedor remoto de Transcrição falhou; o provedor local assumiu esta etapa.",
+      ),
+    ).toBeTruthy();
   });
 
   it("requires a title before creating", async () => {

@@ -1,1 +1,1 @@
-{ "id": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a7c", "role": "analysis", "adapter": "ollama", "locality": "local", "endpoint": "http://127.0.0.1:11434", "model": "llama3", "dataCategories": ["transcript", "records", "questions"], "isDefault": false }
+{"id": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a7c", "role": "analysis", "adapter": "ollama", "locality": "local", "endpoint": "http://127.0.0.1:11434", "model": "llama3", "dataCategories": ["transcript", "records", "questions"], "isDefault": false, "authorization": "not_required", "hasCredential": false}

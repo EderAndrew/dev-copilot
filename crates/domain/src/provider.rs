@@ -8,6 +8,7 @@ use std::fmt;
 
 use crate::error::{DomainError, InputProblem};
 use crate::ids::ProviderId;
+use crate::time::Timestamp;
 
 /// What a provider is used for. `Analysis` also answers questions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -432,6 +433,260 @@ impl Provider {
     pub const fn data_categories(&self) -> &BTreeSet<DataCategory> {
         &self.data_categories
     }
+
+    /// The same provider with its API key stored under `reference`.
+    #[must_use]
+    pub fn with_credential_ref(mut self, reference: CredentialRef) -> Self {
+        self.credential_ref = Some(reference);
+        self
+    }
+
+    /// Whether `other` sends data elsewhere or sends other data than `self`: the changes that
+    /// need a new authorization (data-model.md "ProviderAuthorization").
+    #[must_use]
+    pub fn changes_destination_or_data(&self, other: &Self) -> bool {
+        self.adapter != other.adapter
+            || self.endpoint != other.endpoint
+            || self.data_categories != other.data_categories
+    }
+}
+
+/// State of a stored remote authorization (data-model.md "ProviderAuthorization").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AuthorizationState {
+    /// The user accepted; requests it covers may be sent.
+    Granted,
+    /// The user withdrew it; nothing more is sent (FR-047).
+    Revoked,
+}
+
+code_enum!(AuthorizationState, "state", {
+    Granted => "granted",
+    Revoked => "revoked",
+});
+
+/// Where a provider stands with respect to authorization, as shown to the user (spec
+/// "Provedor": não configurado, configurado, autorizado, revogado).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AuthorizationStatus {
+    /// Local provider: nothing leaves the machine, no authorization applies.
+    NotRequired,
+    /// Remote provider without an authorization covering its current configuration.
+    Configured,
+    /// Remote provider with a granted authorization covering its configuration.
+    Authorized,
+    /// Remote provider whose last authorization was revoked.
+    Revoked,
+}
+
+code_enum!(AuthorizationStatus, "authorization", {
+    NotRequired => "not_required",
+    Configured => "configured",
+    Authorized => "authorized",
+    Revoked => "revoked",
+});
+
+/// Stored fields of an authorization before validation.
+#[derive(Debug, Clone)]
+pub struct AuthorizationSpec {
+    /// Authorized provider.
+    pub provider_id: ProviderId,
+    /// Granted or revoked.
+    pub state: AuthorizationState,
+    /// Destination shown to the user (host and explicit port).
+    pub destination: String,
+    /// Categories shown to the user and accepted.
+    pub data_categories: BTreeSet<DataCategory>,
+    /// Retention text shown to the user.
+    pub retention_notice: String,
+    /// When the user accepted.
+    pub granted_at: Timestamp,
+    /// When the user revoked, for revoked authorizations.
+    pub revoked_at: Option<Timestamp>,
+}
+
+/// An informed authorization of a remote provider (FR-046): a snapshot of what the user saw
+/// and accepted.
+///
+/// Coverage rule: a request is allowed only while the authorization is granted and its
+/// destination and categories still cover the provider's configuration and the request.
+/// Changing the provider's endpoint or categories therefore needs a new authorization.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderAuthorization {
+    provider_id: ProviderId,
+    state: AuthorizationState,
+    destination: String,
+    data_categories: BTreeSet<DataCategory>,
+    retention_notice: String,
+    granted_at: Timestamp,
+    revoked_at: Option<Timestamp>,
+}
+
+impl ProviderAuthorization {
+    /// Maximum length of the stored retention notice.
+    pub const RETENTION_NOTICE_MAX_CHARS: usize = 4_000;
+
+    /// Grants `provider` what it is configured to receive, after the user saw
+    /// `retention_notice`.
+    ///
+    /// # Errors
+    ///
+    /// [`DomainError::InvalidInput`] on `provider_id` for a local provider (nothing to
+    /// authorize) and on `retention_notice` when it is empty or too long.
+    pub fn grant(
+        provider: &Provider,
+        retention_notice: String,
+        at: Timestamp,
+    ) -> Result<Self, DomainError> {
+        let endpoint = provider
+            .endpoint()
+            .filter(|_| provider.locality() == Locality::Remote)
+            .ok_or_else(|| DomainError::invalid("provider_id", InputProblem::Inconsistent))?;
+        Self::restore(AuthorizationSpec {
+            provider_id: provider.id(),
+            state: AuthorizationState::Granted,
+            destination: endpoint.destination(),
+            data_categories: provider.data_categories().clone(),
+            retention_notice,
+            granted_at: at,
+            revoked_at: None,
+        })
+    }
+
+    /// Rebuilds a stored authorization.
+    ///
+    /// # Errors
+    ///
+    /// [`DomainError::InvalidInput`] when a field is empty or too long, or the revocation
+    /// instant does not match the state.
+    pub fn restore(spec: AuthorizationSpec) -> Result<Self, DomainError> {
+        if spec.destination.is_empty() || spec.destination.len() > Endpoint::MAX_LEN {
+            return Err(DomainError::invalid("destination", InputProblem::Malformed));
+        }
+        if spec.data_categories.is_empty() {
+            return Err(DomainError::invalid("data_categories", InputProblem::Empty));
+        }
+        let notice = spec.retention_notice.trim();
+        if notice.is_empty() {
+            return Err(DomainError::invalid(
+                "retention_notice",
+                InputProblem::Empty,
+            ));
+        }
+        if notice.chars().count() > Self::RETENTION_NOTICE_MAX_CHARS {
+            return Err(DomainError::invalid(
+                "retention_notice",
+                InputProblem::TooLong,
+            ));
+        }
+        let revoked = spec.state == AuthorizationState::Revoked;
+        if revoked != spec.revoked_at.is_some() {
+            return Err(DomainError::invalid(
+                "revoked_at",
+                InputProblem::Inconsistent,
+            ));
+        }
+        Ok(Self {
+            provider_id: spec.provider_id,
+            state: spec.state,
+            destination: spec.destination,
+            data_categories: spec.data_categories,
+            retention_notice: notice.to_owned(),
+            granted_at: spec.granted_at,
+            revoked_at: spec.revoked_at,
+        })
+    }
+
+    /// Withdraws the authorization; requests stop from now on (FR-047).
+    ///
+    /// # Errors
+    ///
+    /// [`DomainError::InvalidTransition`] when it is already revoked.
+    pub fn revoke(&mut self, at: Timestamp) -> Result<(), DomainError> {
+        if self.state == AuthorizationState::Revoked {
+            return Err(DomainError::InvalidTransition {
+                from: self.state.code(),
+                action: "revoke",
+            });
+        }
+        self.state = AuthorizationState::Revoked;
+        self.revoked_at = Some(at.max(self.granted_at));
+        Ok(())
+    }
+
+    /// Whether this authorization allows sending `categories` to `provider` as it is
+    /// configured now.
+    #[must_use]
+    pub fn covers(&self, provider: &Provider, categories: &[DataCategory]) -> bool {
+        self.state == AuthorizationState::Granted
+            && provider.id() == self.provider_id
+            && provider.locality() == Locality::Remote
+            && provider
+                .endpoint()
+                .is_some_and(|endpoint| endpoint.destination() == self.destination)
+            && provider.data_categories().is_subset(&self.data_categories)
+            && categories
+                .iter()
+                .all(|category| provider.data_categories().contains(category))
+    }
+
+    /// Authorized provider.
+    #[must_use]
+    pub const fn provider_id(&self) -> ProviderId {
+        self.provider_id
+    }
+
+    /// Granted or revoked.
+    #[must_use]
+    pub const fn state(&self) -> AuthorizationState {
+        self.state
+    }
+
+    /// Destination the user saw.
+    #[must_use]
+    pub fn destination(&self) -> &str {
+        &self.destination
+    }
+
+    /// Categories the user accepted.
+    #[must_use]
+    pub const fn data_categories(&self) -> &BTreeSet<DataCategory> {
+        &self.data_categories
+    }
+
+    /// Retention text the user saw.
+    #[must_use]
+    pub fn retention_notice(&self) -> &str {
+        &self.retention_notice
+    }
+
+    /// When the user accepted.
+    #[must_use]
+    pub const fn granted_at(&self) -> Timestamp {
+        self.granted_at
+    }
+
+    /// When the user revoked, if revoked.
+    #[must_use]
+    pub const fn revoked_at(&self) -> Option<Timestamp> {
+        self.revoked_at
+    }
+}
+
+/// Authorization status of `provider` given its latest stored authorization.
+#[must_use]
+pub fn authorization_status(
+    provider: &Provider,
+    latest: Option<&ProviderAuthorization>,
+) -> AuthorizationStatus {
+    if provider.locality() == Locality::Local {
+        return AuthorizationStatus::NotRequired;
+    }
+    match latest {
+        Some(auth) if auth.covers(provider, &[]) => AuthorizationStatus::Authorized,
+        Some(auth) if auth.state() == AuthorizationState::Revoked => AuthorizationStatus::Revoked,
+        _ => AuthorizationStatus::Configured,
+    }
 }
 
 #[cfg(test)]
@@ -624,5 +879,139 @@ mod tests {
         assert_eq!(CredentialRef::parse(reference.as_str()), Ok(reference));
         assert!(CredentialRef::parse("Provider Key").is_err());
         assert!(CredentialRef::parse("").is_err());
+    }
+
+    fn remote(categories: &[DataCategory]) -> Provider {
+        let mut s = spec(
+            ProviderAdapterKind::Anthropic,
+            Some("https://api.example.com/v1"),
+        );
+        s.data_categories = categories.iter().copied().collect();
+        Provider::new(s).unwrap()
+    }
+
+    fn at(ms: i64) -> Timestamp {
+        Timestamp::from_unix_millis(ms).unwrap()
+    }
+
+    #[test]
+    fn grant_snapshots_destination_and_categories() {
+        let provider = remote(&[DataCategory::Transcript, DataCategory::Records]);
+        let auth =
+            ProviderAuthorization::grant(&provider, " Kept 30 days. ".into(), at(1)).unwrap();
+        assert_eq!(auth.state(), AuthorizationState::Granted);
+        assert_eq!(auth.destination(), "api.example.com");
+        assert_eq!(auth.retention_notice(), "Kept 30 days.");
+        assert_eq!(auth.data_categories(), provider.data_categories());
+        assert!(auth.covers(&provider, &[DataCategory::Transcript]));
+        assert!(auth.covers(
+            &provider,
+            &[DataCategory::Transcript, DataCategory::Records]
+        ));
+        assert_eq!(
+            authorization_status(&provider, Some(&auth)),
+            AuthorizationStatus::Authorized
+        );
+    }
+
+    #[test]
+    fn local_providers_need_no_authorization() {
+        let local = Provider::new(spec(ProviderAdapterKind::WhisperLocal, None)).unwrap();
+        assert_eq!(
+            ProviderAuthorization::grant(&local, "n/a".into(), at(1)),
+            Err(DomainError::invalid(
+                "provider_id",
+                InputProblem::Inconsistent
+            ))
+        );
+        assert_eq!(
+            authorization_status(&local, None),
+            AuthorizationStatus::NotRequired
+        );
+    }
+
+    #[test]
+    fn undeclared_category_is_not_covered() {
+        let provider = remote(&[DataCategory::Transcript]);
+        let auth = ProviderAuthorization::grant(&provider, "notice".into(), at(1)).unwrap();
+        assert!(!auth.covers(&provider, &[DataCategory::Questions]));
+    }
+
+    #[test]
+    fn endpoint_or_category_change_invalidates() {
+        let provider = remote(&[DataCategory::Transcript]);
+        let auth = ProviderAuthorization::grant(&provider, "notice".into(), at(1)).unwrap();
+        let mut moved = spec(
+            ProviderAdapterKind::Anthropic,
+            Some("https://other.example.com/v1"),
+        );
+        moved.id = provider.id();
+        moved.data_categories = BTreeSet::from([DataCategory::Transcript]);
+        let moved = Provider::new(moved).unwrap();
+        assert!(!auth.covers(&moved, &[DataCategory::Transcript]));
+        let mut wider = spec(
+            ProviderAdapterKind::Anthropic,
+            Some("https://api.example.com/v1"),
+        );
+        wider.id = provider.id();
+        wider.data_categories = BTreeSet::from([DataCategory::Transcript, DataCategory::Questions]);
+        let wider = Provider::new(wider).unwrap();
+        assert!(!auth.covers(&wider, &[DataCategory::Transcript]));
+        assert_eq!(
+            authorization_status(&wider, Some(&auth)),
+            AuthorizationStatus::Configured
+        );
+        let other = remote(&[DataCategory::Transcript]);
+        assert!(!auth.covers(&other, &[DataCategory::Transcript]));
+    }
+
+    #[test]
+    fn revoked_covers_nothing_and_cannot_be_revoked_twice() {
+        let provider = remote(&[DataCategory::Transcript]);
+        let mut auth = ProviderAuthorization::grant(&provider, "notice".into(), at(10)).unwrap();
+        auth.revoke(at(20)).unwrap();
+        assert_eq!(auth.revoked_at(), Some(at(20)));
+        assert!(!auth.covers(&provider, &[DataCategory::Transcript]));
+        assert_eq!(
+            authorization_status(&provider, Some(&auth)),
+            AuthorizationStatus::Revoked
+        );
+        assert!(matches!(
+            auth.revoke(at(30)),
+            Err(DomainError::InvalidTransition { .. })
+        ));
+        assert_eq!(
+            authorization_status(&provider, None),
+            AuthorizationStatus::Configured
+        );
+    }
+
+    #[test]
+    fn restore_validates_fields() {
+        let base = AuthorizationSpec {
+            provider_id: ProviderId::new(),
+            state: AuthorizationState::Granted,
+            destination: "api.example.com".into(),
+            data_categories: BTreeSet::from([DataCategory::Audio]),
+            retention_notice: "notice".into(),
+            granted_at: at(1),
+            revoked_at: None,
+        };
+        assert!(ProviderAuthorization::restore(base.clone()).is_ok());
+        let revoked_without_instant = AuthorizationSpec {
+            state: AuthorizationState::Revoked,
+            ..base.clone()
+        };
+        assert!(ProviderAuthorization::restore(revoked_without_instant).is_err());
+        let blank = AuthorizationSpec {
+            retention_notice: "  ".into(),
+            ..base.clone()
+        };
+        assert!(ProviderAuthorization::restore(blank).is_err());
+        let long = AuthorizationSpec {
+            retention_notice: "x".repeat(ProviderAuthorization::RETENTION_NOTICE_MAX_CHARS + 1),
+            ..base
+        };
+        assert!(ProviderAuthorization::restore(long).is_err());
     }
 }

@@ -27,12 +27,16 @@ type IpcError = {
 };
 ```
 
+`authorization_required` traz `details.providerId` quando o núcleo sabe qual provedor remoto precisa de
+autorização (ex.: `session_start` com transcritor remoto padrão ainda não autorizado); a UI abre então o
+diálogo de autorização (US7.2).
+
 ## Sessões
 
 | Comando | Entrada | Saída | Erros específicos |
 |---------|---------|-------|-------------------|
 | `session_create` | `{ title, language, sources: ("microphone"\|"system")[] }` | `SessionDto` | `invalid_input`, `source_unavailable` |
-| `session_start` | `{ sessionId, consentAcknowledged: boolean }` | `SessionDto` (estado `starting`) | `invalid_state`, `permission_denied`, `no_transcriber`, `secret_store_unavailable`, `invalid_input` se lembrete exigido e não confirmado (FR-012) |
+| `session_start` | `{ sessionId, consentAcknowledged: boolean }` | `SessionDto` (estado `starting`) | `invalid_state`, `permission_denied`, `no_transcriber`, `authorization_required` (com `providerId`), `secret_store_unavailable`, `invalid_input` se lembrete exigido e não confirmado (FR-012) |
 | `session_cancel_start` | `{ sessionId }` | `SessionDto` (estado `idle`) — fecha qualquer fonte já aberta (FR-003) | `invalid_state` se não estiver em `starting` |
 | `session_pause` | `{ sessionId }` | `SessionDto` | `invalid_state` |
 | `session_resume` | `{ sessionId }` | `SessionDto` | `invalid_state`, `permission_denied`, `source_unavailable`, `no_transcriber` |
@@ -94,14 +98,24 @@ núcleo, SC-011); o texto citado vem do trecho ou registro armazenado, nunca tra
 
 ## Provedores e autorização
 
+`ProviderDto`: `{ id, role, adapter, locality, endpoint?, model, dataCategories, isDefault, authorization:
+"not_required" | "configured" | "authorized" | "revoked", hasCredential }` — nunca contém o segredo;
+`hasCredential` só indica que há chave no cofre do SO. `ProviderAuthorizationDto`: `{ providerId, state:
+"granted" | "revoked", destination, dataCategories, retentionNotice, grantedAt, revokedAt? }`. Exemplos em
+`fixtures/ProviderDto/`, `fixtures/AuthorizationPreviewDto/`, `fixtures/ProviderAuthorizationDto/`.
+
+Resolução do provedor de cada etapa: o padrão, se utilizável (local, ou remoto com autorização vigente que cubra
+destino e categorias); senão apenas um provedor local; um remoto diferente do padrão só é escolhido quando não há
+padrão definido. Nunca há troca automática para outro provedor remoto (FR-048).
+
 | Comando | Entrada | Saída | Regras |
 |---------|---------|-------|--------|
 | `provider_list` | `{}` | `ProviderDto[]` (sem segredos) | |
-| `provider_upsert` | `{ id?, role, adapter, endpoint?, model, dataCategories }` | `ProviderDto` | remoto exige `https`; alterar endpoint/categorias revoga autorização vigente |
-| `provider_set_secret` | `{ providerId, secret }` | `{}` | grava no cofre do SO; segredo nunca retorna |
-| `provider_authorization_preview` | `{ providerId }` | `{ destination, dataCategories, retentionNotice }` | texto exibido antes do aceite |
-| `provider_authorize` | `{ providerId, accepted: true }` | `ProviderAuthorizationDto` | |
-| `provider_revoke` | `{ providerId }` | `ProviderAuthorizationDto` | envios novos cessam imediatamente (FR-047) |
+| `provider_upsert` | `{ id?, role, adapter, endpoint?, model, dataCategories }` | `ProviderDto` | remoto exige `https`; local exige loopback; alterar adaptador, endpoint ou categorias revoga a autorização vigente; a chave guardada é mantida |
+| `provider_set_secret` | `{ providerId, secret }` (≤ 8 KiB, sem caracteres de controle) | `{}` | só provedores remotos; grava no cofre do SO; segredo nunca retorna; `secret_store_unavailable` sem gravar em outro lugar |
+| `provider_authorization_preview` | `{ providerId }` | `{ providerId, destination, dataCategories, retentionNotice }` | texto exibido antes do aceite, no idioma da UI; `invalid_input` para provedor local |
+| `provider_authorize` | `{ providerId, accepted: true }` | `ProviderAuthorizationDto` | grava exatamente o que a prévia mostra; `accepted ≠ true` → `invalid_input` |
+| `provider_revoke` | `{ providerId }` | `ProviderAuthorizationDto` | envios novos cessam imediatamente (FR-047); `invalid_state` se não autorizado |
 | `provider_set_default` | `{ role, providerId }` | `{}` | |
 | `local_model_list` | `{}` | `LocalModelDto[]` — `{ id, displayName, origin, sizeBytes, downloaded, downloading }` | catálogo fixo (ADR-003); não faz requisição de rede |
 | `local_model_download` | `{ modelId }` + argumento de topo `channel: Channel<ModelDownloadEvent>` | `{ jobId }` | ação explícita; URL (revisão fixa) e SHA-256 fixos no app; `GET` sem dados de sessão; `invalid_input` fora do catálogo, `invalid_state` se já baixando; progresso pelo canal: `{ type: "progress", jobId, receivedBytes, totalBytes }` \| `{ type: "completed", jobId }` \| `{ type: "failed", jobId, messageKey }` |

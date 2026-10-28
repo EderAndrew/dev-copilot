@@ -16,6 +16,7 @@ type SessionEvent =
   | { type: "record_proposed"; seq: number; record: RecordDto }
   | { type: "question_answered"; seq: number; question: QuestionDto }
   | { type: "provider_in_use"; seq: number; role: "transcription" | "analysis" | "questions"; locality: "local" | "remote"; providerId: string }
+  | { type: "provider_fallback"; seq: number; role: "transcription" | "analysis" | "questions"; fromProviderId: string; toProviderId: string }
   | { type: "transcription_lag"; seq: number; lagMs: number }
   | { type: "storage_error"; seq: number; messageKey: string };
 ```
@@ -24,6 +25,9 @@ Garantias:
 - `capture_indicator.active = false` é emitido em até 1 s após `session_stop` (SC-002).
 - `partial_segment` nunca é persistido; é substituído pelo `final_segment` de mesmo `startMs` ou por um `gap`.
 - `provider_in_use` é emitido no início e em qualquer troca de provedor (FR-050, FR-045b).
+- `provider_fallback` é emitido quando um provedor remoto autorizado falha (inclusive por autorização revogada)
+  e um provedor local assume a etapa (FR-045b), seguido de `provider_in_use` do provedor local. Nunca há troca
+  para outro provedor remoto (FR-048).
 - `transcription_lag` é emitido quando o áudio captado e ainda não entregue ao transcritor passa de 15 s
   (SC-005), e de novo com `lagMs = 0` quando volta a ≤ 5 s (FR-018 "atraso", US2.4). Silêncio não conta como
   atraso: o transcritor consome o áudio mesmo quando não há fala.

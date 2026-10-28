@@ -136,6 +136,16 @@ pub enum SessionEvent {
         /// Provider.
         provider_id: ProviderId,
     },
+    /// An authorized remote provider failed and a local one took over the stage (FR-045b);
+    /// followed by `ProviderInUse` for the local provider.
+    ProviderFallback {
+        /// Stage.
+        stage: ProviderStage,
+        /// Remote provider that failed.
+        from_provider_id: ProviderId,
+        /// Local provider now in use.
+        to_provider_id: ProviderId,
+    },
     /// Transcription lag above 15 s, or zero once recovered.
     TranscriptionLag {
         /// Current lag.

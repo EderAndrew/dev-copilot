@@ -4,14 +4,15 @@
 //! every command that needs storage then fails with a typed error the UI explains (FR-039a).
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use devcopilot_application::ApplicationError;
 use devcopilot_application::analysis_service::{AnalysisDeps, AnalysisService, DEFAULT_TICK};
 use devcopilot_application::export_service::{ExportDeps, ExportService};
 use devcopilot_application::ports::{
-    AnalysisProviderFactory, AudioSource, Clock, EventPublisher, SecretStore, TranscriberFactory,
+    AnalysisProviderFactory, AudioSource, AuthorizationError, Clock, EventPublisher, RemoteGate,
+    SecretStore, TranscriberFactory,
 };
 use devcopilot_application::provider_service::ProviderService;
 use devcopilot_application::question_service::{QuestionDeps, QuestionService};
@@ -20,8 +21,10 @@ use devcopilot_application::session_service::{SessionDeps, SessionService};
 use devcopilot_application::settings_service::SettingsService;
 use devcopilot_audio::{CpalMicrophone, UnavailableSource};
 use devcopilot_domain::audio_source::{AudioSourceKind, UnavailableReason};
+use devcopilot_domain::ids::ProviderId;
+use devcopilot_domain::provider::DataCategory;
 use devcopilot_domain::time::Timestamp;
-use devcopilot_intelligence::{AnalysisAdapterFactory, WhisperTranscriberFactory};
+use devcopilot_intelligence::{AnalysisAdapterFactory, TranscriberAdapterFactory};
 use devcopilot_persistence::{
     Database, KeyringSecretStore, SqliteAnalysisRunRepository, SqliteExportRepository,
     SqliteProviderRepository, SqliteQuestionRepository, SqliteRecordRepository,
@@ -66,6 +69,37 @@ pub struct Platform {
     pub transcribers: Arc<dyn TranscriberFactory>,
     /// Builds analysis adapters for configured providers.
     pub analyzers: Arc<dyn AnalysisProviderFactory>,
+    /// Gate handed to the remote adapters; connected to the provider service by
+    /// [`compose_core`].
+    pub gate: Arc<DeferredGate>,
+}
+
+/// [`RemoteGate`] that the adapter factories hold before storage exists: it refuses every
+/// request until [`compose_core`] connects it to the provider service, and stays refusing if
+/// storage never opens (research R9: deny by default).
+#[derive(Default)]
+pub struct DeferredGate {
+    inner: OnceLock<Arc<dyn RemoteGate>>,
+}
+
+impl DeferredGate {
+    /// Connects the real gate; later calls are ignored.
+    pub fn connect(&self, gate: Arc<dyn RemoteGate>) {
+        let _ = self.inner.set(gate);
+    }
+}
+
+impl RemoteGate for DeferredGate {
+    fn check(
+        &self,
+        provider: &ProviderId,
+        categories: &[DataCategory],
+    ) -> Result<(), AuthorizationError> {
+        self.inner
+            .get()
+            .ok_or(AuthorizationError::NotAuthorized)?
+            .check(provider, categories)
+    }
 }
 
 /// Wall clock from the OS.
@@ -143,7 +177,13 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
     let export_repo = Arc::new(SqliteExportRepository::new(Arc::clone(&db)));
     let run_repo = Arc::new(SqliteAnalysisRunRepository::new(db));
     let settings = Arc::new(SettingsService::new(settings_repo.clone()));
-    let providers = Arc::new(ProviderService::new(provider_repo, settings_repo));
+    let providers = Arc::new(ProviderService::new(
+        provider_repo,
+        settings_repo,
+        Arc::clone(&platform.secrets),
+        Arc::clone(&platform.clock),
+    ));
+    platform.gate.connect(providers.gate());
     let questions = QuestionService::new(QuestionDeps {
         providers: Arc::clone(&providers),
         analyzers: Arc::clone(&platform.analyzers),
@@ -249,13 +289,23 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> AppState {
         .ok()
         .map(|dir| Arc::new(LocalModels::new(models_dir(dir))));
     let core = data_dir.and_then(|dir| {
+        let secrets: Arc<dyn SecretStore> = Arc::new(KeyringSecretStore::new());
+        let gate = Arc::new(DeferredGate::default());
         let platform = Platform {
-            secrets: Arc::new(KeyringSecretStore::new()),
             sources: platform_sources(),
             clock: Arc::new(SystemClock),
             events: Arc::clone(&events) as Arc<dyn EventPublisher>,
-            transcribers: Arc::new(WhisperTranscriberFactory::new(models_dir(&dir))),
-            analyzers: Arc::new(AnalysisAdapterFactory),
+            transcribers: Arc::new(TranscriberAdapterFactory::new(
+                models_dir(&dir),
+                Arc::clone(&gate) as Arc<dyn RemoteGate>,
+                Arc::clone(&secrets),
+            )),
+            analyzers: Arc::new(AnalysisAdapterFactory::new(
+                Arc::clone(&gate) as Arc<dyn RemoteGate>,
+                Arc::clone(&secrets),
+            )),
+            secrets,
+            gate,
         };
         compose_core(&dir, platform)
     });

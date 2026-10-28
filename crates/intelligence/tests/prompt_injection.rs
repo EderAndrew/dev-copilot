@@ -34,7 +34,7 @@ use devcopilot_application::testing::{
     FakeClock, InMemoryAnalysisRunRepository, InMemoryProviderRepository,
     InMemoryQuestionRepository, InMemoryRecordRepository, InMemorySegmentRepository,
     InMemorySessionRepository, InMemorySettingsRepository, RecordingEventPublisher,
-    ScriptedAnalysisProvider, ScriptedAnalysisProviderFactory,
+    ScriptedAnalysisProvider, ScriptedAnalysisProviderFactory, ToggleableSecretStore,
 };
 use devcopilot_domain::Redacted;
 use devcopilot_domain::audio_source::AudioSourceKind;
@@ -155,6 +155,8 @@ async fn run_case(case: &Case) {
     let providers = Arc::new(ProviderService::new(
         Arc::new(InMemoryProviderRepository::default()),
         settings_repo,
+        Arc::new(ToggleableSecretStore::available()),
+        clock.clone(),
     ));
     providers
         .upsert_local(ProviderSpec {
@@ -425,6 +427,8 @@ async fn run_qa_case(case: &QaCase) {
     let providers = Arc::new(ProviderService::new(
         Arc::new(InMemoryProviderRepository::default()),
         settings_repo,
+        Arc::new(ToggleableSecretStore::available()),
+        clock.clone(),
     ));
     providers
         .upsert_local(ProviderSpec {

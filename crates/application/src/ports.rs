@@ -3,8 +3,7 @@
 //! Vendor types never cross these traits (Constitution Art. VI.2). Ports used across `.await`
 //! points return [`BoxFuture`] so they stay object-safe and can be composed as `Arc<dyn _>`.
 //!
-//! Repository ports for entities introduced by user stories grow with those stories:
-//! authorizations on `ProviderRepository` arrive with T135.
+//! Repository ports for entities introduced by user stories grow with those stories.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -16,7 +15,9 @@ use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionS
 use devcopilot_domain::export::ExportRecord;
 use devcopilot_domain::ids::{ProviderId, QuestionId, RecordId, SegmentId, SessionId};
 use devcopilot_domain::language::SessionLanguage;
-use devcopilot_domain::provider::{CredentialRef, DataCategory, Locality, Provider};
+use devcopilot_domain::provider::{
+    CredentialRef, DataCategory, Locality, Provider, ProviderAuthorization,
+};
 use devcopilot_domain::question::{Answer, ContextQuestion};
 use devcopilot_domain::record::{Proposal, RecordKind, RecordStatus, TechnicalRecord};
 use devcopilot_domain::record_change::RecordChange;
@@ -678,7 +679,8 @@ pub trait ExportRepository: Send + Sync {
     fn list_by_session(&self, session: SessionId) -> Result<Vec<ExportRecord>, RepositoryError>;
 }
 
-/// Configured providers (authorizations are added with US7, T135).
+/// Configured providers and their remote authorizations (data-model.md "Provider",
+/// "ProviderAuthorization").
 pub trait ProviderRepository: Send + Sync {
     /// Every provider, oldest first.
     ///
@@ -700,6 +702,28 @@ pub trait ProviderRepository: Send + Sync {
     ///
     /// See [`RepositoryError`].
     fn upsert(&self, provider: &Provider) -> Result<(), RepositoryError>;
+
+    /// The most recent authorization of `provider`, granted or revoked.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn latest_authorization(
+        &self,
+        provider: ProviderId,
+    ) -> Result<Option<ProviderAuthorization>, RepositoryError>;
+
+    /// Stores an authorization: a granted one is added as the provider's latest; a revoked one
+    /// updates the provider's latest authorization (history stays in storage).
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the provider does not exist, or when revoking
+    /// without a stored authorization.
+    fn save_authorization(
+        &self,
+        authorization: &ProviderAuthorization,
+    ) -> Result<(), RepositoryError>;
 }
 
 /// Non-sensitive key/value application settings.

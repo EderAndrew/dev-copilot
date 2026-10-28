@@ -48,6 +48,8 @@ export type SessionViewState = {
   transcript: TranscriptState;
   /** Provider used per stage, from `provider_in_use` (FR-050). */
   providers: Partial<Record<ProviderStage, ProviderInUse>>;
+  /** Stages a local provider took over after a remote one failed (FR-045b). */
+  fallbacks: ProviderStage[];
   /** Technical records and the latest analysis status (US3). */
   records: RecordsState;
   /** Questions in the order they were asked (US5). */
@@ -81,6 +83,7 @@ export const initialSessionState: SessionViewState = {
   storageErrorKey: null,
   transcript: emptyTranscript,
   providers: {},
+  fallbacks: [],
   records: emptyRecords,
   questions: [],
 };
@@ -136,6 +139,10 @@ function applyEvent(
           },
         },
       };
+    case "provider_fallback":
+      return next.fallbacks.includes(event.role)
+        ? next
+        : { ...next, fallbacks: [...next.fallbacks, event.role] };
     default:
       // Transcript, record and question events are folded in above.
       return next;

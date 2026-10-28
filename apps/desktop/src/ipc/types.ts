@@ -53,6 +53,13 @@ export type ProviderAdapterKind =
   | "openai_compatible_chat"
   | "ollama";
 export type DataCategory = "audio" | "transcript" | "records" | "questions";
+/** Authorization status of a provider (spec "Provedor"); local providers need none. */
+export type AuthorizationStatus =
+  | "not_required"
+  | "configured"
+  | "authorized"
+  | "revoked";
+export type AuthorizationState = "granted" | "revoked";
 
 export type ProviderDto = {
   id: string;
@@ -63,6 +70,9 @@ export type ProviderDto = {
   model: string;
   dataCategories: DataCategory[];
   isDefault: boolean;
+  authorization: AuthorizationStatus;
+  /** An API key is stored in the OS credential store; the key itself is never returned. */
+  hasCredential: boolean;
 };
 
 export type ProviderUpsertDto = {
@@ -77,6 +87,28 @@ export type ProviderUpsertDto = {
 export type ProviderSetDefaultDto = {
   role: ProviderRole;
   providerId: string;
+};
+
+export type ProviderSetSecretDto = { providerId: string; secret: string };
+export type ProviderIdDto = { providerId: string };
+export type ProviderAuthorizeDto = { providerId: string; accepted: true };
+
+/** What the user sees before authorizing a remote provider (FR-046). */
+export type AuthorizationPreviewDto = {
+  providerId: string;
+  destination: string;
+  dataCategories: DataCategory[];
+  retentionNotice: string;
+};
+
+export type ProviderAuthorizationDto = {
+  providerId: string;
+  state: AuthorizationState;
+  destination: string;
+  dataCategories: DataCategory[];
+  retentionNotice: string;
+  grantedAt: number;
+  revokedAt?: number;
 };
 
 // Local transcription models (contracts/ipc-commands.md "Provedores e autorização") ---------
@@ -290,6 +322,13 @@ export type SessionEvent =
       role: "transcription" | "analysis" | "questions";
       locality: Locality;
       providerId: string;
+    }
+  | {
+      type: "provider_fallback";
+      seq: number;
+      role: "transcription" | "analysis" | "questions";
+      fromProviderId: string;
+      toProviderId: string;
     }
   | { type: "transcription_lag"; seq: number; lagMs: number }
   | { type: "storage_error"; seq: number; messageKey: string };

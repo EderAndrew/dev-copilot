@@ -44,6 +44,14 @@ impl From<ApplicationError> for IpcError {
             ApplicationError::InvalidInput { field, problem } => {
                 Self::invalid_input(field, problem)
             }
+            ApplicationError::AuthorizationRequired {
+                provider: Some(provider),
+            } => {
+                let mut ipc = Self::new(err.code());
+                ipc.details
+                    .insert("providerId".into(), provider.to_string());
+                ipc
+            }
             ApplicationError::Storage(_) | ApplicationError::Internal(_) => {
                 // Details stay in the local log; the UI only gets the code.
                 tracing::warn!(code = err.code().as_str(), error = %err, "command failed");
@@ -91,6 +99,19 @@ mod tests {
         assert_eq!(err.code, "storage_error");
         assert!(err.details.is_empty());
         assert!(!serde_json::to_string(&err).unwrap().contains("/Users"));
+    }
+
+    #[test]
+    fn authorization_required_names_the_provider() {
+        let provider = devcopilot_domain::ids::ProviderId::new();
+        let err = IpcError::from(ApplicationError::AuthorizationRequired {
+            provider: Some(provider),
+        });
+        assert_eq!(err.code, "authorization_required");
+        assert_eq!(
+            err.details.get("providerId").map(String::as_str),
+            Some(provider.to_string().as_str())
+        );
     }
 
     #[test]

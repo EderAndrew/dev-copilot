@@ -91,7 +91,57 @@
   },
   "providers": {
     "title": "Provedores",
-    "empty": "Nenhum provedor configurado."
+    "empty": "Nenhum provedor configurado.",
+    "help": "Provedores locais processam tudo neste computador. Um provedor remoto só recebe dados depois que você o autoriza, e você pode revogar a autorização a qualquer momento.",
+    "name": "{{adapter}} ({{model}})",
+    "role": {
+      "transcription": "Transcrição",
+      "analysis": "Análise e perguntas"
+    },
+    "adapter": {
+      "whisper_local": "Whisper local",
+      "openai_compatible_stt": "Transcrição compatível com OpenAI",
+      "anthropic": "Anthropic",
+      "openai_compatible_chat": "Chat compatível com OpenAI",
+      "ollama": "Ollama (local)"
+    },
+    "category": {
+      "audio": "Áudio",
+      "transcript": "Transcrição",
+      "records": "Registros técnicos",
+      "questions": "Perguntas"
+    },
+    "status": {
+      "not_required": "Sem envio remoto",
+      "configured": "Não autorizado: nada é enviado",
+      "authorized": "Autorizado",
+      "revoked": "Autorização revogada: nada é enviado"
+    },
+    "credentialStored": "Chave de API guardada no cofre do sistema",
+    "isDefault": "Padrão",
+    "makeDefault": "Tornar {{name}} padrão",
+    "edit": "Editar {{name}}",
+    "authorize": "Autorizar {{name}}…",
+    "revoke": "Revogar autorização de {{name}}",
+    "revoked": "Autorização de {{name}} revogada. Nenhum envio novo ocorrerá.",
+    "authorized": "Provedor autorizado.",
+    "add": "Adicionar provedor",
+    "form": {
+      "newTitle": "Novo provedor",
+      "editTitle": "Editar provedor",
+      "adapter": "Tipo",
+      "remoteHint": "Provedor remoto: os dados saem deste computador somente depois da sua autorização. O endereço precisa usar https.",
+      "localHint": "Provedor local: o endereço precisa ser deste computador (127.0.0.1 ou localhost).",
+      "finalsOnly": "No modo remoto a transcrição mostra apenas o texto final de cada trecho, sem texto provisório.",
+      "endpoint": "Endereço",
+      "model": "Modelo",
+      "categories": "Dados enviados",
+      "secret": "Chave de API (opcional)",
+      "secretReplace": "Nova chave de API (deixe vazio para manter a atual)",
+      "reauthorizeHint": "Alterar o endereço ou os dados enviados revoga a autorização atual; será preciso autorizar de novo.",
+      "save": "Salvar",
+      "cancel": "Cancelar"
+    }
   },
   "settings": {
     "title": "Configurações",
@@ -153,7 +203,8 @@
     "locality": {
       "local": "local (neste computador)",
       "remote": "remoto"
-    }
+    },
+    "fallback": "O provedor remoto de {{stage}} falhou; o provedor local assumiu esta etapa."
   },
   "models": {
     "title": "Modelos locais de transcrição",
@@ -313,5 +364,16 @@
     "confirm": "Excluir definitivamente",
     "deleting": "Excluindo…",
     "cancel": "Cancelar"
+  },
+  "authorization": {
+    "title": "Autorizar envio de dados para {{destination}}?",
+    "titleLoading": "Autorizar provedor remoto?",
+    "nothingSent": "Nada é enviado antes do seu aceite. Se recusar, nada é enviado.",
+    "destination": "Destino",
+    "categories": "Dados que serão enviados",
+    "retention": "Retenção",
+    "revocable": "Você pode revogar esta autorização a qualquer momento em Provedores.",
+    "accept": "Autorizar",
+    "decline": "Recusar"
   }
 }

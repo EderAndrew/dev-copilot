@@ -4,10 +4,18 @@
 //! The session service owns the pipeline and turns its signals into state changes and
 //! indicator events. The audio queue feeds the [`Transcription`] stage
 //! ([`crate::transcription`]); audio is never persisted (FR-020).
+//!
+//! A remote transcriber is wrapped in a [`FallbackTranscriber`] when a local one exists: the
+//! first failure of the remote provider (including a revoked authorization) moves the session
+//! to the local provider for good, with a notice (FR-045b). There is never a switch to another
+//! remote provider (FR-048).
+//!
+//! [`Transcription`]: crate::transcription::Transcription
 
 use std::future::{Future, poll_fn};
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::Poll;
 
 use devcopilot_domain::audio_source::AudioSourceKind;
@@ -16,8 +24,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::events::SessionEvent;
 use crate::ports::{
-    AudioChunkStream, AudioError, AudioSource, BoundedAudioSink, CaptureHandle, SourceFault,
-    SourceFaultNotifier,
+    AudioChunkStream, AudioError, AudioSource, BoundedAudioSink, BoxFuture, CaptureHandle,
+    ProviderDescriptor, ProviderError, SourceFault, SourceFaultNotifier, Transcriber,
+    TranscriptSink,
 };
 
 /// Capacity of the audio queue in chunks (~30 s of 100 ms chunks, research R3).
@@ -166,6 +175,76 @@ impl FaultStream {
             }
         })
         .await
+    }
+}
+
+/// Called once when a [`FallbackTranscriber`] switches: `(failed remote, local now in use)`.
+pub type FallbackNotice = Box<dyn Fn(&ProviderDescriptor, &ProviderDescriptor) + Send + Sync>;
+
+/// Remote transcriber that hands over to a local one after its first failure (FR-045b).
+///
+/// The failing run still returns its error, so the transcription stage records the lost audio
+/// as `gap(provider_failure)` before restarting — now on the local transcriber.
+pub struct FallbackTranscriber {
+    primary: Arc<dyn Transcriber>,
+    fallback: Arc<dyn Transcriber>,
+    switched: AtomicBool,
+    notice: FallbackNotice,
+}
+
+impl FallbackTranscriber {
+    /// Wraps `primary` (remote) with `fallback` (local).
+    #[must_use]
+    pub fn new(
+        primary: Arc<dyn Transcriber>,
+        fallback: Arc<dyn Transcriber>,
+        notice: FallbackNotice,
+    ) -> Self {
+        Self {
+            primary,
+            fallback,
+            switched: AtomicBool::new(false),
+            notice,
+        }
+    }
+
+    /// Whether the local transcriber took over.
+    #[must_use]
+    pub fn switched(&self) -> bool {
+        self.switched.load(Ordering::SeqCst)
+    }
+}
+
+impl Transcriber for FallbackTranscriber {
+    fn descriptor(&self) -> ProviderDescriptor {
+        if self.switched() {
+            self.fallback.descriptor()
+        } else {
+            self.primary.descriptor()
+        }
+    }
+
+    fn run(
+        &self,
+        input: AudioChunkStream,
+        out: TranscriptSink,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'_, Result<(), ProviderError>> {
+        Box::pin(async move {
+            if self.switched() {
+                return self.fallback.run(input, out, cancel).await;
+            }
+            let result = self.primary.run(input, out, cancel).await;
+            if let Err(err) = &result
+                && *err != ProviderError::Cancelled
+                && !self.switched.swap(true, Ordering::SeqCst)
+            {
+                let (from, to) = (self.primary.descriptor(), self.fallback.descriptor());
+                tracing::warn!(from = %from.id, to = %to.id, error = %err, "remote transcriber failed; using local provider");
+                (self.notice)(&from, &to);
+            }
+            result
+        })
     }
 }
 

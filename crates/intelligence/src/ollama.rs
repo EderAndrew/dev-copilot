@@ -7,12 +7,11 @@
 //! (Art. IV.14). Replies are accepted only through [`parse_analysis_output`] and
 //! [`parse_answer_output`].
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use devcopilot_application::ports::{
-    AnalysisOutput, AnalysisProvider, AnalysisProviderFactory, AnalysisRequest, AnswerOutput,
-    BoxFuture, ProviderDescriptor, ProviderError, QuestionRequest,
+    AnalysisOutput, AnalysisProvider, AnalysisRequest, AnswerOutput, BoxFuture, ProviderDescriptor,
+    ProviderError, QuestionRequest,
 };
 use devcopilot_domain::provider::{Locality, Provider, ProviderAdapterKind};
 use serde::{Deserialize, Serialize};
@@ -226,18 +225,5 @@ impl AnalysisProvider for OllamaAnalysisProvider {
                 result = self.ask(request) => result,
             }
         })
-    }
-}
-
-/// Builds analysis adapters for configured providers. Remote adapters arrive with US7.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AnalysisAdapterFactory;
-
-impl AnalysisProviderFactory for AnalysisAdapterFactory {
-    fn create(&self, provider: &Provider) -> Result<Arc<dyn AnalysisProvider>, ProviderError> {
-        match provider.adapter() {
-            ProviderAdapterKind::Ollama => Ok(Arc::new(OllamaAnalysisProvider::new(provider)?)),
-            _ => Err(ProviderError::Unavailable),
-        }
     }
 }

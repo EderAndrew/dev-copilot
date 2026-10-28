@@ -91,7 +91,57 @@
   },
   "providers": {
     "title": "Providers",
-    "empty": "No providers configured."
+    "empty": "No providers configured.",
+    "help": "Local providers process everything on this computer. A remote provider only receives data after you authorize it, and you can revoke the authorization at any time.",
+    "name": "{{adapter}} ({{model}})",
+    "role": {
+      "transcription": "Transcription",
+      "analysis": "Analysis and questions"
+    },
+    "adapter": {
+      "whisper_local": "Local Whisper",
+      "openai_compatible_stt": "OpenAI-compatible transcription",
+      "anthropic": "Anthropic",
+      "openai_compatible_chat": "OpenAI-compatible chat",
+      "ollama": "Ollama (local)"
+    },
+    "category": {
+      "audio": "Audio",
+      "transcript": "Transcript",
+      "records": "Technical records",
+      "questions": "Questions"
+    },
+    "status": {
+      "not_required": "No remote sending",
+      "configured": "Not authorized: nothing is sent",
+      "authorized": "Authorized",
+      "revoked": "Authorization revoked: nothing is sent"
+    },
+    "credentialStored": "API key kept in the system credential store",
+    "isDefault": "Default",
+    "makeDefault": "Make {{name}} the default",
+    "edit": "Edit {{name}}",
+    "authorize": "Authorize {{name}}…",
+    "revoke": "Revoke authorization of {{name}}",
+    "revoked": "Authorization of {{name}} revoked. No new data will be sent.",
+    "authorized": "Provider authorized.",
+    "add": "Add provider",
+    "form": {
+      "newTitle": "New provider",
+      "editTitle": "Edit provider",
+      "adapter": "Type",
+      "remoteHint": "Remote provider: data leaves this computer only after your authorization. The address must use https.",
+      "localHint": "Local provider: the address must be this computer (127.0.0.1 or localhost).",
+      "finalsOnly": "In remote mode the transcript shows only the final text of each passage, without provisional text.",
+      "endpoint": "Address",
+      "model": "Model",
+      "categories": "Data sent",
+      "secret": "API key (optional)",
+      "secretReplace": "New API key (leave empty to keep the current one)",
+      "reauthorizeHint": "Changing the address or the data sent revokes the current authorization; you will need to authorize again.",
+      "save": "Save",
+      "cancel": "Cancel"
+    }
   },
   "settings": {
     "title": "Settings",
@@ -153,7 +203,8 @@
     "locality": {
       "local": "local (on this computer)",
       "remote": "remote"
-    }
+    },
+    "fallback": "The remote {{stage}} provider failed; the local provider took over this stage."
   },
   "models": {
     "title": "Local transcription models",
@@ -313,5 +364,16 @@
     "confirm": "Delete permanently",
     "deleting": "Deleting…",
     "cancel": "Cancel"
+  },
+  "authorization": {
+    "title": "Authorize sending data to {{destination}}?",
+    "titleLoading": "Authorize remote provider?",
+    "nothingSent": "Nothing is sent before you accept. If you decline, nothing is sent.",
+    "destination": "Destination",
+    "categories": "Data that will be sent",
+    "retention": "Retention",
+    "revocable": "You can revoke this authorization at any time under Providers.",
+    "accept": "Authorize",
+    "decline": "Decline"
   }
 }

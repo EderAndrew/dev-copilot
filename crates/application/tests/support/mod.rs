@@ -37,6 +37,7 @@ pub struct Fixture {
     pub transcriber: Arc<ScriptedTranscriber>,
     pub transcribers: Arc<ScriptedTranscriberFactory>,
     pub providers: Arc<ProviderService>,
+    pub provider_repo: Arc<InMemoryProviderRepository>,
     pub settings: Arc<SettingsService>,
     pub secrets: Arc<ToggleableSecretStore>,
     pub mic: Arc<ScriptedAudioSource>,
@@ -70,15 +71,18 @@ pub fn fixture_without_transcriber() -> Fixture {
     let transcriber = Arc::new(ScriptedTranscriber::local(Vec::new()));
     let transcribers = Arc::new(ScriptedTranscriberFactory::new(transcriber.clone()));
     let settings_repo = Arc::new(InMemorySettingsRepository::default());
+    let secrets = Arc::new(ToggleableSecretStore::available());
+    let clock = Arc::new(FakeClock::default());
+    let provider_repo = Arc::new(InMemoryProviderRepository::default());
     let providers = Arc::new(ProviderService::new(
-        Arc::new(InMemoryProviderRepository::default()),
+        provider_repo.clone(),
         settings_repo.clone(),
+        secrets.clone(),
+        clock.clone(),
     ));
     let settings = Arc::new(SettingsService::new(settings_repo));
-    let secrets = Arc::new(ToggleableSecretStore::available());
     let mic = Arc::new(ScriptedAudioSource::granted(AudioSourceKind::Microphone));
     let system = Arc::new(ScriptedAudioSource::granted(AudioSourceKind::System));
-    let clock = Arc::new(FakeClock::default());
     let events = Arc::new(RecordingEventPublisher::default());
     let analyzer = Arc::new(ScriptedAnalysisProvider::local());
     let analyzers = Arc::new(ScriptedAnalysisProviderFactory::new(analyzer.clone()));
@@ -145,6 +149,7 @@ pub fn fixture_without_transcriber() -> Fixture {
         transcriber,
         transcribers,
         providers,
+        provider_repo,
         settings,
         secrets,
         mic,

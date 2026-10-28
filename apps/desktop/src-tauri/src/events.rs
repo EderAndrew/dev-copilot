@@ -73,6 +73,16 @@ pub enum ProviderStageDto {
     Questions,
 }
 
+impl From<ProviderStage> for ProviderStageDto {
+    fn from(stage: ProviderStage) -> Self {
+        match stage {
+            ProviderStage::Transcription => Self::Transcription,
+            ProviderStage::Analysis => Self::Analysis,
+            ProviderStage::Questions => Self::Questions,
+        }
+    }
+}
+
 /// Event payload; the `type` tag and field names follow ipc-events.md.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
@@ -126,6 +136,11 @@ pub enum SessionEventBody {
         role: ProviderStageDto,
         locality: Code<Locality>,
         provider_id: String,
+    },
+    ProviderFallback {
+        role: ProviderStageDto,
+        from_provider_id: String,
+        to_provider_id: String,
     },
     TranscriptionLag {
         lag_ms: u64,
@@ -229,13 +244,18 @@ impl From<SessionEvent> for SessionEventBody {
                 locality,
                 provider_id,
             } => Self::ProviderInUse {
-                role: match stage {
-                    ProviderStage::Transcription => ProviderStageDto::Transcription,
-                    ProviderStage::Analysis => ProviderStageDto::Analysis,
-                    ProviderStage::Questions => ProviderStageDto::Questions,
-                },
+                role: stage.into(),
                 locality: Code(locality),
                 provider_id: provider_id.to_string(),
+            },
+            SessionEvent::ProviderFallback {
+                stage,
+                from_provider_id,
+                to_provider_id,
+            } => Self::ProviderFallback {
+                role: stage.into(),
+                from_provider_id: from_provider_id.to_string(),
+                to_provider_id: to_provider_id.to_string(),
             },
             SessionEvent::TranscriptionLag { lag } => Self::TranscriptionLag {
                 lag_ms: lag.as_millis(),

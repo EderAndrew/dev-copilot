@@ -13,7 +13,9 @@ use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionS
 use devcopilot_domain::export::ExportRecord;
 use devcopilot_domain::ids::{ProviderId, QuestionId, RecordId, SessionId};
 use devcopilot_domain::language::SessionLanguage;
-use devcopilot_domain::provider::{CredentialRef, DataCategory, Locality, Provider};
+use devcopilot_domain::provider::{
+    AuthorizationState, CredentialRef, DataCategory, Locality, Provider, ProviderAuthorization,
+};
 use devcopilot_domain::question::{Answer, Certainty, ContextQuestion};
 use devcopilot_domain::record::TechnicalRecord;
 use devcopilot_domain::record_change::RecordChange;
@@ -363,6 +365,14 @@ impl ScriptedTranscriber {
         }
     }
 
+    /// Transcriber reporting `id` and `locality`, otherwise as [`Self::local`] with no updates.
+    #[must_use]
+    pub fn for_provider(id: ProviderId, locality: Locality) -> Self {
+        let mut transcriber = Self::local(Vec::new());
+        transcriber.descriptor = descriptor_for(id, locality, &[DataCategory::Audio]);
+        transcriber
+    }
+
     /// Sets what every run without a queued end does (default: [`TranscriberEnd::WaitForInput`]).
     pub fn set_end(&self, end: TranscriberEnd) {
         lock(&self.script).default_end = Some(end);
@@ -475,10 +485,12 @@ impl Transcriber for ScriptedTranscriber {
     }
 }
 
-/// Factory handing out one shared [`ScriptedTranscriber`].
+/// Factory handing out one shared [`ScriptedTranscriber`], or a routed one per provider.
 #[derive(Debug)]
 pub struct ScriptedTranscriberFactory {
     transcriber: Arc<ScriptedTranscriber>,
+    routes: Mutex<BTreeMap<ProviderId, Arc<ScriptedTranscriber>>>,
+    created: Mutex<Vec<ProviderId>>,
     unavailable: AtomicBool,
     languages: Mutex<Vec<SessionLanguage>>,
 }
@@ -489,9 +501,22 @@ impl ScriptedTranscriberFactory {
     pub fn new(transcriber: Arc<ScriptedTranscriber>) -> Self {
         Self {
             transcriber,
+            routes: Mutex::new(BTreeMap::new()),
+            created: Mutex::new(Vec::new()),
             unavailable: AtomicBool::new(false),
             languages: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Hands out `transcriber` for `provider` instead of the shared one.
+    pub fn route(&self, provider: ProviderId, transcriber: Arc<ScriptedTranscriber>) {
+        lock(&self.routes).insert(provider, transcriber);
+    }
+
+    /// Providers `create` was called for, in order.
+    #[must_use]
+    pub fn created(&self) -> Vec<ProviderId> {
+        lock(&self.created).clone()
     }
 
     /// Makes `create` fail with [`ProviderError::Unavailable`] (e.g. model not downloaded).
@@ -509,14 +534,19 @@ impl ScriptedTranscriberFactory {
 impl TranscriberFactory for ScriptedTranscriberFactory {
     fn create(
         &self,
-        _provider: &Provider,
+        provider: &Provider,
         language: SessionLanguage,
     ) -> Result<Arc<dyn Transcriber>, ProviderError> {
         if self.unavailable.load(Ordering::SeqCst) {
             return Err(ProviderError::Unavailable);
         }
         lock(&self.languages).push(language);
-        Ok(Arc::clone(&self.transcriber) as Arc<dyn Transcriber>)
+        lock(&self.created).push(provider.id());
+        let transcriber = lock(&self.routes)
+            .get(&provider.id())
+            .cloned()
+            .unwrap_or_else(|| Arc::clone(&self.transcriber));
+        Ok(transcriber as Arc<dyn Transcriber>)
     }
 }
 
@@ -1241,6 +1271,7 @@ impl SessionContent for InMemoryExportRepository {
 #[derive(Debug, Default)]
 pub struct InMemoryProviderRepository {
     providers: Mutex<Vec<Provider>>,
+    authorizations: Mutex<Vec<ProviderAuthorization>>,
     fail_with: Mutex<Option<RepositoryError>>,
 }
 
@@ -1252,6 +1283,12 @@ impl InMemoryProviderRepository {
 
     fn check(&self) -> Result<(), RepositoryError> {
         lock(&self.fail_with).clone().map_or(Ok(()), Err)
+    }
+
+    /// Every stored authorization, oldest first.
+    #[must_use]
+    pub fn authorizations(&self) -> Vec<ProviderAuthorization> {
+        lock(&self.authorizations).clone()
     }
 }
 
@@ -1277,6 +1314,41 @@ impl ProviderRepository for InMemoryProviderRepository {
             Some(existing) => *existing = provider.clone(),
             None => providers.push(provider.clone()),
         }
+        Ok(())
+    }
+
+    fn latest_authorization(
+        &self,
+        provider: ProviderId,
+    ) -> Result<Option<ProviderAuthorization>, RepositoryError> {
+        self.check()?;
+        Ok(lock(&self.authorizations)
+            .iter()
+            .rev()
+            .find(|a| a.provider_id() == provider)
+            .cloned())
+    }
+
+    fn save_authorization(
+        &self,
+        authorization: &ProviderAuthorization,
+    ) -> Result<(), RepositoryError> {
+        self.check()?;
+        let id = authorization.provider_id();
+        if !lock(&self.providers).iter().any(|p| p.id() == id) {
+            return Err(RepositoryError::NotFound);
+        }
+        let mut all = lock(&self.authorizations);
+        if authorization.state() == AuthorizationState::Granted {
+            all.push(authorization.clone());
+            return Ok(());
+        }
+        let latest = all
+            .iter_mut()
+            .rev()
+            .find(|a| a.provider_id() == id)
+            .ok_or(RepositoryError::NotFound)?;
+        *latest = authorization.clone();
         Ok(())
     }
 }

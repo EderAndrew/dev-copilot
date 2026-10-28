@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { isIpcError } from "./client";
 import type {
   AudioSourceKind,
+  AuthorizationState,
+  AuthorizationStatus,
   Certainty,
   DataCategory,
   ErrorCode,
@@ -52,6 +54,7 @@ const literal =
   (expected: string): Check =>
   (v) =>
     v === expected;
+const literalTrue: Check = (v) => v === true;
 const arrayOf =
   (check: Check): Check =>
   (v) =>
@@ -114,6 +117,16 @@ const category = keys<DataCategory>({
   transcript: true,
   records: true,
   questions: true,
+});
+const authorization = keys<AuthorizationStatus>({
+  not_required: true,
+  configured: true,
+  authorized: true,
+  revoked: true,
+});
+const authorizationState = keys<AuthorizationState>({
+  granted: true,
+  revoked: true,
 });
 const sessionState = keys<SessionState>({
   idle: true,
@@ -337,6 +350,17 @@ const eventShapes: Record<SessionEvent["type"], Shape> = {
       providerId: str,
     },
   }),
+  provider_fallback: event("provider_fallback", {
+    required: {
+      role: keys<"transcription" | "analysis" | "questions">({
+        transcription: true,
+        analysis: true,
+        questions: true,
+      }),
+      fromProviderId: str,
+      toProviderId: str,
+    },
+  }),
   transcription_lag: event("transcription_lag", {
     required: { lagMs: nonNegativeInt },
   }),
@@ -397,6 +421,8 @@ const dtoShapes: Record<string, (value: unknown) => string[]> = {
         model: str,
         dataCategories: arrayOf(category),
         isDefault: bool,
+        authorization,
+        hasCredential: bool,
       },
       optional: { endpoint: str },
     }),
@@ -412,6 +438,32 @@ const dtoShapes: Record<string, (value: unknown) => string[]> = {
     }),
   ProviderSetDefaultDto: (v) =>
     problems(v, { required: { role, providerId: str } }),
+  ProviderSetSecretDto: (v) =>
+    problems(v, { required: { providerId: str, secret: str } }),
+  ProviderIdDto: (v) => problems(v, { required: { providerId: str } }),
+  ProviderAuthorizeDto: (v) =>
+    problems(v, { required: { providerId: str, accepted: literalTrue } }),
+  AuthorizationPreviewDto: (v) =>
+    problems(v, {
+      required: {
+        providerId: str,
+        destination: str,
+        dataCategories: arrayOf(category),
+        retentionNotice: str,
+      },
+    }),
+  ProviderAuthorizationDto: (v) =>
+    problems(v, {
+      required: {
+        providerId: str,
+        state: authorizationState,
+        destination: str,
+        dataCategories: arrayOf(category),
+        retentionNotice: str,
+        grantedAt: nonNegativeInt,
+      },
+      optional: { revokedAt: nonNegativeInt },
+    }),
   SessionDto: (v) => problems(v, sessionShape),
   SessionCreateDto: (v) =>
     problems(v, {

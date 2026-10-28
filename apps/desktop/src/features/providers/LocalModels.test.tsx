@@ -38,6 +38,8 @@ function setup(models: LocalModelDto[], providers: ProviderDto[] = []) {
       locality: "local" as const,
       model: "base",
       dataCategories: ["audio" as const],
+      authorization: "not_required" as const,
+      hasCredential: false,
       isDefault: false,
     })),
     providerSetDefault: vi.fn(async () => undefined),
@@ -117,6 +119,8 @@ describe("LocalModels", () => {
           model: "base",
           dataCategories: ["audio"],
           isDefault: true,
+          authorization: "not_required",
+          hasCredential: false,
         },
       ],
     );

@@ -9,6 +9,7 @@ import type {
   SessionDto,
   SessionLanguage,
 } from "../../ipc/types";
+import { AuthorizationDialog } from "../providers/AuthorizationDialog";
 import { citedSegments } from "../questions/questionState";
 import { QuestionsPanel } from "../questions/QuestionsPanel";
 import { RecordsPanel } from "../records/RecordsPanel";
@@ -33,6 +34,8 @@ export type SessionsClient = Pick<
   | "recordSetStatus"
   | "questionAsk"
   | "questionToRecord"
+  | "providerAuthorizationPreview"
+  | "providerAuthorize"
 >;
 
 type SessionsPageProps = {
@@ -56,6 +59,8 @@ export function SessionsPage({
   const [askingConsent, setAskingConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<IpcError | null>(null);
+  // Remote provider the core asked to authorize before capture can start (US7.2).
+  const [authorizing, setAuthorizing] = useState<string | null>(null);
   const session = store.state.session;
   const entries = store.state.transcript.entries;
   const segments = useMemo(() => citedSegments(entries), [entries]);
@@ -86,7 +91,11 @@ export function SessionsPage({
     try {
       store.track(await command());
     } catch (failure) {
-      setError(toIpcError(failure));
+      const ipcError = toIpcError(failure);
+      setError(ipcError);
+      const providerId = ipcError.details?.providerId;
+      if (ipcError.code === "authorization_required" && providerId)
+        setAuthorizing(providerId);
     } finally {
       setBusy(false);
     }
@@ -154,6 +163,13 @@ export function SessionsPage({
             onStop={() => void run(() => client.sessionStop(session.id))}
           />
           <ProviderBadge providers={store.state.providers} />
+          {store.state.fallbacks.map((stage) => (
+            <p key={stage} role="status">
+              {t("providerInUse.fallback", {
+                stage: t(`providerInUse.stage.${stage}`),
+              })}
+            </p>
+          ))}
           {session.state !== "idle" && (
             <div className="session-workspace">
               <TranscriptView
@@ -193,6 +209,17 @@ export function SessionsPage({
             >
               {t("sessions.newAnother")}
             </button>
+          )}
+          {authorizing && (
+            <AuthorizationDialog
+              providerId={authorizing}
+              client={client}
+              onAuthorized={() => {
+                setAuthorizing(null);
+                start(session, true);
+              }}
+              onCancel={() => setAuthorizing(null)}
+            />
           )}
           {askingConsent && (
             <ConsentReminderDialog

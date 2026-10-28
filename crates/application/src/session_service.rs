@@ -1,5 +1,5 @@
 //! Session use cases: create, start, cancel start, stop, delete, and startup recovery
-//! (FR-001–FR-012, FR-039a, FR-042–FR-045a). Pause and resume arrive with US9 (T145).
+//! (FR-001–FR-012, FR-039a, FR-042–FR-045b). Pause and resume arrive with US9 (T145).
 //!
 //! While capturing, the audio queue feeds the session's [`Transcription`], which persists
 //! finals and gaps as they arrive (US2) and announces finals to the session's incremental
@@ -26,6 +26,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
 use devcopilot_domain::ids::SessionId;
 use devcopilot_domain::language::SessionLanguage;
+use devcopilot_domain::provider::{Locality, Provider, ProviderRole};
 use devcopilot_domain::session::{FailureReason, Session, SessionState};
 use devcopilot_domain::text::Title;
 use devcopilot_domain::transcript::{GapReason, TranscriptSegment};
@@ -33,7 +34,9 @@ use tokio::runtime::Handle;
 use tokio_util::sync::CancellationToken;
 
 use crate::analysis_service::{AnalysisService, SessionAnalysis};
-use crate::capture_pipeline::{CapturePipeline, FaultStream, OpenError, indicator};
+use crate::capture_pipeline::{
+    CapturePipeline, FallbackNotice, FallbackTranscriber, FaultStream, OpenError, indicator,
+};
 use crate::error::ApplicationError;
 use crate::events::{ProviderStage, SessionEvent, SourceStatus};
 use crate::ports::{
@@ -410,14 +413,7 @@ impl SessionService {
         }
         inner.deps.secrets.check_available()?;
         let provider = inner.deps.providers.resolve_transcriber()?;
-        let transcriber = inner
-            .deps
-            .transcribers
-            .create(&provider, session.language())
-            .map_err(|err| {
-                tracing::warn!(session = %id, provider = %provider.id(), error = %err, "transcriber unavailable");
-                ApplicationError::NoTranscriber
-            })?;
+        let transcriber = inner.transcriber(id, &provider, session.language())?;
         let sources = session
             .sources()
             .iter()
@@ -552,6 +548,64 @@ impl Inner {
 
     fn deleting_set(&self) -> MutexGuard<'_, HashSet<SessionId>> {
         self.deleting.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Transcriber of `provider`; a remote one falls back to a local provider when one can
+    /// transcribe (FR-045b).
+    fn transcriber(
+        &self,
+        id: SessionId,
+        provider: &Provider,
+        language: SessionLanguage,
+    ) -> Result<Arc<dyn Transcriber>, ApplicationError> {
+        let primary = self
+            .deps
+            .transcribers
+            .create(provider, language)
+            .map_err(|err| {
+                tracing::warn!(session = %id, provider = %provider.id(), error = %err, "transcriber unavailable");
+                ApplicationError::NoTranscriber
+            })?;
+        if provider.locality() != Locality::Remote {
+            return Ok(primary);
+        }
+        let fallback = match self
+            .deps
+            .providers
+            .resolve_local_fallback(ProviderRole::Transcription)
+        {
+            Ok(Some(local)) => self.deps.transcribers.create(&local, language).ok(),
+            Ok(None) => None,
+            Err(err) => {
+                tracing::warn!(session = %id, error = %err, "local fallback unresolved");
+                None
+            }
+        };
+        let Some(fallback) = fallback else {
+            return Ok(primary);
+        };
+        let events = Arc::clone(&self.deps.events);
+        let notice: FallbackNotice = Box::new(move |from, to| {
+            events.publish(
+                id,
+                SessionEvent::ProviderFallback {
+                    stage: ProviderStage::Transcription,
+                    from_provider_id: from.id,
+                    to_provider_id: to.id,
+                },
+            );
+            events.publish(
+                id,
+                SessionEvent::ProviderInUse {
+                    stage: ProviderStage::Transcription,
+                    locality: to.locality,
+                    provider_id: to.id,
+                },
+            );
+        });
+        Ok(Arc::new(FallbackTranscriber::new(
+            primary, fallback, notice,
+        )))
     }
 
     fn available_source(

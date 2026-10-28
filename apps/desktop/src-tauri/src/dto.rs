@@ -9,7 +9,10 @@ use devcopilot_domain::DomainError;
 use devcopilot_domain::audio_source::{AudioSourceKind, PermissionState, UnavailableReason};
 use devcopilot_domain::export::{ExportContent, ExportFormat};
 use devcopilot_domain::language::{SessionLanguage, UiLanguage};
-use devcopilot_domain::provider::{DataCategory, Locality, ProviderAdapterKind, ProviderRole};
+use devcopilot_domain::provider::{
+    AuthorizationState, AuthorizationStatus, DataCategory, Locality, ProviderAdapterKind,
+    ProviderRole,
+};
 use devcopilot_domain::question::{Certainty, QuestionStatus};
 use devcopilot_domain::record::{Nature, RecordKind, RecordStatus};
 use devcopilot_domain::session::{FailureReason, SessionState};
@@ -45,6 +48,8 @@ macro_rules! code_enum {
 
 code_enum!(
     AudioSourceKind,
+    AuthorizationState,
+    AuthorizationStatus,
     Certainty,
     DataCategory,
     ExportContent,

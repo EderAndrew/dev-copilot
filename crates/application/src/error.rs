@@ -1,6 +1,7 @@
 //! Application errors with stable codes (contracts/ipc-commands.md `IpcError.code`).
 
 use devcopilot_domain::DomainError;
+use devcopilot_domain::ids::ProviderId;
 use thiserror::Error;
 
 use crate::ports::{AuthorizationError, ProviderError, RepositoryError, SecretStoreError};
@@ -99,9 +100,13 @@ pub enum ApplicationError {
     /// OS credential store unavailable (FR-039a).
     #[error("secret store unavailable")]
     SecretStoreUnavailable,
-    /// Remote provider lacks authorization (FR-046).
+    /// Remote provider lacks authorization (FR-046); names the provider to authorize when
+    /// known.
     #[error("authorization required")]
-    AuthorizationRequired,
+    AuthorizationRequired {
+        /// Provider whose authorization is missing.
+        provider: Option<ProviderId>,
+    },
     /// Provider failure.
     #[error("provider error")]
     Provider(#[source] ProviderError),
@@ -125,7 +130,7 @@ impl ApplicationError {
             Self::SourceUnavailable => ErrorCode::SourceUnavailable,
             Self::NoTranscriber => ErrorCode::NoTranscriber,
             Self::SecretStoreUnavailable => ErrorCode::SecretStoreUnavailable,
-            Self::AuthorizationRequired => ErrorCode::AuthorizationRequired,
+            Self::AuthorizationRequired { .. } => ErrorCode::AuthorizationRequired,
             Self::Provider(_) => ErrorCode::ProviderError,
             Self::Storage(_) => ErrorCode::StorageError,
             Self::Internal(_) => ErrorCode::Internal,
@@ -170,7 +175,7 @@ impl From<SecretStoreError> for ApplicationError {
 impl From<ProviderError> for ApplicationError {
     fn from(err: ProviderError) -> Self {
         match err {
-            ProviderError::AuthorizationRequired => Self::AuthorizationRequired,
+            ProviderError::AuthorizationRequired => Self::AuthorizationRequired { provider: None },
             other => Self::Provider(other),
         }
     }
@@ -178,7 +183,7 @@ impl From<ProviderError> for ApplicationError {
 
 impl From<AuthorizationError> for ApplicationError {
     fn from(_: AuthorizationError) -> Self {
-        Self::AuthorizationRequired
+        Self::AuthorizationRequired { provider: None }
     }
 }
 
