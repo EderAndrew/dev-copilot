@@ -39,3 +39,9 @@ yarn-error.log*
 
 # Rust
 /target
+
+# Editors and misc
+*.rs.bk
+*.log
+*.swp
+.idea/

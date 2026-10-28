@@ -2,5 +2,16 @@
 name = "devcopilot-audio"
 edition.workspace = true
 version.workspace = true
+publish.workspace = true
 
 [dependencies]
+devcopilot-application.workspace = true
+devcopilot-domain.workspace = true
+cpal.workspace = true
+rtrb.workspace = true
+rubato.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

@@ -2,5 +2,13 @@
 name = "devcopilot-domain"
 edition.workspace = true
 version.workspace = true
+publish.workspace = true
 
+# Pure business rules: no Tauri, audio, database or AI dependencies (Constitution Art. II.2).
 [dependencies]
+thiserror.workspace = true
+time.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

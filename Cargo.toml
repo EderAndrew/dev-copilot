@@ -13,9 +13,69 @@ members = [
 [workspace.package]
 edition = "2024"
 version = "0.1.0"
+publish = false
 
 [workspace.metadata]
 name = "devcopilot-rust"
+
+# Versions are written at full precision; the committed Cargo.lock pins the exact resolved
+# versions. Purpose of each dependency: specs/001-meeting-sessions/research.md (R1–R19).
+[workspace.dependencies]
+devcopilot-domain = { path = "crates/domain" }
+devcopilot-application = { path = "crates/application" }
+devcopilot-audio = { path = "crates/audio" }
+devcopilot-intelligence = { path = "crates/intelligence" }
+devcopilot-persistence = { path = "crates/persistence" }
+
+# Async runtime and cancellation (R3)
+tokio = { version = "1.54.1", default-features = false }
+tokio-util = { version = "0.7.20", default-features = false }
+
+# Serialization, errors, diagnostics (R11, R13)
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "std", "env-filter"] }
+tracing-appender = "0.2.5"
+
+# Domain value types (R19)
+uuid = { version = "1.29.0", features = ["v7"] }
+time = { version = "0.3.55", features = ["std"] }
+
+# Audio pipeline (R1, R3)
+cpal = "0.18.2"
+rtrb = "0.4.1"
+rubato = "5.0.1"
+
+# Transcription and AI providers (R4–R6, R18)
+whisper-rs = "0.16.0"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "http2"] }
+# No remote $ref resolution: the analysis schema is embedded (R6).
+jsonschema = { version = "0.60.2", default-features = false }
+sha2 = "0.11.1"
+
+# Encrypted persistence and OS credential store (R8, R9)
+rusqlite = { version = "0.41.0", features = ["bundled-sqlcipher"] }
+keyring = "4.2.0"
+
+# Desktop shell
+tauri = "2.12.5"
+tauri-build = "2.7.4"
+tauri-plugin-dialog = "2.8.4"
+
+# Test-only
+wiremock = "0.6.5"
+tempfile = "3.27.0"
+
+[workspace.lints.rust]
+# Allowed per module only where documented with `// SAFETY:` (Constitution Art. I.4).
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+# Allowed in tests via clippy.toml (Constitution Art. I.3).
+unwrap_used = "deny"
+expect_used = "deny"
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

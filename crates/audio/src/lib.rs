@@ -1,14 +1,4 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+//! OS audio capture adapters implementing the application `AudioSource` port.
+//!
+//! Real-time callbacks only write to bounded ring buffers; resampling and any heavy work run
+//! outside the callback (Constitution Art. V.3).

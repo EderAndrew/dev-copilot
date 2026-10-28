@@ -14,7 +14,8 @@
       {
         "title": "Dev Copilot",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "label": "main"
       }
     ],
     "security": {
@@ -31,6 +32,9 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "infoPlist": "./Info.plist"
+    }
   }
 }

@@ -1,14 +1,4 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+//! Transcription and LLM provider adapters implementing the application ports.
+//!
+//! Vendor payloads stay inside this crate and never leak into domain types
+//! (Constitution Art. VI.2). Transcript content and model output are untrusted data.

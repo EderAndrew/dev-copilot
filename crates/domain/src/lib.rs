@@ -1,14 +1,4 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+//! Dev Copilot domain: entities, value objects, state machines and invariants.
+//!
+//! This crate is pure business logic and must not depend on Tauri, platform audio APIs,
+//! databases or AI SDKs (Constitution Art. II.2).
