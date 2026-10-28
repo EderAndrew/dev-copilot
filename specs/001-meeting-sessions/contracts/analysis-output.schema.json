@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devcopilot.local/schemas/analysis-output/v1",
+  "title": "Dev Copilot analysis output v1",
+  "description": "Única forma aceita de saída de um AnalysisProvider. Qualquer desvio é descartado (FR-030).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "proposals"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "proposals": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "text", "nature", "rationale", "evidenceSegmentIds"],
+        "properties": {
+          "kind": { "enum": ["requirement", "decision", "risk", "open_question", "task", "assumption"] },
+          "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "nature": { "enum": ["observed", "inferred", "suggested"] },
+          "rationale": { "type": "string", "maxLength": 2000 },
+          "evidenceSegmentIds": {
+            "type": "array",
+            "maxItems": 20,
+            "items": { "type": "string", "format": "uuid" }
+          },
+          "acceptanceCriteria": {
+            "type": "array",
+            "maxItems": 10,
+            "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+          },
+          "alternatives": {
+            "type": "array",
+            "maxItems": 10,
+            "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+          },
+          "relatesTo": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["recordId", "relation"],
+            "properties": {
+              "recordId": { "type": "string", "format": "uuid" },
+              "relation": { "enum": ["duplicate", "conflict", "refines"] }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "nature": { "const": "observed" } } },
+            "then": { "properties": { "evidenceSegmentIds": { "minItems": 1 } } }
+          }
+        ]
+      }
+    }
+  }
+}
