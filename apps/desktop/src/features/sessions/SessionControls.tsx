@@ -9,11 +9,13 @@ type SessionControlsProps = {
   error?: IpcError | null;
   onStart: () => void;
   onCancelStart: () => void;
+  onPause: () => void;
+  onResume: () => void;
   onStop: () => void;
 };
 
 /**
- * Start/stop controls for one session. Which actions exist in which state mirrors the core
+ * Start, pause, resume and stop controls for one session. Which actions exist in which state mirrors the core
  * state machine; the core still validates every command (Art. IV.11).
  */
 export function SessionControls({
@@ -22,6 +24,8 @@ export function SessionControls({
   error,
   onStart,
   onCancelStart,
+  onPause,
+  onResume,
   onStop,
 }: SessionControlsProps) {
   const { t } = useTranslation();
@@ -33,6 +37,7 @@ export function SessionControls({
         {t("sessions.stateLabel")}{" "}
         <strong>{t(`sessions.state.${state}`)}</strong>
       </p>
+      {state === "paused" && <p>{t("sessions.pausedHint")}</p>}
       {state === "failed" && failure && (
         <p role="alert">{t(`sessions.failure.${failure}`)}</p>
       )}
@@ -46,6 +51,16 @@ export function SessionControls({
         {state === "starting" && (
           <button type="button" onClick={onCancelStart} disabled={busy}>
             {t("sessions.cancelStart")}
+          </button>
+        )}
+        {state === "capturing" && (
+          <button type="button" onClick={onPause} disabled={busy}>
+            {t("sessions.pause")}
+          </button>
+        )}
+        {state === "paused" && (
+          <button type="button" onClick={onResume} disabled={busy}>
+            {t("sessions.resume")}
           </button>
         )}
         {(state === "capturing" || state === "paused") && (

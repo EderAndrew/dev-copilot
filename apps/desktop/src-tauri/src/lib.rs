@@ -52,6 +52,8 @@ pub fn run() -> tauri::Result<()> {
             commands::sessions::session_create,
             commands::sessions::session_start,
             commands::sessions::session_cancel_start,
+            commands::sessions::session_pause,
+            commands::sessions::session_resume,
             commands::sessions::session_stop,
             commands::sessions::session_subscribe,
             commands::audio::audio_sources_list,

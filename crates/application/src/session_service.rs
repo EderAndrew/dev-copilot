@@ -1,5 +1,5 @@
-//! Session use cases: create, start, cancel start, stop, delete, and startup recovery
-//! (FR-001–FR-012, FR-039a, FR-042–FR-045b). Pause and resume arrive with US9 (T145).
+//! Session use cases: create, start, cancel start, pause, resume, stop, delete, and startup
+//! recovery (FR-001–FR-012, FR-039a, FR-042–FR-045b).
 //!
 //! While capturing, the audio queue feeds the session's [`Transcription`], which persists
 //! finals and gaps as they arrive (US2) and announces finals to the session's incremental
@@ -16,6 +16,13 @@
 //! one lock together with its pipeline; every state change is persisted and published while
 //! that lock is held, so events reflect the order of transitions.
 //!
+//! Pause (FR-006a) closes every source at once, so nothing is captured, and lets the audio
+//! captured before it finish transcribing in the background. Resume re-checks the transcriber,
+//! the sources and their permissions; sources that became unusable during the pause are
+//! reported and left closed (US9.4). The paused interval is stored as `gap(paused)` before the
+//! new capture writes anything. Segment offsets are wall-clock time since the session first
+//! captured, so the gap has the length of the pause; the active duration excludes it.
+//!
 //! Deleting a session is refused while it is active (FR-044). Otherwise its analysis runs and
 //! question still in flight are cancelled and awaited first, so nothing is written for it once
 //! its rows are gone (FR-043).
@@ -24,13 +31,17 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
+use devcopilot_domain::ids::SegmentId;
 use devcopilot_domain::ids::SessionId;
 use devcopilot_domain::language::SessionLanguage;
 use devcopilot_domain::provider::{Locality, Provider, ProviderRole};
 use devcopilot_domain::session::{FailureReason, Session, SessionState};
 use devcopilot_domain::text::Title;
+use devcopilot_domain::time::{Duration, Timestamp};
 use devcopilot_domain::transcript::{GapReason, TranscriptSegment};
+use devcopilot_domain::transcript::{SegmentKind, SegmentSpec};
 use tokio::runtime::Handle;
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::analysis_service::{AnalysisService, SessionAnalysis};
@@ -117,9 +128,28 @@ pub struct SourceInfo {
 struct Active {
     session: Session,
     cancel: CancellationToken,
+    /// Child of `cancel` for the current capture; cancelled when it pauses or ends, so the
+    /// fault supervisor of a closed pipeline never touches a later one.
+    capture: CancellationToken,
     pipeline: Option<CapturePipeline>,
     transcription: Option<Transcription>,
     analysis: Option<SessionAnalysis>,
+    paused: Option<PausedCapture>,
+}
+
+/// What a pause leaves behind for the resume.
+struct PausedCapture {
+    /// Session offset where the paused interval begins.
+    gap_start: Duration,
+    /// Transcription of the audio captured before the pause, finishing in the background.
+    drain: Option<JoinHandle<()>>,
+}
+
+/// Wall-clock offset of `now` from the first capture of `session`.
+fn offset_at(session: &Session, now: Timestamp) -> Duration {
+    session.started_at().map_or(Duration::ZERO, |started| {
+        now.saturating_duration_since(started)
+    })
 }
 
 struct Inner {
@@ -429,17 +459,20 @@ impl SessionService {
         }
         inner.deps.sessions.update(&session)?;
         let cancel = CancellationToken::new();
+        let capture = cancel.child_token();
         *active = Some(Active {
             session: session.clone(),
             cancel: cancel.clone(),
+            capture: capture.clone(),
             pipeline: None,
             transcription: None,
             analysis: None,
+            paused: None,
         });
         inner.publish_state(&session);
         drop(active);
         tracing::info!(session = %id, "session starting");
-        runtime.spawn(Arc::clone(inner).finish_start(id, cancel, sources, transcriber));
+        runtime.spawn(Arc::clone(inner).finish_start(id, cancel, capture, sources, transcriber));
         Ok(session)
     }
 
@@ -467,6 +500,125 @@ impl SessionService {
         inner.persist(&session);
         inner.publish_state(&session);
         tracing::info!(session = %id, "session start cancelled");
+        Ok(session)
+    }
+
+    /// Pauses capture (FR-006a): every source closes before this returns, the indicator shows
+    /// "paused", and audio captured before the pause finishes transcribing in the background.
+    ///
+    /// Must be called within a Tokio runtime.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::InvalidState`] unless the session is `capturing` with its sources
+    /// open; [`ApplicationError::NotFound`].
+    pub fn pause(&self, id: SessionId) -> Result<Session, ApplicationError> {
+        let inner = &self.inner;
+        let runtime = Handle::try_current()
+            .map_err(|_| ApplicationError::Internal("no async runtime".into()))?;
+        let now = inner.deps.clock.now();
+        let mut guard = inner.lock();
+        let Some(active) = guard.as_mut().filter(|a| a.session.id() == id) else {
+            drop(guard);
+            return Err(inner.rejected(id, |s| s.pause(now)));
+        };
+        if active.session.state() == SessionState::Capturing && active.pipeline.is_none() {
+            return Err(ApplicationError::InvalidState(
+                "session is still resuming".into(),
+            ));
+        }
+        let wall = offset_at(&active.session, now);
+        active.session.pause(now)?;
+        active.capture.cancel();
+        if let Some(mut pipeline) = active.pipeline.take() {
+            pipeline.close_all();
+        }
+        let transcription = active.transcription.take();
+        let captured = transcription
+            .as_ref()
+            .map_or(Duration::ZERO, Transcription::captured_end);
+        active.paused = Some(PausedCapture {
+            gap_start: wall.max(captured),
+            drain: transcription.map(|t| runtime.spawn(t.drain(DRAIN_DEADLINE))),
+        });
+        let session = active.session.clone();
+        inner.publish(id, indicator(true, true, session.sources().to_vec()));
+        inner.persist(&session);
+        inner.publish_state(&session);
+        drop(guard);
+        tracing::info!(session = %id, "session paused");
+        Ok(session)
+    }
+
+    /// Resumes a paused session (FR-006a). Checks again that the credential store is
+    /// available, a transcriber is usable and each source is available with its permission
+    /// granted. A source that fails is reported with `source_status` and stays closed
+    /// (US9.4); with none left the session stays paused. Then returns the session in
+    /// `capturing` while the sources reopen in the background, after the paused interval is
+    /// stored as `gap(paused)`.
+    ///
+    /// Must be called within a Tokio runtime.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::InvalidState`] unless paused; [`ApplicationError::NotFound`];
+    /// [`ApplicationError::SecretStoreUnavailable`], [`ApplicationError::NoTranscriber`],
+    /// [`ApplicationError::AuthorizationRequired`]; [`ApplicationError::PermissionDenied`] or
+    /// [`ApplicationError::SourceUnavailable`] when no source can capture.
+    pub fn resume(&self, id: SessionId) -> Result<Session, ApplicationError> {
+        let inner = &self.inner;
+        let runtime = Handle::try_current()
+            .map_err(|_| ApplicationError::Internal("no async runtime".into()))?;
+        let now = inner.deps.clock.now();
+        let mut guard = inner.lock();
+        let Some(active) = guard.as_mut().filter(|a| a.session.id() == id) else {
+            drop(guard);
+            return Err(inner.rejected(id, |s| s.resume(now)));
+        };
+        let mut resumed = active.session.clone();
+        resumed.resume(now)?;
+        inner.deps.secrets.check_available()?;
+        let provider = inner.deps.providers.resolve_transcriber()?;
+        let transcriber = inner.transcriber(id, &provider, resumed.language())?;
+        let mut sources = Vec::new();
+        let mut problem = None;
+        for kind in resumed.sources() {
+            let status = match inner.available_source(*kind) {
+                Ok(source) if source.permission().is_granted() => {
+                    sources.push(source);
+                    continue;
+                }
+                Ok(_) => {
+                    problem.get_or_insert(ApplicationError::PermissionDenied);
+                    SourceStatus::PermissionRevoked
+                }
+                Err(_) => {
+                    problem.get_or_insert(ApplicationError::SourceUnavailable);
+                    SourceStatus::Lost
+                }
+            };
+            tracing::warn!(session = %id, source = kind.code(), "source not resumed");
+            inner.publish(
+                id,
+                SessionEvent::SourceStatus {
+                    source: *kind,
+                    status,
+                },
+            );
+        }
+        if sources.is_empty() {
+            return Err(problem.unwrap_or(ApplicationError::SourceUnavailable));
+        }
+        let capture = active.cancel.child_token();
+        active.capture = capture.clone();
+        active.session = resumed;
+        let paused = active.paused.take();
+        let session = active.session.clone();
+        inner.persist(&session);
+        inner.publish_state(&session);
+        drop(guard);
+        tracing::info!(session = %id, "session resuming");
+        runtime.spawn(Arc::clone(inner).finish_resume(id, capture, sources, transcriber, paused));
         Ok(session)
     }
 
@@ -499,11 +651,12 @@ impl SessionService {
         inner.publish_state(&session);
         let transcription = active.transcription.take();
         let analysis = active.analysis.take();
+        let paused_drain = active.paused.take().and_then(|paused| paused.drain);
         drop(guard);
         tracing::info!(session = %id, "session stopping");
         match (Handle::try_current(), transcription) {
             (Ok(runtime), transcription) => {
-                runtime.spawn(Arc::clone(inner).drain(id, transcription, analysis));
+                runtime.spawn(Arc::clone(inner).drain(id, paused_drain, transcription, analysis));
             }
             (Err(_), transcription) => {
                 if let Some(transcription) = transcription {
@@ -710,6 +863,7 @@ impl Inner {
         self: Arc<Self>,
         id: SessionId,
         cancel: CancellationToken,
+        capture: CancellationToken,
         sources: Vec<Arc<dyn AudioSource>>,
         transcriber: Arc<dyn Transcriber>,
     ) {
@@ -729,19 +883,90 @@ impl Inner {
         if cancel.is_cancelled() {
             return;
         }
-        if let Some(faults) = self.open_sources(id, &cancel, &sources, transcriber) {
-            Arc::clone(&self).supervise(id, cancel, faults).await;
+        if let Some(faults) = self.open_sources(id, &capture, &sources, transcriber, None) {
+            Arc::clone(&self).supervise(id, capture, faults).await;
         }
+    }
+
+    /// Background part of `resume`: waits for the pre-pause transcription, then stores
+    /// `gap(paused)` and reopens the sources.
+    async fn finish_resume(
+        self: Arc<Self>,
+        id: SessionId,
+        capture: CancellationToken,
+        sources: Vec<Arc<dyn AudioSource>>,
+        transcriber: Arc<dyn Transcriber>,
+        paused: Option<PausedCapture>,
+    ) {
+        let gap_start = match paused {
+            Some(PausedCapture { gap_start, drain }) => {
+                if let Some(drain) = drain {
+                    // Bounded by its own deadline; segments must be written in `seq` order.
+                    let _ = drain.await;
+                }
+                Some(gap_start)
+            }
+            None => None,
+        };
+        if capture.is_cancelled() {
+            return;
+        }
+        let gap = Some(gap_start.unwrap_or(Duration::ZERO));
+        if let Some(faults) = self.open_sources(id, &capture, &sources, transcriber, gap) {
+            Arc::clone(&self).supervise(id, capture, faults).await;
+        }
+    }
+
+    /// Stores the paused interval `[start, end]` as `gap(paused)`; `false` on storage failure.
+    fn write_pause_gap(&self, session: &Session, seq: u64, start: Duration, end: Duration) -> bool {
+        let id = session.id();
+        let segment = match TranscriptSegment::new(
+            SegmentSpec {
+                id: SegmentId::new(),
+                session_id: id,
+                seq,
+                kind: SegmentKind::Gap {
+                    reason: GapReason::Paused,
+                },
+                source: None,
+                start,
+                end,
+            },
+            session.sources(),
+        ) {
+            Ok(segment) => segment,
+            Err(err) => {
+                tracing::warn!(session = %id, error = %err, "pause gap rejected");
+                return true;
+            }
+        };
+        if let Err(err) = self.deps.segments.append(&segment) {
+            tracing::error!(session = %id, error = %err, "pause gap append failed");
+            return false;
+        }
+        self.publish(
+            id,
+            SessionEvent::Gap {
+                reason: GapReason::Paused,
+                start,
+                duration: segment.duration(),
+            },
+        );
+        true
     }
 
     /// Opens the sources and moves the session to `capturing`; the fault stream to supervise
     /// on success.
+    ///
+    /// On resume, `pause_gap` is where the paused interval began: the session is already
+    /// `capturing`, and `gap(paused)` is stored before the new capture's first segment.
     fn open_sources(
         self: &Arc<Self>,
         id: SessionId,
         cancel: &CancellationToken,
         sources: &[Arc<dyn AudioSource>],
         transcriber: Arc<dyn Transcriber>,
+        pause_gap: Option<Duration>,
     ) -> Option<FaultStream> {
         // Opening may take a moment on real devices; the lock is not held meanwhile, so a
         // cancel can still land. Anything opened is closed if it did.
@@ -759,10 +984,12 @@ impl Inner {
             }
         };
         let active = guard.as_mut()?;
-        if active.session.ready(self.deps.clock.now()).is_err() {
+        let now = self.deps.clock.now();
+        if pause_gap.is_none() && active.session.ready(now).is_err() {
             self.fail_active(&mut guard, FailureReason::Internal);
             return None;
         }
+        let mut offset_base = offset_at(&active.session, now);
         let first_seq = match self.deps.segments.next_seq(id) {
             Ok(seq) => seq,
             Err(err) => {
@@ -771,20 +998,38 @@ impl Inner {
                 return None;
             }
         };
+        let mut first_seq = first_seq;
+        if let Some(gap_start) = pause_gap {
+            offset_base = offset_base.max(gap_start);
+            if !self.write_pause_gap(&active.session, first_seq, gap_start, offset_base) {
+                self.publish(
+                    id,
+                    SessionEvent::StorageError {
+                        message_key: STORAGE_ERROR_KEY,
+                    },
+                );
+                self.fail_active(&mut guard, FailureReason::StorageError);
+                return None;
+            }
+            first_seq += 1;
+        }
+        let active = guard.as_mut()?;
         let descriptor = transcriber.descriptor();
         let sources = pipeline.active_sources();
         active.pipeline = Some(pipeline);
-        active.analysis = self
-            .deps
-            .analysis
-            .as_ref()
-            .and_then(|analysis| analysis.attach(&active.session));
+        if active.analysis.is_none() {
+            active.analysis = self
+                .deps
+                .analysis
+                .as_ref()
+                .and_then(|analysis| analysis.attach(&active.session));
+        }
         active.transcription = Some(Transcription::spawn(
             TranscriptionDeps {
                 session_id: id,
                 session_sources: active.session.sources().to_vec(),
-                // Offsets continue after earlier captures of the session (pause, US9).
-                offset_base: active.session.active_duration(),
+                // Wall-clock offset since the first capture, so pauses keep their length.
+                offset_base,
                 first_seq,
                 transcriber,
                 segments: Arc::clone(&self.deps.segments),
@@ -795,11 +1040,13 @@ impl Inner {
             streams.chunks,
         ));
         let session = active.session.clone();
-        if !self.persist(&session) {
-            self.fail_active(&mut guard, FailureReason::StorageError);
-            return None;
+        if pause_gap.is_none() {
+            if !self.persist(&session) {
+                self.fail_active(&mut guard, FailureReason::StorageError);
+                return None;
+            }
+            self.publish_state(&session);
         }
-        self.publish_state(&session);
         self.publish(id, indicator(true, false, sources));
         self.publish(
             id,
@@ -809,7 +1056,7 @@ impl Inner {
                 provider_id: descriptor.id,
             },
         );
-        tracing::info!(session = %id, "session capturing");
+        tracing::info!(session = %id, resumed = pause_gap.is_some(), "session capturing");
         Some(streams.faults)
     }
 
@@ -915,9 +1162,14 @@ impl Inner {
     async fn drain(
         self: Arc<Self>,
         id: SessionId,
+        paused_drain: Option<JoinHandle<()>>,
         transcription: Option<Transcription>,
         analysis: Option<SessionAnalysis>,
     ) {
+        if let Some(paused_drain) = paused_drain {
+            // Already bounded by its own deadline.
+            let _ = paused_drain.await;
+        }
         if let Some(transcription) = transcription {
             transcription.drain(DRAIN_DEADLINE).await;
         }

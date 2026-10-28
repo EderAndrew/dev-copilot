@@ -380,6 +380,12 @@ impl Transcription {
         }
     }
 
+    /// End of the latest audio received from the sources, as a session offset.
+    #[must_use]
+    pub fn captured_end(&self) -> Duration {
+        self.recorder.lock().captured_end
+    }
+
     /// Stops transcribing now; with `reason`, records the unfinalized audio as a gap.
     pub fn abort(self, reason: Option<GapReason>) {
         self.stop(reason);

@@ -125,6 +125,12 @@ export const ipc = {
     call<SessionDto>("session_start", { request }),
   sessionCancelStart: (sessionId: string) =>
     call<SessionDto>("session_cancel_start", { request: { sessionId } }),
+  /** Closes every source at once; the paused interval becomes `gap(paused)` (FR-006a). */
+  sessionPause: (sessionId: string) =>
+    call<SessionDto>("session_pause", { request: { sessionId } }),
+  /** The core re-checks transcriber, sources and permissions before capturing again. */
+  sessionResume: (sessionId: string) =>
+    call<SessionDto>("session_resume", { request: { sessionId } }),
   sessionStop: (sessionId: string) =>
     call<SessionDto>("session_stop", { request: { sessionId } }),
   /** Routes the session's events to `onEvent`; resolves with the current session. */

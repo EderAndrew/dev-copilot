@@ -20,6 +20,8 @@ function renderControls(state: SessionState, extra: Partial<SessionDto> = {}) {
   const handlers = {
     onStart: vi.fn(),
     onCancelStart: vi.fn(),
+    onPause: vi.fn(),
+    onResume: vi.fn(),
     onStop: vi.fn(),
   };
   const utils = render(
@@ -53,9 +55,32 @@ describe("SessionControls", () => {
     expect(
       screen.queryByRole("button", { name: "Iniciar captura" }),
     ).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Parar captura" }));
+    expect(capturing.handlers.onStop).toHaveBeenCalledOnce();
+  });
+
+  it("pauses and resumes with the keyboard (US9)", async () => {
+    const user = userEvent.setup();
+    const capturing = renderControls("capturing");
+    expect(screen.queryByRole("button", { name: "Retomar captura" })).toBeNull();
+    await user.tab();
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Pausar captura" }),
+    );
+    await user.keyboard("{Enter}");
+    expect(capturing.handlers.onPause).toHaveBeenCalledOnce();
+    capturing.unmount();
+
+    const paused = renderControls("paused");
+    expect(screen.getByText("pausada")).toBeTruthy();
+    expect(screen.getByText(/nada é captado nem processado/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Pausar captura" })).toBeNull();
     await user.tab();
     await user.keyboard("{Enter}");
-    expect(capturing.handlers.onStop).toHaveBeenCalledOnce();
+    expect(paused.handlers.onResume).toHaveBeenCalledOnce();
+    // Stop is still offered while paused (US9.3).
+    await user.click(screen.getByRole("button", { name: "Parar captura" }));
+    expect(paused.handlers.onStop).toHaveBeenCalledOnce();
   });
 
   it("disables controls while stopping and hides them when ended", () => {
@@ -75,7 +100,10 @@ describe("SessionControls", () => {
   });
 
   it("has no axe violations", async () => {
-    const { container } = renderControls("capturing");
+    const { container, unmount } = renderControls("capturing");
     expect((await axe(container)).violations).toEqual([]);
+    unmount();
+    const paused = renderControls("paused");
+    expect((await axe(paused.container)).violations).toEqual([]);
   });
 });

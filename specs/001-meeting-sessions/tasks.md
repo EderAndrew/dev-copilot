@@ -394,14 +394,24 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 
 ### Tests for User Story 9 (REQUIRED) ⚠️
 
-- [ ] T143 [P] [US9] Use-case tests: pause closes streams and halts transcription, resume re-checks permission/source/transcriber, stop from paused, active_duration excludes pauses, gap `paused` recorded, in `crates/application/tests/pause_resume.rs`
-- [ ] T144 [P] [US9] Frontend test: pause/resume controls and indicator "pausada" announced in `apps/desktop/src/features/sessions/SessionControls.test.tsx`
+- [X] T143 [P] [US9] Use-case tests: pause closes streams and halts transcription, resume re-checks permission/source/transcriber, stop from paused, active_duration excludes pauses, gap `paused` recorded, in `crates/application/tests/pause_resume.rs`
+- [X] T144 [P] [US9] Frontend test: pause/resume controls and indicator "pausada" announced in `apps/desktop/src/features/sessions/SessionControls.test.tsx`
 
 ### Implementation for User Story 9
 
-- [ ] T145 [US9] Implement pause/resume in `crates/application/src/session_service.rs` and pause gating in `crates/application/src/capture_pipeline.rs`
-- [ ] T146 [US9] Implement commands `session_pause`, `session_resume` in `apps/desktop/src-tauri/src/commands/sessions.rs`
-- [ ] T147 [US9] Add pause/resume to `apps/desktop/src/features/sessions/SessionControls.tsx` and paused state to `apps/desktop/src/features/sessions/CaptureIndicator.tsx`, with strings in `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
+- [X] T145 [US9] Implement pause/resume in `crates/application/src/session_service.rs` and pause gating in `crates/application/src/capture_pipeline.rs`
+- [X] T146 [US9] Implement commands `session_pause`, `session_resume` in `apps/desktop/src-tauri/src/commands/sessions.rs`
+- [X] T147 [US9] Add pause/resume to `apps/desktop/src/features/sessions/SessionControls.tsx` and paused state to `apps/desktop/src/features/sessions/CaptureIndicator.tsx`, with strings in `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
+
+
+**Phase 10 notes** (2026-10-28):
+- Domain: `Session::pause`/`resume` already existed (T046). Only the service, the commands and the UI were missing.
+- Service (T145): `pause` closes every source under the session lock before returning (nothing more can be captured), publishes `capture_indicator { paused: true }` with the session's sources, and lets the transcription of audio captured before the pause drain in the background (bounded by `DRAIN_DEADLINE`). `resume` re-checks the credential store, the transcriber (`no_transcriber`, `authorization_required`) and each source's availability and permission. A source that fails is reported by `source_status` and stays closed; with none left, the session stays `paused` and the error is `permission_denied` or `source_unavailable`. Then it returns `capturing` while a background task waits for the pre-pause drain, stores `gap(paused)` and reopens the sources, so segments stay in `seq` order. Stop from `paused` waits for that drain and never reopens anything. Incremental analysis stays attached across the pause and only receives finals.
+- Offsets: segment offsets are now wall-clock time since the session first captured (data-model: "relativos ao início da sessão") instead of the accumulated active duration, so `gap(paused)` has the length of the pause. The gap starts at the later of the pause instant and the end of the audio already captured. `active_duration` still excludes pauses (FR-040).
+- Each capture runs under its own `capture` token, a child of the session token, which pause and stop cancel, so a closed pipeline's fault supervisor never acts on a later one. "Pause gating" (T145) is this closing of the pipeline; `capture_pipeline.rs` itself needed no change. `Transcription::captured_end` was added for the gap start.
+- Pausing while a resume is still reopening sources is refused with `invalid_state`.
+- IPC (T146): `session_pause` and `session_resume` call the service directly. The contract table now lists the background reopen, `source_status` for skipped sources, and the `authorization_required`/`secret_store_unavailable` errors.
+- UI (T147): `SessionControls` offers Pause while capturing and Resume while paused, with Stop in both, and shows a paused hint. `CaptureIndicator` already rendered the paused state ("Captura pausada", ❚❚); the paused gap uses the existing transcript gap label.
 
 ---
 

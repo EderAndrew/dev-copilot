@@ -30,6 +30,8 @@ export type SessionsClient = Pick<
   | "sessionCreate"
   | "sessionStart"
   | "sessionCancelStart"
+  | "sessionPause"
+  | "sessionResume"
   | "sessionStop"
   | "recordSetStatus"
   | "questionAsk"
@@ -160,6 +162,8 @@ export function SessionsPage({
             onCancelStart={() =>
               void run(() => client.sessionCancelStart(session.id))
             }
+            onPause={() => void run(() => client.sessionPause(session.id))}
+            onResume={() => void run(() => client.sessionResume(session.id))}
             onStop={() => void run(() => client.sessionStop(session.id))}
           />
           <ProviderBadge providers={store.state.providers} />

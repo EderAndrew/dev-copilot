@@ -1,4 +1,5 @@
-//! `session_create`, `session_start`, `session_cancel_start`, `session_stop`,
+//! `session_create`, `session_start`, `session_cancel_start`, `session_pause`,
+//! `session_resume`, `session_stop`,
 //! `session_subscribe`, `session_list`, `session_get`, `session_rename` and `session_delete`
 //! (contracts/ipc-commands.md "Sessões").
 //!
@@ -245,6 +246,27 @@ pub fn cancel_start(core: &Core, request: &SessionIdDto) -> Result<SessionDto, I
     Ok(core.sessions.cancel_start(request.id()?)?.into())
 }
 
+/// Pauses capture; every source is closed before this returns (FR-006a).
+///
+/// # Errors
+///
+/// `invalid_input`, `not_found`, `invalid_state` outside `capturing`.
+pub fn pause(core: &Core, request: &SessionIdDto) -> Result<SessionDto, IpcError> {
+    Ok(core.sessions.pause(request.id()?)?.into())
+}
+
+/// Resumes a paused session after re-checking transcriber, sources and permissions; sources
+/// that became unusable are reported by `source_status` and stay closed.
+///
+/// # Errors
+///
+/// `invalid_input`, `not_found`, `invalid_state` outside `paused`, `permission_denied`,
+/// `source_unavailable`, `no_transcriber`, `authorization_required`,
+/// `secret_store_unavailable`.
+pub fn resume(core: &Core, request: &SessionIdDto) -> Result<SessionDto, IpcError> {
+    Ok(core.sessions.resume(request.id()?)?.into())
+}
+
 /// Stops capture; returns the session in `stopping` without waiting for the drain.
 ///
 /// # Errors
@@ -433,6 +455,32 @@ pub async fn session_cancel_start(
     request: SessionIdDto,
 ) -> Result<SessionDto, IpcError> {
     cancel_start(state.core()?, &request)
+}
+
+/// Pauses capture (FR-006a).
+///
+/// # Errors
+///
+/// See [`pause`].
+#[tauri::command]
+pub async fn session_pause(
+    state: State<'_, AppState>,
+    request: SessionIdDto,
+) -> Result<SessionDto, IpcError> {
+    pause(state.core()?, &request)
+}
+
+/// Resumes a paused session (FR-006a).
+///
+/// # Errors
+///
+/// See [`resume`].
+#[tauri::command]
+pub async fn session_resume(
+    state: State<'_, AppState>,
+    request: SessionIdDto,
+) -> Result<SessionDto, IpcError> {
+    resume(state.core()?, &request)
 }
 
 /// Stops capture immediately (FR-005).

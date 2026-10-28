@@ -54,7 +54,10 @@
       "secret_store_unavailable": "O cofre de credenciais do sistema ficou indisponível.",
       "interrupted": "O aplicativo foi encerrado durante a captura. O conteúdo já finalizado foi mantido.",
       "internal": "A captura parou por um erro inesperado."
-    }
+    },
+    "pause": "Pausar captura",
+    "resume": "Retomar captura",
+    "pausedHint": "Captura pausada: nada é captado nem processado até você retomar. O intervalo aparece como lacuna na transcrição."
   },
   "sources": {
     "microphone": "Microfone",

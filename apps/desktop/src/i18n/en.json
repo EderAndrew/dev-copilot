@@ -54,7 +54,10 @@
       "secret_store_unavailable": "The system credential store became unavailable.",
       "interrupted": "The app closed during capture. Finalized content was kept.",
       "internal": "Capture stopped because of an unexpected error."
-    }
+    },
+    "pause": "Pause capture",
+    "resume": "Resume capture",
+    "pausedHint": "Capture paused: nothing is captured or processed until you resume. The interval appears as a gap in the transcript."
   },
   "sources": {
     "microphone": "Microphone",

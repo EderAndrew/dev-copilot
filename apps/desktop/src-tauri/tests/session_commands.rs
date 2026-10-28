@@ -236,6 +236,49 @@ async fn stop_outside_capture_is_invalid_state() {
 }
 
 #[tokio::test]
+async fn pause_and_resume_follow_the_session() {
+    let h = harness();
+    let session =
+        sessions::create(&h.core, create_dto("Daily", &[AudioSourceKind::Microphone])).unwrap();
+    assert_eq!(
+        sessions::pause(&h.core, &id_dto(&session.id))
+            .unwrap_err()
+            .code,
+        "invalid_state"
+    );
+    assert_eq!(
+        sessions::resume(&h.core, &id_dto("nope")).unwrap_err().code,
+        "invalid_input"
+    );
+    sessions::start(
+        &h.core,
+        SessionStartDto {
+            session_id: session.id.clone(),
+            consent_acknowledged: true,
+        },
+    )
+    .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        while !h.mic.is_capturing() {
+            tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let paused = sessions::pause(&h.core, &id_dto(&session.id)).unwrap();
+    assert_eq!(paused.state, Code(SessionState::Paused));
+    assert!(!h.mic.is_capturing());
+    let resumed = sessions::resume(&h.core, &id_dto(&session.id)).unwrap();
+    assert_eq!(resumed.state, Code(SessionState::Capturing));
+    assert_eq!(
+        sessions::resume(&h.core, &id_dto(&session.id))
+            .unwrap_err()
+            .code,
+        "invalid_state"
+    );
+}
+
+#[tokio::test]
 async fn delete_requires_confirmation_and_a_stopped_session() {
     let h = harness();
     let session =

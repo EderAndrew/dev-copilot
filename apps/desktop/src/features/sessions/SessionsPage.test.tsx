@@ -96,6 +96,12 @@ function setup(overrides: Partial<SettingsDto> = {}) {
       Promise.resolve({ ...idle, state: "starting" as const }),
     ),
     sessionCancelStart: vi.fn(() => Promise.resolve(idle)),
+    sessionPause: vi.fn(() =>
+      Promise.resolve({ ...idle, state: "paused" as const }),
+    ),
+    sessionResume: vi.fn(() =>
+      Promise.resolve({ ...idle, state: "capturing" as const }),
+    ),
     sessionStop: vi.fn(() =>
       Promise.resolve({ ...idle, state: "stopping" as const }),
     ),
@@ -334,6 +340,45 @@ describe("SessionsPage", () => {
       screen.getByText(
         "O provedor remoto de Transcrição falhou; o provedor local assumiu esta etapa.",
       ),
+    ).toBeTruthy();
+  });
+
+  it("pauses, announces it and resumes (US9)", async () => {
+    const user = userEvent.setup();
+    const { client, emit } = setup({ consentReminderDismissed: true });
+    await user.type(await screen.findByLabelText("Título"), "Daily");
+    await user.click(screen.getByRole("button", { name: "Criar sessão" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Iniciar captura" }),
+    );
+    emit({ type: "state_changed", seq: 1, state: "capturing" });
+    await user.click(
+      await screen.findByRole("button", { name: "Pausar captura" }),
+    );
+    expect(client.sessionPause).toHaveBeenCalledWith("s1");
+    emit({ type: "state_changed", seq: 2, state: "paused" });
+    emit({
+      type: "capture_indicator",
+      seq: 3,
+      active: true,
+      paused: true,
+      sources: ["microphone"],
+    });
+    expect(captureStatus().textContent).toContain("Captura pausada: Microfone");
+    await user.click(
+      await screen.findByRole("button", { name: "Retomar captura" }),
+    );
+    expect(client.sessionResume).toHaveBeenCalledWith("s1");
+    emit({ type: "state_changed", seq: 4, state: "capturing" });
+    emit({
+      type: "gap",
+      seq: 5,
+      reason: "paused",
+      startMs: 10_000,
+      durationMs: 30_000,
+    });
+    expect(
+      screen.getByText(/Lacuna na transcrição .*: captura pausada/),
     ).toBeTruthy();
   });
 
