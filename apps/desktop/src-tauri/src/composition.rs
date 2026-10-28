@@ -9,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use devcopilot_application::ApplicationError;
 use devcopilot_application::analysis_service::{AnalysisDeps, AnalysisService, DEFAULT_TICK};
+use devcopilot_application::export_service::{ExportDeps, ExportService};
 use devcopilot_application::ports::{
     AnalysisProviderFactory, AudioSource, Clock, EventPublisher, SecretStore, TranscriberFactory,
 };
@@ -22,9 +23,9 @@ use devcopilot_domain::audio_source::{AudioSourceKind, UnavailableReason};
 use devcopilot_domain::time::Timestamp;
 use devcopilot_intelligence::{AnalysisAdapterFactory, WhisperTranscriberFactory};
 use devcopilot_persistence::{
-    Database, KeyringSecretStore, SqliteAnalysisRunRepository, SqliteProviderRepository,
-    SqliteQuestionRepository, SqliteRecordRepository, SqliteSegmentRepository,
-    SqliteSessionRepository, SqliteSettingsRepository,
+    Database, KeyringSecretStore, SqliteAnalysisRunRepository, SqliteExportRepository,
+    SqliteProviderRepository, SqliteQuestionRepository, SqliteRecordRepository,
+    SqliteSegmentRepository, SqliteSessionRepository, SqliteSettingsRepository,
 };
 use tauri::{AppHandle, Manager, Runtime};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -47,6 +48,8 @@ pub struct Core {
     pub analysis: AnalysisService,
     /// Contextual questions.
     pub questions: QuestionService,
+    /// Session export.
+    pub export: ExportService,
 }
 
 /// Platform adapters that do not depend on storage.
@@ -137,13 +140,14 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
     let segment_repo = Arc::new(SqliteSegmentRepository::new(Arc::clone(&db)));
     let record_repo = Arc::new(SqliteRecordRepository::new(Arc::clone(&db)));
     let question_repo = Arc::new(SqliteQuestionRepository::new(Arc::clone(&db)));
+    let export_repo = Arc::new(SqliteExportRepository::new(Arc::clone(&db)));
     let run_repo = Arc::new(SqliteAnalysisRunRepository::new(db));
     let settings = Arc::new(SettingsService::new(settings_repo.clone()));
     let providers = Arc::new(ProviderService::new(provider_repo, settings_repo));
     let questions = QuestionService::new(QuestionDeps {
         providers: Arc::clone(&providers),
         analyzers: Arc::clone(&platform.analyzers),
-        questions: question_repo,
+        questions: question_repo.clone(),
         records: record_repo.clone(),
         segments: segment_repo.clone(),
         sessions: session_repo.clone(),
@@ -161,6 +165,15 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
         events: Arc::clone(&platform.events),
         tick: DEFAULT_TICK,
     });
+    let export = ExportService::new(ExportDeps {
+        sessions: session_repo.clone(),
+        segments: segment_repo.clone(),
+        records: record_repo.clone(),
+        questions: question_repo,
+        exports: export_repo,
+        settings: Arc::clone(&settings),
+        clock: Arc::clone(&platform.clock),
+    });
     let records = Arc::new(RecordService::new(
         record_repo,
         session_repo.clone(),
@@ -177,6 +190,7 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
         clock: platform.clock,
         events: platform.events,
         analysis: Some(analysis.clone()),
+        questions: Some(questions.clone()),
     });
     sessions.recover_on_startup()?;
     questions.recover_on_startup()?;
@@ -187,6 +201,7 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
         records,
         analysis,
         questions,
+        export,
     })
 }
 

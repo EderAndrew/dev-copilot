@@ -15,9 +15,11 @@
 //!   `no_evidence` ([`Answer::grounded`](devcopilot_domain::question::Answer::grounded)).
 //! - Answers never touch records (FR-037). [`QuestionService::to_record`] creates a *new*
 //!   `proposed` record only on explicit user request.
+//! - Deleting a session cancels its question in flight ([`QuestionService::cancel_session`]);
+//!   whatever the provider still returns is discarded, neither stored nor published.
 
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::Arc;
 
 use devcopilot_domain::Redacted;
 use devcopilot_domain::ids::{QuestionId, RecordId, SegmentId, SessionId};
@@ -31,6 +33,7 @@ use tokio_util::sync::CancellationToken;
 use crate::analysis_service::summary;
 use crate::error::ApplicationError;
 use crate::events::{ProviderStage, SessionEvent};
+use crate::in_flight::InFlight;
 use crate::ports::{
     AnalysisProvider, AnalysisProviderFactory, AnalysisSegment, Clock, EventPublisher,
     ProviderError, QuestionRepository, QuestionRequest, RecordRepository, SegmentRepository,
@@ -63,17 +66,8 @@ pub struct QuestionDeps {
 
 struct Inner {
     deps: QuestionDeps,
-    /// Sessions with a question in flight.
-    in_flight: Mutex<HashSet<SessionId>>,
-}
-
-impl Inner {
-    fn release(&self, session: SessionId) {
-        self.in_flight
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .remove(&session);
-    }
+    /// Questions in flight (at most one per session).
+    in_flight: InFlight,
 }
 
 /// Contextual question use cases.
@@ -89,7 +83,7 @@ impl QuestionService {
         Self {
             inner: Arc::new(Inner {
                 deps,
-                in_flight: Mutex::new(HashSet::new()),
+                in_flight: InFlight::default(),
             }),
         }
     }
@@ -124,18 +118,9 @@ impl QuestionService {
             .resolve_analyzer()?
             .ok_or(ApplicationError::Provider(ProviderError::Unavailable))?;
         let analyzer = deps.analyzers.create(&provider)?;
-        {
-            let mut in_flight = self
-                .inner
-                .in_flight
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
-            if !in_flight.insert(id) {
-                return Err(ApplicationError::InvalidState(
-                    "a question about this session is pending".into(),
-                ));
-            }
-        }
+        let ticket = self.inner.in_flight.register_exclusive(id).ok_or_else(|| {
+            ApplicationError::InvalidState("a question about this session is pending".into())
+        })?;
         let pending = ContextQuestion::ask(
             QuestionId::new(),
             id,
@@ -143,10 +128,7 @@ impl QuestionService {
             Some(provider.id()),
             deps.clock.now(),
         );
-        if let Err(err) = deps.questions.insert(&pending) {
-            self.inner.release(id);
-            return Err(err.into());
-        }
+        deps.questions.insert(&pending)?;
         deps.events.publish(
             id,
             SessionEvent::ProviderInUse {
@@ -158,8 +140,15 @@ impl QuestionService {
         let inner = Arc::clone(&self.inner);
         let question = pending.clone();
         runtime.spawn(async move {
-            answer(&inner, question, &session, analyzer.as_ref()).await;
-            inner.release(id);
+            answer(
+                &inner,
+                question,
+                &session,
+                analyzer.as_ref(),
+                ticket.token(),
+            )
+            .await;
+            drop(ticket);
         });
         tracing::info!(session = %id, question = %pending.id(), "question asked");
         Ok(pending)
@@ -194,6 +183,13 @@ impl QuestionService {
         Ok(record)
     }
 
+    /// Cancels the question about `session` still in flight, if any, and waits up to
+    /// `deadline` for it to end; its outcome is discarded. `false` when it outlived the
+    /// deadline.
+    pub async fn cancel_session(&self, session: SessionId, deadline: std::time::Duration) -> bool {
+        self.inner.in_flight.cancel(session, deadline).await
+    }
+
     /// Marks questions left `pending` by an unexpected exit as failed, so none waits forever.
     ///
     /// # Errors
@@ -221,12 +217,18 @@ async fn answer(
     mut question: ContextQuestion,
     session: &Session,
     analyzer: &dyn AnalysisProvider,
+    cancel: CancellationToken,
 ) {
     let deps = &inner.deps;
     let id = session.id();
     let outcome = match context(deps, session, &question) {
         Ok((request, finals, records)) => {
-            match analyzer.answer(request, CancellationToken::new()).await {
+            let reply = analyzer.answer(request, cancel.clone()).await;
+            if cancel.is_cancelled() {
+                tracing::info!(session = %id, question = %question.id(), "question discarded");
+                return;
+            }
+            match reply {
                 Ok(output) => {
                     let grounded = output.answer.grounded(|evidence| match evidence {
                         EvidenceRef::Segment(segment) => finals.contains(&segment),

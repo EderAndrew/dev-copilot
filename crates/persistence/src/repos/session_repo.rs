@@ -2,6 +2,11 @@
 //!
 //! Rows are mapped back through [`Session::restore`], so stored data that breaks a domain
 //! invariant surfaces as [`RepositoryError::Corrupt`] instead of a half-valid entity.
+//!
+//! Deleting a session relies on `ON DELETE CASCADE` for everything it owns and on
+//! `secure_delete` to overwrite the freed pages; a `TRUNCATE` checkpoint then copies them into
+//! the database file and empties the write-ahead log, which would otherwise keep the deleted
+//! pages until the next automatic checkpoint (FR-042, research R8).
 
 use std::sync::Arc;
 
@@ -247,4 +252,36 @@ impl SessionRepository for SqliteSessionRepository {
             tx.commit().map_err(|e| storage_error(&e))
         })
     }
+
+    fn delete(&self, id: SessionId) -> Result<(), RepositoryError> {
+        self.db.with_conn(|conn| {
+            let tx = conn.transaction().map_err(|e| storage_error(&e))?;
+            let deleted = tx
+                .execute(
+                    "DELETE FROM sessions WHERE id = ?1",
+                    params![id.to_string()],
+                )
+                .map_err(|e| storage_error(&e))?;
+            if deleted == 0 {
+                return Err(RepositoryError::NotFound);
+            }
+            tx.commit().map_err(|e| storage_error(&e))?;
+            checkpoint(conn)
+        })
+    }
+}
+
+/// Copies every WAL frame into the database file and truncates the log.
+fn checkpoint(conn: &Connection) -> Result<(), RepositoryError> {
+    let busy: i64 = conn
+        .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| row.get(0))
+        .map_err(|e| storage_error(&e))?;
+    if busy != 0 {
+        // Only this process holds the database; a busy checkpoint means the log still holds
+        // deleted pages, so the deletion is not reported as complete.
+        return Err(RepositoryError::Storage(
+            "write-ahead log checkpoint did not complete".into(),
+        ));
+    }
+    Ok(())
 }

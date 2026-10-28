@@ -132,8 +132,9 @@ licença e advisories (Art. VII.6, `cargo deny`).
 
 - **Decisão**: comandos Tauri finos que desserializam DTOs, validam (tamanhos, enums, ids) e delegam para
   casos de uso; eventos de sessão via `tauri::ipc::Channel` por assinatura. Sem plugins de shell, fs ou http
-  no frontend. Exportação usa `tauri-plugin-dialog` apenas para obter o caminho de salvamento
-  (`dialog:allow-save`); a escrita é feita no Rust somente no caminho retornado. Remover
+  no frontend. Exportação usa `tauri-plugin-dialog` apenas para obter o caminho de salvamento,
+  aberto pelo próprio núcleo (o webview não recebe permissão `dialog:*`, US6); a escrita é feita no
+  Rust somente no caminho retornado. Remover
   `tauri-plugin-opener` se não houver uso. CSP restrita já configurada; `connect-src` não inclui destinos
   remotos (a rede ocorre só no núcleo).
 - **Justificativa**: Art. IV.5, IV.11, VII.4.

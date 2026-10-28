@@ -25,10 +25,14 @@ import {
   formatOffset,
   transcriptFromItems,
 } from "../transcript/transcriptState";
+import { DeleteSessionDialog, type DeleteClient } from "./DeleteSessionDialog";
+import { ExportDialog, type ExportClient } from "./ExportDialog";
 import { formatDate } from "./SessionHistory";
 
 export type DetailClient = PlanClient &
   QuestionsClient &
+  ExportClient &
+  DeleteClient &
   Pick<
     IpcClient,
     "sessionGet" | "sessionRename" | "analysisRunFinal" | "sessionSubscribe"
@@ -42,8 +46,8 @@ type SessionDetailProps = {
 
 /**
  * A saved session (US4.3, US4.4): its data, failure reason, transcript and plan, with rename
- * and an explicit final analysis for ended or failed sessions (FR-033), and questions about it
- * (US5).
+ * and an explicit final analysis for ended or failed sessions (FR-033), questions about it
+ * (US5), and export and deletion (US6). After deletion it returns to the history.
  */
 export function SessionDetail({
   sessionId,
@@ -59,6 +63,7 @@ export function SessionDetail({
   const [planVersion, setPlanVersion] = useState(0);
   const [questions, setQuestions] = useState<QuestionDto[]>([]);
   const [records, setRecords] = useState<RecordDto[]>([]);
+  const [dialog, setDialog] = useState<"export" | "delete" | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -196,6 +201,29 @@ export function SessionDetail({
           <span aria-hidden="true">⚠ </span>
           {t(`sessions.failure.${session.failure}`)}
         </p>
+      )}
+      <div className="detail-actions">
+        <button type="button" onClick={() => setDialog("export")}>
+          {t("detail.export")}
+        </button>
+        <button type="button" onClick={() => setDialog("delete")}>
+          {t("detail.delete")}
+        </button>
+      </div>
+      {dialog === "export" && (
+        <ExportDialog
+          sessionId={sessionId}
+          client={client}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === "delete" && (
+        <DeleteSessionDialog
+          session={session}
+          client={client}
+          onDeleted={onBack}
+          onCancel={() => setDialog(null)}
+        />
       )}
       {!finished && session.state !== "idle" && <p>{t("detail.active")}</p>}
       {error && <p role="alert">{t(error.messageKey)}</p>}

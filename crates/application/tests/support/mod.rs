@@ -9,6 +9,7 @@ use std::time::Duration as StdDuration;
 
 use devcopilot_application::analysis_service::{AnalysisDeps, AnalysisService};
 use devcopilot_application::events::SessionEvent;
+use devcopilot_application::export_service::{ExportDeps, ExportService};
 use devcopilot_application::ports::{AudioSource, SessionRepository};
 use devcopilot_application::provider_service::ProviderService;
 use devcopilot_application::question_service::{QuestionDeps, QuestionService};
@@ -16,7 +17,7 @@ use devcopilot_application::record_service::RecordService;
 use devcopilot_application::session_service::{NewSession, SessionDeps, SessionService};
 use devcopilot_application::settings_service::{AnalysisLimits, SettingsService, SettingsUpdate};
 use devcopilot_application::testing::{
-    FakeClock, InMemoryAnalysisRunRepository, InMemoryProviderRepository,
+    FakeClock, InMemoryAnalysisRunRepository, InMemoryExportRepository, InMemoryProviderRepository,
     InMemoryQuestionRepository, InMemoryRecordRepository, InMemorySegmentRepository,
     InMemorySessionRepository, InMemorySettingsRepository, RecordingEventPublisher,
     ScriptedAnalysisProvider, ScriptedAnalysisProviderFactory, ScriptedAudioSource,
@@ -50,6 +51,8 @@ pub struct Fixture {
     pub record_service: RecordService,
     pub questions: Arc<InMemoryQuestionRepository>,
     pub question_service: QuestionService,
+    pub exports: Arc<InMemoryExportRepository>,
+    pub export_service: ExportService,
 }
 
 /// Microphone and system sources granted, a local transcriber configured, consent reminder
@@ -92,6 +95,32 @@ pub fn fixture_without_transcriber() -> Fixture {
         events: events.clone(),
         tick: StdDuration::from_millis(5),
     });
+    let questions = Arc::new(InMemoryQuestionRepository::default());
+    let question_service = QuestionService::new(QuestionDeps {
+        providers: providers.clone(),
+        analyzers: analyzers.clone(),
+        questions: questions.clone(),
+        records: records.clone(),
+        segments: segments.clone(),
+        sessions: sessions.clone(),
+        clock: clock.clone(),
+        events: events.clone(),
+    });
+    let exports = Arc::new(InMemoryExportRepository::default());
+    sessions.cascade_to(segments.clone());
+    sessions.cascade_to(records.clone());
+    sessions.cascade_to(runs.clone());
+    sessions.cascade_to(questions.clone());
+    sessions.cascade_to(exports.clone());
+    let export_service = ExportService::new(ExportDeps {
+        sessions: sessions.clone(),
+        segments: segments.clone(),
+        records: records.clone(),
+        questions: questions.clone(),
+        exports: exports.clone(),
+        settings: settings.clone(),
+        clock: clock.clone(),
+    });
     let service = SessionService::new(SessionDeps {
         sessions: sessions.clone(),
         segments: segments.clone(),
@@ -106,19 +135,9 @@ pub fn fixture_without_transcriber() -> Fixture {
         clock: clock.clone(),
         events: events.clone(),
         analysis: Some(analysis.clone()),
+        questions: Some(question_service.clone()),
     });
     let record_service = RecordService::new(records.clone(), sessions.clone(), clock.clone());
-    let questions = Arc::new(InMemoryQuestionRepository::default());
-    let question_service = QuestionService::new(QuestionDeps {
-        providers: providers.clone(),
-        analyzers: analyzers.clone(),
-        questions: questions.clone(),
-        records: records.clone(),
-        segments: segments.clone(),
-        sessions: sessions.clone(),
-        clock: clock.clone(),
-        events: events.clone(),
-    });
     Fixture {
         service,
         sessions,
@@ -140,6 +159,8 @@ pub fn fixture_without_transcriber() -> Fixture {
         record_service,
         questions,
         question_service,
+        exports,
+        export_service,
     }
 }
 

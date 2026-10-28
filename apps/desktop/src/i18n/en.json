@@ -226,7 +226,9 @@
     "createdAt": "Created",
     "activeDuration": "Active duration",
     "active": "This session is still in progress; follow it on the Sessions page.",
-    "runFinal": "Run final analysis"
+    "runFinal": "Run final analysis",
+    "export": "Export…",
+    "delete": "Delete session…"
   },
   "plan": {
     "title": "Development plan",
@@ -278,5 +280,38 @@
     "convert": "Turn into a proposed item",
     "convertLabel": "Turn the answer into an item: {{question}}",
     "converted": "Proposed item added to the plan. Review it before confirming."
+  },
+  "export": {
+    "title": "Export session",
+    "unencryptedWarning": "Exported files are not encrypted. Anyone with access to them can read the meeting content; keep them somewhere safe.",
+    "formats": "Formats",
+    "format": {
+      "markdown": "Markdown (readable)",
+      "json": "JSON (structured)"
+    },
+    "content": "Content",
+    "part": {
+      "plan": "Plan, questions and answers",
+      "transcript": "Transcript"
+    },
+    "chooseSomething": "Choose at least one format and one kind of content.",
+    "choosingDestination": "Choose where to save in the system window…",
+    "written": "Files written: {{files}}",
+    "cancelled": "Export cancelled; no file was written.",
+    "submit": "Export",
+    "close": "Close"
+  },
+  "deleteSession": {
+    "title": "Delete “{{title}}”?",
+    "stopFirst": "This session is still running. Stop capture before deleting it.",
+    "warning": {
+      "secureDeletion": "The content is removed from this computer's encrypted database, but secure removal is not guaranteed: SSDs, snapshots and the file system may keep copies of old data.",
+      "backups": "System backups made before the deletion still contain this session.",
+      "exportedFiles": "Files already exported are not deleted; remove them yourself if needed.",
+      "irreversible": "This cannot be undone."
+    },
+    "confirm": "Delete permanently",
+    "deleting": "Deleting…",
+    "cancel": "Cancel"
   }
 }

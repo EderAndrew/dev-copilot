@@ -43,6 +43,8 @@ pub fn run() -> tauri::Result<()> {
             commands::sessions::session_list,
             commands::sessions::session_get,
             commands::sessions::session_rename,
+            commands::sessions::session_delete,
+            commands::export::export_session,
             commands::sessions::session_create,
             commands::sessions::session_start,
             commands::sessions::session_cancel_start,

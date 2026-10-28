@@ -342,6 +342,23 @@ export type SessionDetailDto = {
   questions: QuestionDto[];
 };
 
+/** `session_delete` input; `confirmed` must be `true` (FR-042). */
+export type SessionDeleteDto = { sessionId: string; confirmed: boolean };
+
+// Export -----------------------------------------------------------------------------------------
+
+export type ExportFormat = "markdown" | "json";
+export type ExportContent = "plan" | "transcript";
+
+export type ExportSessionDto = {
+  sessionId: string;
+  formats: ExportFormat[];
+  content: ExportContent[];
+};
+
+/** File names written, without directories; empty when the user cancelled the dialog. */
+export type ExportResultDto = { written: string[] };
+
 // Audio sources and permissions ----------------------------------------------------------------
 
 export type AudioSourceDto = {

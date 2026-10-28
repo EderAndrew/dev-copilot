@@ -106,6 +106,8 @@ describe("SessionDetail", () => {
       recordCreate: vi.fn(),
       questionAsk: vi.fn(),
       questionToRecord: vi.fn(),
+      exportSession: vi.fn(() => Promise.resolve({ written: [] })),
+      sessionDelete: vi.fn(() => Promise.resolve({})),
     };
   }
 

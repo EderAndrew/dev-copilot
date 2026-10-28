@@ -1,6 +1,7 @@
 //! IPC validation of the session and audio commands (T044): malformed ids, title bounds,
-//! unknown source kinds, start without consent, and `session_cancel_start` outside
-//! `starting`. Every rejection leaves capture closed.
+//! unknown source kinds, start without consent, `session_cancel_start` outside `starting`,
+//! and `session_delete` without confirmation or of an active session (FR-042, FR-044). Every
+//! rejection leaves capture closed.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -15,7 +16,7 @@ use devcopilot_application::testing::{
 use devcopilot_desktop_lib::commands::IpcError;
 use devcopilot_desktop_lib::commands::audio::{self, AvailabilityDto};
 use devcopilot_desktop_lib::commands::sessions::{
-    self, SessionCreateDto, SessionIdDto, SessionStartDto,
+    self, SessionCreateDto, SessionDeleteDto, SessionIdDto, SessionStartDto,
 };
 use devcopilot_desktop_lib::composition::{Core, Platform, compose_core};
 use devcopilot_desktop_lib::dto::Code;
@@ -231,6 +232,69 @@ async fn stop_outside_capture_is_invalid_state() {
             .code,
         "invalid_state"
     );
+}
+
+#[tokio::test]
+async fn delete_requires_confirmation_and_a_stopped_session() {
+    let h = harness();
+    let session =
+        sessions::create(&h.core, create_dto("Daily", &[AudioSourceKind::Microphone])).unwrap();
+    let delete = |confirmed| SessionDeleteDto {
+        session_id: session.id.clone(),
+        confirmed,
+    };
+
+    let err = sessions::delete(&h.core, &delete(false)).await.unwrap_err();
+    assert_eq!(err.code, "invalid_input");
+    assert_eq!(field(&err), Some("confirmed"));
+    let err = sessions::delete(
+        &h.core,
+        &SessionDeleteDto {
+            session_id: "not-a-uuid".into(),
+            confirmed: true,
+        },
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(field(&err), Some("session_id"));
+
+    sessions::start(
+        &h.core,
+        SessionStartDto {
+            session_id: session.id.clone(),
+            consent_acknowledged: true,
+        },
+    )
+    .unwrap();
+    let wait_for = |state: SessionState| {
+        let core = &h.core;
+        let id = session.id.clone();
+        async move {
+            tokio::time::timeout(std::time::Duration::from_secs(2), async {
+                while sessions::detail(core, &id_dto(&id)).unwrap().session.state != Code(state) {
+                    tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+                }
+            })
+            .await
+            .unwrap();
+        }
+    };
+    // Rejected while starting and while capturing.
+    let err = sessions::delete(&h.core, &delete(true)).await.unwrap_err();
+    assert_eq!(err.code, "invalid_state");
+    wait_for(SessionState::Capturing).await;
+    let err = sessions::delete(&h.core, &delete(true)).await.unwrap_err();
+    assert_eq!(err.code, "invalid_state");
+    sessions::stop(&h.core, &id_dto(&session.id)).unwrap();
+    wait_for(SessionState::Ended).await;
+
+    sessions::delete(&h.core, &delete(true)).await.unwrap();
+    let err = sessions::detail(&h.core, &id_dto(&session.id)).unwrap_err();
+    assert_eq!(err.code, "not_found");
+    assert!(!h.mic.is_capturing());
+    // The payload must carry the flag explicitly.
+    let raw = serde_json::json!({ "sessionId": session.id });
+    assert!(serde_json::from_value::<SessionDeleteDto>(raw).is_err());
 }
 
 #[tokio::test]

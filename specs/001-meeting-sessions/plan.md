@@ -57,7 +57,7 @@ Complexity Tracking with an ADR), or N/A.
       explícitas e testadas; registros estruturados com natureza, status, proveniência e histórico; IA só cria
       propostas.
 - [x] ✅ **IV. Security & privacy**: threat model resumido na spec e detalhado abaixo; capabilities mínimas
-      (sem shell/fs/http no frontend; só `dialog:allow-save`); validação em todos os comandos IPC; segredos e
+      (sem shell/fs/http/dialog no frontend; só `core:default` — o diálogo de salvar é aberto pelo núcleo); validação em todos os comandos IPC; segredos e
       chave do banco no cofre do SO; `RemoteGate` como ponto único de rede; exclusão com avisos; SQLCipher.
 - [x] ✅ **V. Cross-platform audio**: microfone via `cpal`; áudio do sistema por adaptador por SO atrás da
       porta, condicionado a spike; ring/canais limitados com política de descarte e lacunas; cancelamento por

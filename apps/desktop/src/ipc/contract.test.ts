@@ -9,6 +9,8 @@ import type {
   Certainty,
   DataCategory,
   ErrorCode,
+  ExportContent,
+  ExportFormat,
   FailureReason,
   GapReason,
   Locality,
@@ -356,7 +358,21 @@ const downloadEventShapes: Record<ModelDownloadEvent["type"], Shape> = {
   },
 };
 
+const exportFormat = keys<ExportFormat>({ markdown: true, json: true });
+const exportContent = keys<ExportContent>({ plan: true, transcript: true });
+
 const dtoShapes: Record<string, (value: unknown) => string[]> = {
+  ExportSessionDto: (v) =>
+    problems(v, {
+      required: {
+        sessionId: str,
+        formats: arrayOf(exportFormat),
+        content: arrayOf(exportContent),
+      },
+    }),
+  ExportResultDto: (v) => problems(v, { required: { written: arrayOf(str) } }),
+  SessionDeleteDto: (v) =>
+    problems(v, { required: { sessionId: str, confirmed: bool } }),
   IpcError: (v) =>
     problems(v, {
       required: { code: errorCode, messageKey: str },

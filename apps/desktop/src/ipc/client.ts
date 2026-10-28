@@ -6,6 +6,8 @@ import type {
   AudioSourceDto,
   AudioSourceKind,
   ErrorCode,
+  ExportResultDto,
+  ExportSessionDto,
   IpcError,
   JobIdDto,
   LocalModelDto,
@@ -142,6 +144,14 @@ export const ipc = {
     call<SessionDetailDto>("session_get", { request: { sessionId } }),
   sessionRename: (sessionId: string, title: string) =>
     call<SessionDto>("session_rename", { request: { sessionId, title } }),
+  /** Deletes a session after the user confirmed the warnings (FR-042). */
+  sessionDelete: (sessionId: string) =>
+    call<Record<string, never>>("session_delete", {
+      request: { sessionId, confirmed: true },
+    }),
+  /** The core opens the save dialog and writes only where the user chose (FR-041). */
+  exportSession: (request: ExportSessionDto) =>
+    call<ExportResultDto>("export_session", { request }),
   audioSourcesList: () => call<AudioSourceDto[]>("audio_sources_list"),
   audioPermissionRequest: (kind: AudioSourceKind) =>
     call<PermissionState>("audio_permission_request", { request: { kind } }),

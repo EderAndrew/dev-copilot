@@ -40,7 +40,7 @@ type IpcError = {
 | `session_list` | `{ cursor?: string, limit?: 1..100 }` (padrão 50; `cursor` = último id da página anterior) | `{ items: SessionDto[], nextCursor? }`, mais recentes primeiro | `invalid_input` (limite fora da faixa, cursor desconhecido) |
 | `session_get` | `{ sessionId }` | `SessionDetailDto` = `{ session: SessionDto, transcript: TranscriptItemDto[], records: RecordDto[], questions: QuestionDto[] }`; `TranscriptItemDto` = `{ type: "final", segment: SegmentDto }` \| `{ type: "gap", reason, startMs, durationMs }` em ordem de `seq`; perguntas em ordem de envio | `not_found` |
 | `session_rename` | `{ sessionId, title }` | `SessionDto` | `invalid_input` |
-| `session_delete` | `{ sessionId, confirmed: true }` | `{}` | `invalid_state` (sessão ativa, FR-044) |
+| `session_delete` | `{ sessionId, confirmed: true }` | `{}`; análises e pergunta em andamento da sessão são canceladas e descartadas antes da remoção | `invalid_input` (`confirmed` ≠ `true`), `not_found`, `invalid_state` (sessão ativa — inclusive `starting`/`stopping` —, FR-044) |
 | `session_subscribe` | `{ sessionId }` + argumento de topo `channel: Channel<SessionEvent>` (Tauri só aceita `Channel` como argumento de comando, não dentro de `request`) | `SessionDto` atual (para ressincronizar ao reconectar) | `not_found` |
 
 ## Fontes e permissões
@@ -90,7 +90,7 @@ núcleo, SC-011); o texto citado vem do trecho ou registro armazenado, nunca tra
 
 | Comando | Entrada | Saída | Regras |
 |---------|---------|-------|--------|
-| `export_session` | `{ sessionId, formats: ("markdown"\|"json")[], content: ("plan"\|"transcript")[] }` | `{ written: string[] }` (nomes de arquivo, sem diretório) | o núcleo abre o diálogo de salvar e escreve somente no caminho escolhido; cancelamento → `{ written: [] }` |
+| `export_session` | `{ sessionId, formats: ("markdown"\|"json")[], content: ("plan"\|"transcript")[] }` | `{ written: string[] }` (nomes de arquivo, sem diretório) | o núcleo abre um diálogo de salvar por formato e escreve somente nos caminhos escolhidos; cancelar qualquer diálogo → `{ written: [] }` e nada gravado; listas vazias → `invalid_input`; mesmo caminho para dois formatos → `invalid_input` (`path`); falha de escrita → `storage_error` sem o caminho |
 
 ## Provedores e autorização
 

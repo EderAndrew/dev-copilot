@@ -1,10 +1,9 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Least-privilege capability for the main window: core IPC plus the native save dialog used by export.",
+  "description": "Least-privilege capability for the main window: core IPC only. The export save dialog is opened from Rust, so the webview needs no dialog or file system permission.",
   "windows": ["main"],
   "permissions": [
-    "core:default",
-    "dialog:allow-save"
+    "core:default"
   ]
 }

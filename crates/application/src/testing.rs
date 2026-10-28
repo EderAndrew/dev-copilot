@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use devcopilot_domain::Redacted;
 use devcopilot_domain::analysis_run::AnalysisRun;
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
+use devcopilot_domain::export::ExportRecord;
 use devcopilot_domain::ids::{ProviderId, QuestionId, RecordId, SessionId};
 use devcopilot_domain::language::SessionLanguage;
 use devcopilot_domain::provider::{CredentialRef, DataCategory, Locality, Provider};
@@ -28,8 +29,8 @@ use crate::ports::{
     AnalysisOutput, AnalysisProvider, AnalysisProviderFactory, AnalysisRequest,
     AnalysisRunRepository, AnswerOutput, AudioChunk, AudioChunkStream, AudioError, AudioSource,
     AuthorizationError, BoundedAudioSink, BoxFuture, CaptureHandle, Clock, EventPublisher,
-    ProviderDescriptor, ProviderError, ProviderRepository, QuestionRepository, QuestionRequest,
-    RecordRepository, RemoteGate, RepositoryError, SecretStore, SecretStoreError,
+    ExportRepository, ProviderDescriptor, ProviderError, ProviderRepository, QuestionRepository,
+    QuestionRequest, RecordRepository, RemoteGate, RepositoryError, SecretStore, SecretStoreError,
     SegmentRepository, SessionRepository, SettingsRepository, SinkError, SourceFault,
     SourceFaultNotifier, Transcriber, TranscriberFactory, TranscriptSink, TranscriptUpdate,
 };
@@ -803,15 +804,35 @@ impl RemoteGate for FakeRemoteGate {
 // Storage
 // ---------------------------------------------------------------------------------------------
 
+/// Content an in-memory repository holds per session, removed when the session is deleted
+/// (the in-memory counterpart of `ON DELETE CASCADE`).
+pub trait SessionContent: fmt::Debug + Send + Sync {
+    /// Drops everything stored for `session`.
+    fn remove_session(&self, session: SessionId);
+}
+
 /// In-memory session repository.
 #[derive(Debug, Default)]
 pub struct InMemorySessionRepository {
     sessions: Mutex<Vec<Session>>,
     interrupted_gaps: Mutex<Vec<SessionId>>,
     fail_updates: Mutex<Option<RepositoryError>>,
+    cascade: Mutex<Vec<Arc<dyn SessionContent>>>,
+    deleted: Mutex<Vec<SessionId>>,
 }
 
 impl InMemorySessionRepository {
+    /// Makes `delete` also remove the session's content from `content`.
+    pub fn cascade_to(&self, content: Arc<dyn SessionContent>) {
+        lock(&self.cascade).push(content);
+    }
+
+    /// Sessions deleted so far, in order.
+    #[must_use]
+    pub fn deleted(&self) -> Vec<SessionId> {
+        lock(&self.deleted).clone()
+    }
+
     /// Stores `session` as is (e.g. a session left active by a crash).
     pub fn seed(&self, session: Session) {
         lock(&self.sessions).push(session);
@@ -879,6 +900,22 @@ impl SessionRepository for InMemorySessionRepository {
         if session.started_at().is_some() {
             lock(&self.interrupted_gaps).push(session.id());
         }
+        Ok(())
+    }
+
+    fn delete(&self, id: SessionId) -> Result<(), RepositoryError> {
+        {
+            let mut sessions = lock(&self.sessions);
+            let before = sessions.len();
+            sessions.retain(|s| s.id() != id);
+            if sessions.len() == before {
+                return Err(RepositoryError::NotFound);
+            }
+        }
+        for content in lock(&self.cascade).iter() {
+            content.remove_session(id);
+        }
+        lock(&self.deleted).push(id);
         Ok(())
     }
 }
@@ -1131,6 +1168,72 @@ impl QuestionRepository for InMemoryQuestionRepository {
             .filter(|q| q.session_id() == session)
             .cloned()
             .collect())
+    }
+}
+
+impl SessionContent for InMemorySegmentRepository {
+    fn remove_session(&self, session: SessionId) {
+        lock(&self.segments).retain(|s| s.session_id() != session);
+    }
+}
+
+impl SessionContent for InMemoryRecordRepository {
+    fn remove_session(&self, session: SessionId) {
+        let mut records = lock(&self.records);
+        let removed: Vec<RecordId> = records
+            .iter()
+            .filter(|r| r.session_id() == session)
+            .map(TechnicalRecord::id)
+            .collect();
+        records.retain(|r| r.session_id() != session);
+        lock(&self.changes).retain(|c| !removed.contains(&c.record_id()));
+    }
+}
+
+impl SessionContent for InMemoryAnalysisRunRepository {
+    fn remove_session(&self, session: SessionId) {
+        lock(&self.runs).retain(|r| r.session_id() != session);
+    }
+}
+
+impl SessionContent for InMemoryQuestionRepository {
+    fn remove_session(&self, session: SessionId) {
+        lock(&self.questions).retain(|q| q.session_id() != session);
+    }
+}
+
+/// In-memory export repository.
+#[derive(Debug, Default)]
+pub struct InMemoryExportRepository {
+    exports: Mutex<Vec<ExportRecord>>,
+}
+
+impl InMemoryExportRepository {
+    /// Every stored export, in insertion order.
+    #[must_use]
+    pub fn all(&self) -> Vec<ExportRecord> {
+        lock(&self.exports).clone()
+    }
+}
+
+impl ExportRepository for InMemoryExportRepository {
+    fn insert(&self, export: &ExportRecord) -> Result<(), RepositoryError> {
+        lock(&self.exports).push(export.clone());
+        Ok(())
+    }
+
+    fn list_by_session(&self, session: SessionId) -> Result<Vec<ExportRecord>, RepositoryError> {
+        Ok(lock(&self.exports)
+            .iter()
+            .filter(|e| e.session_id() == session)
+            .cloned()
+            .collect())
+    }
+}
+
+impl SessionContent for InMemoryExportRepository {
+    fn remove_session(&self, session: SessionId) {
+        lock(&self.exports).retain(|e| e.session_id() != session);
     }
 }
 

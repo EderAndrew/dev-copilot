@@ -6,6 +6,7 @@ publish.workspace = true
 
 [dependencies]
 devcopilot-domain.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "rt", "macros"] }
 tokio-util.workspace = true

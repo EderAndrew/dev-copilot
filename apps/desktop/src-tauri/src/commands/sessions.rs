@@ -1,5 +1,5 @@
 //! `session_create`, `session_start`, `session_cancel_start`, `session_stop`,
-//! `session_subscribe`, `session_list`, `session_get` and `session_rename`
+//! `session_subscribe`, `session_list`, `session_get`, `session_rename` and `session_delete`
 //! (contracts/ipc-commands.md "Sessões").
 //!
 //! Each Tauri command is a thin wrapper over a plain function taking the [`Core`], so the
@@ -137,6 +137,20 @@ pub struct SessionRenameDto {
     pub session_id: String,
     pub title: String,
 }
+
+/// `session_delete` input; `confirmed` must be `true` (FR-042).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[allow(missing_docs)]
+pub struct SessionDeleteDto {
+    pub session_id: String,
+    pub confirmed: bool,
+}
+
+/// Output of commands that return nothing (`{}`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EmptyDto {}
 
 /// A persisted transcript item: a final segment or a gap.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -313,6 +327,34 @@ pub fn rename(core: &Core, request: SessionRenameDto) -> Result<SessionDto, IpcE
         .sessions
         .rename(id, Title::parse(request.title)?)?
         .into())
+}
+
+/// Deletes a session and all of its local content after explicit confirmation.
+///
+/// # Errors
+///
+/// `invalid_input` (id, `confirmed` not `true`), `not_found`, `invalid_state` while the
+/// session is active (FR-044), storage errors.
+pub async fn delete(core: &Core, request: &SessionDeleteDto) -> Result<EmptyDto, IpcError> {
+    let id = SessionId::parse(&request.session_id)?;
+    if !request.confirmed {
+        return Err(IpcError::invalid_input("confirmed", "malformed"));
+    }
+    core.sessions.delete(id).await?;
+    Ok(EmptyDto {})
+}
+
+/// Deletes a session (US6, FR-042).
+///
+/// # Errors
+///
+/// See [`delete`].
+#[tauri::command]
+pub async fn session_delete(
+    state: State<'_, AppState>,
+    request: SessionDeleteDto,
+) -> Result<EmptyDto, IpcError> {
+    delete(state.core()?, &request).await
 }
 
 /// Lists saved sessions (US4.3).

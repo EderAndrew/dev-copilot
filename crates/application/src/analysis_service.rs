@@ -20,6 +20,8 @@
 //! - A **final** analysis of an ended or failed session runs only on explicit request
 //!   ([`AnalysisService::run_final`], FR-033), under the same rules: it only creates proposals,
 //!   counts against the hourly cap, and at most one runs per session.
+//! - Deleting a session cancels its runs still in flight and waits for them to end
+//!   ([`AnalysisService::cancel_session`]), so nothing is written for it afterwards.
 
 use std::collections::{HashSet, VecDeque};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -40,6 +42,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::error::ApplicationError;
 use crate::events::{AnalysisStatus, ProviderStage, SessionEvent};
+use crate::in_flight::InFlight;
 use crate::ports::{
     AnalysisProvider, AnalysisProviderFactory, AnalysisRequest, AnalysisRunRepository,
     AnalysisSegment, BoxFuture, Clock, EventPublisher, ProviderError, RecordRepository,
@@ -88,8 +91,10 @@ struct Inner {
     deps: AnalysisDeps,
     /// Start of every call in the last hour, across sessions.
     calls: Mutex<VecDeque<Timestamp>>,
-    /// Sessions with a final analysis in flight.
-    finals: Mutex<HashSet<SessionId>>,
+    /// Final analyses in flight (at most one per session).
+    finals: InFlight,
+    /// Incremental schedulers, until their last run ends (which may be after capture stops).
+    schedulers: InFlight,
 }
 
 /// Counts a call starting at `now` against the hourly cap; `false` when the cap is reached.
@@ -122,7 +127,8 @@ impl AnalysisService {
             inner: Arc::new(Inner {
                 deps,
                 calls: Mutex::new(VecDeque::new()),
-                finals: Mutex::new(HashSet::new()),
+                finals: InFlight::default(),
+                schedulers: InFlight::default(),
             }),
         }
     }
@@ -163,33 +169,11 @@ impl AnalysisService {
             max_segments: MAX_SEGMENTS_FINAL,
             analyzer,
         });
-        {
-            let mut finals = self
-                .inner
-                .finals
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
-            if !finals.insert(id) {
-                return Err(ApplicationError::InvalidState(
-                    "final analysis already running".into(),
-                ));
-            }
-        }
-        let release = || {
-            self.inner
-                .finals
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .remove(&id);
-        };
+        let ticket = self.inner.finals.register_exclusive(id).ok_or_else(|| {
+            ApplicationError::InvalidState("final analysis already running".into())
+        })?;
         let now = deps.clock.now();
-        let run = match context.create_run(range, now) {
-            Ok(run) => run,
-            Err(err) => {
-                release();
-                return Err(err);
-            }
-        };
+        let run = context.create_run(range, now)?;
         let run_id = run.id();
         deps.events.publish(
             id,
@@ -207,19 +191,11 @@ impl AnalysisService {
         if !reserve_call(&self.inner.calls, now, max_per_hour) {
             tracing::warn!(session = %id, "final analysis rate limited");
             context.finish_run(run, AnalysisOutcome::RateLimited);
-            release();
             return Ok(run_id);
         }
-        let inner = Arc::clone(&self.inner);
         runtime.spawn(async move {
-            context
-                .execute_run(run, range, CancellationToken::new())
-                .await;
-            inner
-                .finals
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .remove(&id);
+            context.execute_run(run, range, ticket.token()).await;
+            drop(ticket);
         });
         tracing::info!(session = %id, run = %run_id, "final analysis started");
         Ok(run_id)
@@ -260,7 +236,8 @@ impl AnalysisService {
         );
         let (tx, rx) = mpsc::channel(FEED_CAPACITY);
         let stop = CancellationToken::new();
-        let cancel = CancellationToken::new();
+        let ticket = self.inner.schedulers.register(id);
+        let cancel = ticket.token();
         let scheduler = Scheduler {
             run: Arc::new(RunContext {
                 inner: Arc::clone(&self.inner),
@@ -279,7 +256,13 @@ impl AnalysisService {
             tokens_used: 0,
             limited_reported: false,
         };
-        let handle = runtime.spawn(scheduler.run(rx, stop.clone(), cancel.clone()));
+        let handle = runtime.spawn({
+            let (stop, cancel) = (stop.clone(), cancel.clone());
+            async move {
+                scheduler.run(rx, stop, cancel).await;
+                drop(ticket);
+            }
+        });
         tracing::info!(session = %id, provider = %provider.id(), "analysis attached");
         Some(SessionAnalysis {
             feed: AnalysisFeed { tx },
@@ -287,6 +270,17 @@ impl AnalysisService {
             cancel,
             handle,
         })
+    }
+}
+
+impl AnalysisService {
+    /// Cancels every run of `session` still in flight — a final analysis, or an incremental
+    /// run draining after capture stopped — and waits up to `deadline` for them to end. `false`
+    /// when a run outlived the deadline.
+    pub async fn cancel_session(&self, session: SessionId, deadline: std::time::Duration) -> bool {
+        let finals = self.inner.finals.cancel(session, deadline).await;
+        let schedulers = self.inner.schedulers.cancel(session, deadline).await;
+        finals && schedulers
     }
 }
 

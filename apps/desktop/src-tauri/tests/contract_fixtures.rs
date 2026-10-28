@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use devcopilot_desktop_lib::commands::IpcError;
 use devcopilot_desktop_lib::commands::audio::{AudioSourceDto, PermissionHelpDto};
+use devcopilot_desktop_lib::commands::export::{ExportResultDto, ExportSessionDto};
 use devcopilot_desktop_lib::commands::providers::{
     JobIdDto, LocalModelDownloadDto, ProviderDto, ProviderSetDefaultDto, ProviderUpsertDto,
 };
@@ -18,8 +19,8 @@ use devcopilot_desktop_lib::commands::records::{
     PlanDto, RecordCreateDto, RecordDto, RecordEditDto, RecordSetStatusDto, RunIdDto,
 };
 use devcopilot_desktop_lib::commands::sessions::{
-    SessionCreateDto, SessionDetailDto, SessionDto, SessionIdDto, SessionListDto, SessionPageDto,
-    SessionRenameDto, SessionStartDto,
+    SessionCreateDto, SessionDeleteDto, SessionDetailDto, SessionDto, SessionIdDto, SessionListDto,
+    SessionPageDto, SessionRenameDto, SessionStartDto,
 };
 use devcopilot_desktop_lib::commands::settings::{SettingsDto, SettingsUpdateDto};
 use devcopilot_desktop_lib::events::IpcSessionEvent;
@@ -64,6 +65,13 @@ fn assert_round_trip<T: DeserializeOwned + Serialize>(dto: &str) {
 #[test]
 fn ipc_error() {
     assert_round_trip::<IpcError>("IpcError");
+}
+
+#[test]
+fn export_and_delete() {
+    assert_round_trip::<ExportSessionDto>("ExportSessionDto");
+    assert_round_trip::<ExportResultDto>("ExportResultDto");
+    assert_round_trip::<SessionDeleteDto>("SessionDeleteDto");
 }
 
 #[test]
@@ -135,6 +143,8 @@ fn session_events() {
 fn every_fixture_directory_is_covered() {
     let covered = [
         "AudioSourceDto",
+        "ExportResultDto",
+        "ExportSessionDto",
         "IpcError",
         "JobIdDto",
         "LocalModelDownloadDto",
@@ -154,6 +164,7 @@ fn every_fixture_directory_is_covered() {
         "RecordSetStatusDto",
         "RunIdDto",
         "SessionCreateDto",
+        "SessionDeleteDto",
         "SessionDetailDto",
         "SessionDto",
         "SessionEvent",

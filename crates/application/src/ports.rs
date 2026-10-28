@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use devcopilot_domain::Redacted;
 use devcopilot_domain::analysis_run::AnalysisRun;
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
+use devcopilot_domain::export::ExportRecord;
 use devcopilot_domain::ids::{ProviderId, QuestionId, RecordId, SegmentId, SessionId};
 use devcopilot_domain::language::SessionLanguage;
 use devcopilot_domain::provider::{CredentialRef, DataCategory, Locality, Provider};
@@ -513,6 +514,15 @@ pub trait SessionRepository: Send + Sync {
     ///
     /// [`RepositoryError::NotFound`] when absent.
     fn save_interrupted(&self, session: &Session) -> Result<(), RepositoryError>;
+
+    /// Deletes the session and everything it owns (sources, transcript, records and their
+    /// history, runs, questions, export records) in one transaction, then moves the deleted
+    /// pages out of the write-ahead log so no copy of them stays behind in it (FR-042, FR-043).
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent; [`RepositoryError::Storage`].
+    fn delete(&self, id: SessionId) -> Result<(), RepositoryError>;
 }
 
 /// Final segments and gaps of a session's transcript. Each append is its own transaction, so
@@ -648,6 +658,24 @@ pub trait AnalysisRunRepository: Send + Sync {
     ///
     /// See [`RepositoryError`].
     fn list_by_session(&self, session: SessionId) -> Result<Vec<AnalysisRun>, RepositoryError>;
+}
+
+/// Export events (data-model.md "ExportRecord"); file paths are never stored.
+pub trait ExportRepository: Send + Sync {
+    /// Stores an export event.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the session does not exist;
+    /// [`RepositoryError::Storage`].
+    fn insert(&self, export: &ExportRecord) -> Result<(), RepositoryError>;
+
+    /// Exports of `session`, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn list_by_session(&self, session: SessionId) -> Result<Vec<ExportRecord>, RepositoryError>;
 }
 
 /// Configured providers (authorizations are added with US7, T135).

@@ -10,6 +10,7 @@ pub mod secret_store;
 
 pub use db::Database;
 pub use repos::analysis_run_repo::SqliteAnalysisRunRepository;
+pub use repos::export_repo::SqliteExportRepository;
 pub use repos::provider_repo::SqliteProviderRepository;
 pub use repos::question_repo::SqliteQuestionRepository;
 pub use repos::record_repo::SqliteRecordRepository;

@@ -1,5 +1,5 @@
-//! Session use cases: create, start, cancel start, stop, and startup recovery (FR-001–FR-012,
-//! FR-039a, FR-045a). Pause and resume arrive with US9 (T145).
+//! Session use cases: create, start, cancel start, stop, delete, and startup recovery
+//! (FR-001–FR-012, FR-039a, FR-042–FR-045a). Pause and resume arrive with US9 (T145).
 //!
 //! While capturing, the audio queue feeds the session's [`Transcription`], which persists
 //! finals and gaps as they arrive (US2) and announces finals to the session's incremental
@@ -15,7 +15,12 @@
 //! At most one session is active at a time (FR-006). The active session lives in memory under
 //! one lock together with its pipeline; every state change is persisted and published while
 //! that lock is held, so events reflect the order of transitions.
+//!
+//! Deleting a session is refused while it is active (FR-044). Otherwise its analysis runs and
+//! question still in flight are cancelled and awaited first, so nothing is written for it once
+//! its rows are gone (FR-043).
 
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
@@ -36,6 +41,7 @@ use crate::ports::{
     SessionRepository, SourceFault, Transcriber, TranscriberFactory,
 };
 use crate::provider_service::ProviderService;
+use crate::question_service::QuestionService;
 use crate::settings_service::SettingsService;
 use crate::transcription::{Transcription, TranscriptionDeps};
 
@@ -67,6 +73,8 @@ pub struct SessionDeps {
     pub events: Arc<dyn EventPublisher>,
     /// Incremental analysis; `None` runs capture without it.
     pub analysis: Option<AnalysisService>,
+    /// Contextual questions, cancelled when their session is deleted.
+    pub questions: Option<QuestionService>,
 }
 
 /// Largest page of [`SessionService::list_page`].
@@ -114,6 +122,20 @@ struct Active {
 struct Inner {
     deps: SessionDeps,
     active: Mutex<Option<Active>>,
+    /// Sessions being deleted; they cannot start.
+    deleting: Mutex<HashSet<SessionId>>,
+}
+
+/// Removes a session from [`Inner::deleting`] when its deletion ends, however it ends.
+struct Deleting<'a> {
+    inner: &'a Inner,
+    id: SessionId,
+}
+
+impl Drop for Deleting<'_> {
+    fn drop(&mut self) {
+        self.inner.deleting_set().remove(&self.id);
+    }
 }
 
 /// Session lifecycle use cases.
@@ -139,6 +161,7 @@ impl SessionService {
             inner: Arc::new(Inner {
                 deps,
                 active: Mutex::new(None),
+                deleting: Mutex::new(HashSet::new()),
             }),
         }
     }
@@ -280,6 +303,51 @@ impl SessionService {
         Ok(session)
     }
 
+    /// Deletes a session and all of its local content after the user confirmed (FR-042).
+    ///
+    /// Refused while the session is active, including while it starts or stops (FR-044).
+    /// Analysis runs and the question still in flight for it are cancelled and awaited for up
+    /// to [`DRAIN_DEADLINE`] before its rows are removed, so their results are discarded
+    /// (FR-043).
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::NotFound`]; [`ApplicationError::InvalidState`] while the session is
+    /// active or already being deleted; [`ApplicationError::Storage`].
+    pub async fn delete(&self, id: SessionId) -> Result<(), ApplicationError> {
+        let inner = &self.inner;
+        if !inner.deleting_set().insert(id) {
+            return Err(ApplicationError::InvalidState(
+                "session is being deleted".into(),
+            ));
+        }
+        let _deleting = Deleting { inner, id };
+        // Checked after joining `deleting`, which `start` reads under the active lock: either
+        // the start is refused or the session is seen active here.
+        let session = self.get(id)?;
+        if session.state().is_active()
+            || inner.lock().as_ref().is_some_and(|a| a.session.id() == id)
+        {
+            return Err(ApplicationError::InvalidState(
+                "stop the session before deleting it".into(),
+            ));
+        }
+        let mut settled = true;
+        if let Some(analysis) = &inner.deps.analysis {
+            settled &= analysis.cancel_session(id, DRAIN_DEADLINE).await;
+        }
+        if let Some(questions) = &inner.deps.questions {
+            settled &= questions.cancel_session(id, DRAIN_DEADLINE).await;
+        }
+        if !settled {
+            // Late writes fail once the session row is gone; nothing of it survives.
+            tracing::warn!(session = %id, "work still running when the session was deleted");
+        }
+        inner.deps.sessions.delete(id)?;
+        tracing::info!(session = %id, "session deleted");
+        Ok(())
+    }
+
     /// Persisted finals and gaps of a session, in `seq` order.
     ///
     /// # Errors
@@ -317,6 +385,11 @@ impl SessionService {
         let runtime = Handle::try_current()
             .map_err(|_| ApplicationError::Internal("no async runtime".into()))?;
         let mut active = inner.lock();
+        if inner.deleting_set().contains(&id) {
+            return Err(ApplicationError::InvalidState(
+                "session is being deleted".into(),
+            ));
+        }
         if let Some(current) = active.as_ref() {
             return Err(ApplicationError::InvalidState(
                 if current.session.id() == id {
@@ -475,6 +548,10 @@ impl SessionService {
 impl Inner {
     fn lock(&self) -> MutexGuard<'_, Option<Active>> {
         self.active.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn deleting_set(&self) -> MutexGuard<'_, HashSet<SessionId>> {
+        self.deleting.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     fn available_source(

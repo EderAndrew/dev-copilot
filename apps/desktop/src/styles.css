@@ -120,10 +120,31 @@ fieldset label {
 }
 
 .dialog-actions,
+.detail-actions,
 .session-controls-actions {
   display: flex;
   gap: 0.5rem;
   margin-top: 0.75rem;
+}
+
+.dialog fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0.75rem 0;
+}
+
+.export-warning {
+  font-weight: 600;
+}
+
+.delete-warnings {
+  padding-left: 1.25rem;
+}
+
+button.danger {
+  background: #b71c1c;
+  color: #fff;
 }
 
 .source-reason {

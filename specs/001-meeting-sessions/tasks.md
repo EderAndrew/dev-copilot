@@ -322,19 +322,27 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 
 ### Tests for User Story 6 (REQUIRED) ⚠️
 
-- [ ] T119 [P] [US6] Export tests: JSON matches `contracts/export-format.md` v1 (fixture comparison), Markdown snapshot, content selection, no providerId/credentials/paths, export during an in-flight analysis contains only persisted content, in `crates/application/tests/export_service.rs`
-- [ ] T120 [P] [US6] Deletion tests: cascade removes all rows, deleted content absent from list/get/questions/analysis/export (SC-012), active session deletion rejected (FR-044), in-flight analysis/question runs cancelled and their results discarded, WAL checkpoint executed, in `crates/persistence/tests/delete_session.rs` and `crates/application/tests/delete_session.rs`
-- [ ] T121 [P] [US6] Command test: export writes only to the dialog-returned path and cancellation writes nothing, in `apps/desktop/src-tauri/tests/export_command.rs`
-- [ ] T122 [P] [US6] Frontend tests for ExportDialog warning and DeleteSessionDialog confirmation in `apps/desktop/src/features/sessions/ExportDialog.test.tsx` and `apps/desktop/src/features/sessions/DeleteSessionDialog.test.tsx`
+- [X] T119 [P] [US6] Export tests: JSON matches `contracts/export-format.md` v1 (fixture comparison), Markdown snapshot, content selection, no providerId/credentials/paths, export during an in-flight analysis contains only persisted content, in `crates/application/tests/export_service.rs`
+- [X] T120 [P] [US6] Deletion tests: cascade removes all rows, deleted content absent from list/get/questions/analysis/export (SC-012), active session deletion rejected (FR-044), in-flight analysis/question runs cancelled and their results discarded, WAL checkpoint executed, in `crates/persistence/tests/delete_session.rs` and `crates/application/tests/delete_session.rs`
+- [X] T121 [P] [US6] Command test: export writes only to the dialog-returned path and cancellation writes nothing, in `apps/desktop/src-tauri/tests/export_command.rs`
+- [X] T122 [P] [US6] Frontend tests for ExportDialog warning and DeleteSessionDialog confirmation in `apps/desktop/src/features/sessions/ExportDialog.test.tsx` and `apps/desktop/src/features/sessions/DeleteSessionDialog.test.tsx`
 
 ### Implementation for User Story 6
 
-- [ ] T123 [US6] Implement `export_service` (Markdown with UI-language labels, JSON v1, ExportRecord) in `crates/application/src/export_service.rs`
-- [ ] T124 [P] [US6] Implement export record repository and `delete_cascade` with checkpoint in `crates/persistence/src/repos/export_repo.rs` and `crates/persistence/src/repos/session_repo.rs`
-- [ ] T125 [US6] Implement session deletion use case in `crates/application/src/session_service.rs`
-- [ ] T126 [US6] Implement `export_session` (native save dialog in Rust, write only to returned path) and `session_delete` commands in `apps/desktop/src-tauri/src/commands/export.rs` and `apps/desktop/src-tauri/src/commands/sessions.rs`
-- [ ] T127 [P] [US6] Implement ExportDialog and DeleteSessionDialog (secure-deletion, backup and exported-file warnings) in `apps/desktop/src/features/sessions/ExportDialog.tsx` and `apps/desktop/src/features/sessions/DeleteSessionDialog.tsx`
-- [ ] T128 [US6] Add US6 strings to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
+- [X] T123 [US6] Implement `export_service` (Markdown with UI-language labels, JSON v1, ExportRecord) in `crates/application/src/export_service.rs`
+- [X] T124 [P] [US6] Implement export record repository and `delete_cascade` with checkpoint in `crates/persistence/src/repos/export_repo.rs` and `crates/persistence/src/repos/session_repo.rs`
+- [X] T125 [US6] Implement session deletion use case in `crates/application/src/session_service.rs`
+- [X] T126 [US6] Implement `export_session` (native save dialog in Rust, write only to returned path) and `session_delete` commands in `apps/desktop/src-tauri/src/commands/export.rs` and `apps/desktop/src-tauri/src/commands/sessions.rs`
+- [X] T127 [P] [US6] Implement ExportDialog and DeleteSessionDialog (secure-deletion, backup and exported-file warnings) in `apps/desktop/src/features/sessions/ExportDialog.tsx` and `apps/desktop/src/features/sessions/DeleteSessionDialog.tsx`
+- [X] T128 [US6] Add US6 strings to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
+
+**Phase 8 notes** (2026-10-28):
+- Domain: `export.rs` adds `ExportFormat` (`markdown`/`json`), `ExportContent` (`plan`/`transcript`) and `ExportRecord` (session, formats, content, instant — never the path).
+- Export (T123): `ExportService::file_names` → save dialog per format → `render` (from what is persisted at that moment) → files written by the command → `record`. JSON is `devcopilot.session-export` v1 built with `serde_json` (now a dependency of `application`; it is pure data formatting, no I/O). Markdown labels follow the UI language; session text is escaped so it cannot add structure, links or HTML. Choices recorded in `contracts/export-format.md`: plan sections follow the UI plan order, each item carries an origin marker (`[IA]`/`[usuário]`) besides status and nature (US6.1 "proveniência"), only answered questions are exported, provider ids appear nowhere. Example outputs live in `contracts/examples/` and are the T119 fixtures (`DEVCOPILOT_UPDATE_SNAPSHOTS=1` rewrites them).
+- Deletion (T124/T125): `SessionRepository::delete` deletes the `sessions` row (everything else cascades) and runs `PRAGMA wal_checkpoint(TRUNCATE)`; a busy checkpoint is reported as `storage_error` instead of a complete deletion. `SessionService::delete` is async: it refuses active sessions (including `starting`/`stopping`, FR-044) and sessions already being deleted (which also cannot start meanwhile), then cancels and awaits — up to `DRAIN_DEADLINE` — the session's final analysis, an incremental run still draining after stop, and its question in flight. This uses a new per-session `InFlight` registry inside `application` (replacing the previous "one in flight" sets); a question cancelled this way is discarded, neither stored nor published. `SessionDeps` gained `questions: Option<QuestionService>`.
+- IPC (T126): `export_session` takes the dialog through a `SaveDialog` trait (`NativeSaveDialog` opens `tauri-plugin-dialog` from Rust), asks for every path first and writes nothing if any dialog is cancelled; the same path for two formats is `invalid_input` (`path`); write failures are `storage_error` without the path. Because the dialog is opened by the core, `capabilities/default.json` drops `dialog:allow-save`: the webview has `core:default` only. `session_delete` requires `confirmed: true` and returns `{}`. New fixtures: `ExportSessionDto`, `ExportResultDto`, `SessionDeleteDto`.
+- UI (T127): `SessionDetail` has Export and Delete actions. `ExportDialog` shows the unencrypted-file warning (also the dialog's description), formats and content, and reports the files written or that nothing was written. `DeleteSessionDialog` is an `alertdialog` listing the secure-deletion, backup, exported-file and irreversibility warnings, starts focused on Cancel, and for an active session only asks to stop it first; after deletion the view returns to the history.
+- Also fixed a `tsc` error from Phase 7 in `SessionsPage.test.tsx` (`questionAsk` mock inferred as `Promise<never>`).
 
 ---
 

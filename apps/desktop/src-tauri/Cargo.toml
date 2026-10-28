@@ -26,7 +26,7 @@ devcopilot-audio.workspace = true
 devcopilot-domain.workspace = true
 devcopilot-intelligence.workspace = true
 devcopilot-persistence.workspace = true
-tokio = { workspace = true, features = ["rt"] }
+tokio = { workspace = true, features = ["rt", "sync"] }
 tokio-util.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true

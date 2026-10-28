@@ -5,6 +5,7 @@ import { axe } from "vitest-axe";
 
 import type {
   AudioSourceDto,
+  QuestionDto,
   SessionDto,
   SessionEvent,
   SettingsDto,
@@ -65,7 +66,9 @@ function setup(overrides: Partial<SettingsDto> = {}) {
     settingsUpdate: vi.fn(() => Promise.resolve(settings)),
     sessionCreate: vi.fn(() => Promise.resolve(idle)),
     recordSetStatus: vi.fn(() => Promise.reject(new Error("unused"))),
-    questionAsk: vi.fn(() => Promise.reject(new Error("unused"))),
+    questionAsk: vi.fn((): Promise<QuestionDto> =>
+      Promise.reject(new Error("unused")),
+    ),
     questionToRecord: vi.fn(() => Promise.reject(new Error("unused"))),
     sessionStart: vi.fn(() =>
       Promise.resolve({ ...idle, state: "starting" as const }),

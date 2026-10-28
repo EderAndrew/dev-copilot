@@ -7,6 +7,7 @@ use std::fmt;
 
 use devcopilot_domain::DomainError;
 use devcopilot_domain::audio_source::{AudioSourceKind, PermissionState, UnavailableReason};
+use devcopilot_domain::export::{ExportContent, ExportFormat};
 use devcopilot_domain::language::{SessionLanguage, UiLanguage};
 use devcopilot_domain::provider::{DataCategory, Locality, ProviderAdapterKind, ProviderRole};
 use devcopilot_domain::question::{Certainty, QuestionStatus};
@@ -46,6 +47,8 @@ code_enum!(
     AudioSourceKind,
     Certainty,
     DataCategory,
+    ExportContent,
+    ExportFormat,
     FailureReason,
     GapReason,
     Locality,

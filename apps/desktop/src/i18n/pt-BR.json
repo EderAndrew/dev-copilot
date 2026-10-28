@@ -226,7 +226,9 @@
     "createdAt": "Criada em",
     "activeDuration": "Duração ativa",
     "active": "Esta sessão ainda está em andamento; acompanhe-a na página Sessões.",
-    "runFinal": "Executar análise final"
+    "runFinal": "Executar análise final",
+    "export": "Exportar…",
+    "delete": "Excluir sessão…"
   },
   "plan": {
     "title": "Plano de desenvolvimento",
@@ -278,5 +280,38 @@
     "convert": "Transformar em item proposto",
     "convertLabel": "Transformar a resposta em item: {{question}}",
     "converted": "Item proposto adicionado ao plano. Revise-o antes de confirmar."
+  },
+  "export": {
+    "title": "Exportar sessão",
+    "unencryptedWarning": "Os arquivos exportados não são cifrados. Quem tiver acesso a eles poderá ler o conteúdo da reunião; guarde-os em local seguro.",
+    "formats": "Formatos",
+    "format": {
+      "markdown": "Markdown (legível)",
+      "json": "JSON (estruturado)"
+    },
+    "content": "Conteúdo",
+    "part": {
+      "plan": "Plano, perguntas e respostas",
+      "transcript": "Transcrição"
+    },
+    "chooseSomething": "Escolha ao menos um formato e um conteúdo.",
+    "choosingDestination": "Escolha onde salvar na janela do sistema…",
+    "written": "Arquivos gravados: {{files}}",
+    "cancelled": "Exportação cancelada; nenhum arquivo foi gravado.",
+    "submit": "Exportar",
+    "close": "Fechar"
+  },
+  "deleteSession": {
+    "title": "Excluir “{{title}}”?",
+    "stopFirst": "Esta sessão ainda está em andamento. Pare a captura antes de excluí-la.",
+    "warning": {
+      "secureDeletion": "O conteúdo é removido do banco cifrado deste computador, mas a remoção segura não é garantida: SSDs, snapshots e o sistema de arquivos podem manter cópias de dados antigos.",
+      "backups": "Backups do sistema feitos antes da exclusão continuam contendo esta sessão.",
+      "exportedFiles": "Arquivos já exportados não são excluídos; apague-os você mesmo se necessário.",
+      "irreversible": "Esta ação não pode ser desfeita."
+    },
+    "confirm": "Excluir definitivamente",
+    "deleting": "Excluindo…",
+    "cancel": "Cancelar"
   }
 }
