@@ -27,6 +27,7 @@ type IpcError = {
 |---------|---------|-------|-------------------|
 | `session_create` | `{ title, language, sources: ("microphone"\|"system")[] }` | `SessionDto` | `invalid_input`, `source_unavailable` |
 | `session_start` | `{ sessionId, consentAcknowledged: boolean }` | `SessionDto` (estado `starting`) | `invalid_state`, `permission_denied`, `no_transcriber`, `secret_store_unavailable`, `invalid_input` se lembrete exigido e não confirmado (FR-012) |
+| `session_cancel_start` | `{ sessionId }` | `SessionDto` (estado `idle`) — fecha qualquer fonte já aberta (FR-003) | `invalid_state` se não estiver em `starting` |
 | `session_pause` | `{ sessionId }` | `SessionDto` | `invalid_state` |
 | `session_resume` | `{ sessionId }` | `SessionDto` | `invalid_state`, `permission_denied`, `source_unavailable`, `no_transcriber` |
 | `session_stop` | `{ sessionId }` | `SessionDto` (estado `stopping`) — retorna sem aguardar drenagem | `invalid_state` |

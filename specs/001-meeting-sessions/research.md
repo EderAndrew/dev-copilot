@@ -195,6 +195,17 @@ licença e advisories (Art. VII.6, `cargo deny`).
   prompt injection (SC-010). Testes determinísticos usam provedor fake; avaliação com provedores reais roda
   sob demanda, nunca com dados confidenciais.
 
+## R19. Dependências auxiliares
+
+- **Decisão**: além das dependências centrais, o workspace usa: `time` (timestamps e durações no domínio, sem
+  dependência de SO), `sha2` (verificação SHA-256 do download de modelos, R4), `tracing-appender` (arquivo de
+  log rotativo no diretório de logs do app, R13) e `tempfile` (somente dev: bancos e diretórios temporários em
+  testes).
+- **Justificativa**: cada uma tem um propósito único e é amplamente mantida (Art. VII.6); `tempfile` não entra
+  no binário distribuído.
+- **Alternativas**: `chrono` no lugar de `time` (API maior, histórico de advisories); implementar hash ou
+  rotação de log à mão (código de segurança sem necessidade).
+
 ---
 
 ## Itens que permanecem dependentes de spike

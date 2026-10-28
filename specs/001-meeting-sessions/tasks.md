@@ -54,7 +54,7 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 
 ### Spike S3 (blocking) and ADR
 
-- [ ] T011 Spike S3: build a throwaway test in `crates/persistence/tests/spike_sqlcipher.rs` opening an SQLCipher DB with a key stored via `keyring` on macOS, Windows and Linux CI runners; record results and the decision in `docs/adr/ADR-004-armazenamento-local-cifrado.md` (context, options, decision, tradeoffs, review triggers, deletion limitations)
+- [ ] T011 Spike S3: build a throwaway test in `crates/persistence/tests/spike_sqlcipher.rs` opening an SQLCipher DB with a key stored via `keyring` on macOS, Windows and Linux CI runners; record results and the decision in `docs/adr/ADR-004.md` (armazenamento local cifrado: context, options, decision, tradeoffs, review triggers, deletion limitations)
 
 ### Domain primitives
 
@@ -85,7 +85,7 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 ### Provider and settings services (local only)
 
 - [ ] T029 Implement `provider_service` basics (list, upsert local providers, set default per role, resolve usable transcriber/analyzer) in `crates/application/src/provider_service.rs` with tests using fakes
-- [ ] T030 [P] Implement `settings_service` (ui_language, consent_reminder_dismissed, analysis_limits defaults 30 s / 40 per hour) in `crates/application/src/settings_service.rs` with tests
+- [ ] T030 [P] Implement `settings_service` (ui_language, consent_reminder_dismissed, analysis_limits defaults per research R7: trigger 6 finals / 90 s, min interval 30 s, 40 calls per hour, per-session token cap per provider) in `crates/application/src/settings_service.rs` with tests
 
 ### Tauri plumbing
 
@@ -115,10 +115,10 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 ### Tests for User Story 1 (REQUIRED) ⚠️
 
 - [ ] T040 [P] [US1] Exhaustive state-machine tests (all valid/invalid transitions incl. paused, failure reasons, terminal states) in `crates/domain/src/session.rs` test module
-- [ ] T041 [P] [US1] Use-case tests: start blocked without permission/transcriber/secret store, consent reminder required, single active session (FR-006), stop emits indicator off and cancels sources (SC-002 with fake clock), source loss → failed with content kept, in `crates/application/tests/session_service.rs`
+- [ ] T041 [P] [US1] Use-case tests: start blocked without permission/transcriber/secret store, consent reminder required, single active session (FR-006), stop emits indicator off and cancels sources (SC-002 with fake clock), cancel during `starting` → `idle` with sources closed (FR-003), sole source loss → failed with content kept, permission revoked mid-capture stops that source and emits `source_status: permission_revoked` (FR-010), default-device change never switches to another device (FR-011, Art. V.4), OS suspend/lock handled as source loss without auto-resume, in `crates/application/tests/session_service.rs`
 - [ ] T042 [P] [US1] Startup recovery test: non-terminal sessions become `failed(interrupted)` and get a trailing `gap(interrupted)` after the last persisted final (FR-007, US2.3) in `crates/application/tests/recovery.rs`
 - [ ] T043 [P] [US1] Repository tests for sessions and sources in `crates/persistence/tests/session_repo.rs`
-- [ ] T044 [P] [US1] IPC command validation tests (bad ids, title bounds, unknown source kind, start without consent) in `apps/desktop/src-tauri/tests/session_commands.rs`
+- [ ] T044 [P] [US1] IPC command validation tests (bad ids, title bounds, unknown source kind, start without consent, `session_cancel_start` outside `starting`) in `apps/desktop/src-tauri/tests/session_commands.rs`
 - [ ] T045 [P] [US1] Frontend tests: CaptureIndicator shows text+icon, `aria-live`, axe clean; controls keyboard-operable, in `apps/desktop/src/features/sessions/CaptureIndicator.test.tsx` and `apps/desktop/src/features/sessions/SessionControls.test.tsx`
 
 ### Implementation for User Story 1
@@ -131,7 +131,7 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 - [ ] T051 [P] [US1] Implement cpal microphone adapter (device enumeration, permission query/request, callback writing only to `rtrb` producer, no silent device switch FR-011) in `crates/audio/src/cpal_mic.rs`
 - [ ] T052 [P] [US1] Implement resampler/downmixer to 16 kHz mono f32 outside the callback in `crates/audio/src/resample.rs` with unit tests on synthetic signals
 - [ ] T053 [P] [US1] Add ignored-by-default device integration test for mic capture in `crates/audio/tests/mic_device.rs`
-- [ ] T054 [US1] Implement commands `session_create`, `session_start`, `session_stop`, `session_subscribe`, `audio_sources_list`, `audio_permission_request`, `audio_permission_help` in `apps/desktop/src-tauri/src/commands/sessions.rs` and `apps/desktop/src-tauri/src/commands/audio.rs`
+- [ ] T054 [US1] Implement commands `session_create`, `session_start`, `session_cancel_start`, `session_stop`, `session_subscribe`, `audio_sources_list`, `audio_permission_request`, `audio_permission_help` in `apps/desktop/src-tauri/src/commands/sessions.rs` and `apps/desktop/src-tauri/src/commands/audio.rs`
 - [ ] T055 [P] [US1] Implement session event store/reducer (applies events by seq, resubscribe on reconnect) in `apps/desktop/src/features/sessions/sessionStore.ts`
 - [ ] T056 [P] [US1] Implement NewSessionForm (title, language, source selection with availability reasons) in `apps/desktop/src/features/sessions/NewSessionForm.tsx`
 - [ ] T057 [P] [US1] Implement ConsentReminderDialog (FR-012, "não mostrar novamente") in `apps/desktop/src/features/sessions/ConsentReminderDialog.tsx`
@@ -152,15 +152,15 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 ### Tests for User Story 2 (REQUIRED) ⚠️
 
 - [ ] T061 [P] [US2] Domain tests for TranscriptSegment (final/gap, offsets, source required with 2 sources) in `crates/domain/src/transcript.rs` test module
-- [ ] T062 [P] [US2] Pipeline tests: partials never persisted, finals persisted on arrival, overload drops oldest and emits `gap(overload)`, provider failure emits `gap(provider_failure)`, stop drains ≤ 5 s then `gap(cancelled_on_stop)`, controls respond while transcriber hangs (SC-006) in `crates/application/tests/transcription_pipeline.rs`
+- [ ] T062 [P] [US2] Pipeline tests: partials never persisted, finals persisted on arrival, overload drops oldest and emits `gap(overload)`, provider failure emits `gap(provider_failure)`, stop drains ≤ 5 s then `gap(cancelled_on_stop)`, controls respond while transcriber hangs (SC-006), `transcription_lag` emitted above 15 s and cleared on recovery (US2.4), storage write failure (disk full) emits `storage_error` and stops capture as `failed(storage_error)` with prior finals intact, in `crates/application/tests/transcription_pipeline.rs`
 - [ ] T063 [P] [US2] Segment repository tests incl. crash-safety (write, reopen, read) in `crates/persistence/tests/segment_repo.rs`
 - [ ] T064 [P] [US2] Model download tests: rejects hash mismatch, requires explicit call, no session data in request, in `crates/intelligence/tests/model_download.rs`
 - [ ] T065 [P] [US2] Whisper adapter test on a short non-confidential fixture (ignored unless model path env var set) in `crates/intelligence/tests/whisper_local.rs`
-- [ ] T066 [P] [US2] Frontend transcript tests: partial styling distinct, gap rendering, timestamps, screen-reader labels in `apps/desktop/src/features/transcript/TranscriptView.test.tsx`
+- [ ] T066 [P] [US2] Frontend transcript tests: partial styling distinct, gap rendering, lag indicator, timestamps, screen-reader labels in `apps/desktop/src/features/transcript/TranscriptView.test.tsx`
 
 ### Implementation for User Story 2
 
-- [ ] T067 [US2] Spike S2: measure partial/final latency of whisper models on reference hardware per OS; record reference hardware in `specs/001-meeting-sessions/quickstart.md` and decision in `docs/adr/ADR-003-provedores-transcricao-ia.md`
+- [ ] T067 [US2] Spike S2: measure partial/final latency of whisper models on reference hardware per OS; record reference hardware in `specs/001-meeting-sessions/quickstart.md` and decision in `docs/adr/ADR-003.md` (provedores de transcrição e IA)
 - [ ] T068 [P] [US2] Implement TranscriptSegment, SegmentKind, GapReason (incl. `interrupted`) in `crates/domain/src/transcript.rs`
 - [ ] T069 [P] [US2] Implement SegmentRepository (append_final, append_gap in transactions, list_by_session) in `crates/persistence/src/repos/segment_repo.rs`
 - [ ] T070 [P] [US2] Implement energy-based VAD and sliding-window chunker (partial every ~2 s, final on pause or ~25 s) in `crates/intelligence/src/vad.rs` with unit tests
@@ -168,9 +168,9 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 - [ ] T072 [P] [US2] Implement explicit model download with pinned URL list and SHA-256 verification in `crates/intelligence/src/model_download.rs`
 - [ ] T073 [US2] Extend `capture_pipeline` with resample → bounded chunk channel (~30 s) → transcriber → partial/final/gap events and persistence in `crates/application/src/capture_pipeline.rs`
 - [ ] T074 [US2] Wire whisper provider registration and `local_model_download` command with progress events in `apps/desktop/src-tauri/src/composition.rs` and `apps/desktop/src-tauri/src/commands/providers.rs`
-- [ ] T075 [P] [US2] Implement TranscriptView (auto-scroll with pause on user scroll, partial/final/gap, source tags) in `apps/desktop/src/features/transcript/TranscriptView.tsx`
+- [ ] T075 [P] [US2] Implement TranscriptView (auto-scroll with pause on user scroll, partial/final/gap, lag indicator from `transcription_lag`, source tags) in `apps/desktop/src/features/transcript/TranscriptView.tsx`
 - [ ] T076 [P] [US2] Implement LocalModels screen (choose/download model, shows origin and size) in `apps/desktop/src/features/providers/LocalModels.tsx`
-- [ ] T077 [P] [US2] Show `provider_in_use` (local/remote per stage) in `apps/desktop/src/features/sessions/ProviderBadge.tsx` (FR-050)
+- [ ] T077 [P] [US2] Show `provider_in_use` (local/remote per stage: transcription, analysis, questions) in `apps/desktop/src/features/sessions/ProviderBadge.tsx` (FR-050)
 - [ ] T078 [US2] Add US2 strings to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
 
 **Checkpoint**: US1 + US2 form the first demonstrable increment (capture + live transcript)
@@ -186,10 +186,10 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 ### Tests for User Story 3 (REQUIRED) ⚠️
 
 - [ ] T079 [P] [US3] Domain tests: record status transitions, `observed` requires evidence, AI actor cannot change existing records, user changes produce RecordChange, in `crates/domain/src/record.rs` test module
-- [ ] T080 [P] [US3] Output validation tests against `specs/001-meeting-sessions/contracts/analysis-output.schema.json` (unknown fields, observed without evidence, oversize, wrong version → InvalidOutput) in `crates/intelligence/tests/output_validation.rs`
+- [ ] T080 [P] [US3] Output validation tests against `specs/001-meeting-sessions/contracts/analysis-output.schema.json` (unknown fields, observed without evidence, oversize, wrong version → InvalidOutput; evidence references keep the original segment text, never translated — FR-053b) in `crates/intelligence/tests/output_validation.rs`
 - [ ] T081 [P] [US3] Prompt-injection suite (≥ 20 cases pt-BR/en in `crates/intelligence/tests/fixtures/injection/`) asserting zero status changes, deletions or extra effects (SC-010) in `crates/application/tests/prompt_injection.rs`
-- [ ] T082 [P] [US3] Analysis service tests: scheduling (6 finals or 90 s, min 30 s, 1 in flight, hourly cap), conflict → new proposed flagged, duplicate flagged, evidence ids from other sessions discarded, provider failure leaves records intact and capture unaffected, in `crates/application/tests/analysis_service.rs`
-- [ ] T083 [P] [US3] Evaluation harness with annotated non-confidential transcripts in `crates/intelligence/tests/fixtures/eval/` measuring (a) recall of explicit requirements/decisions ≥ 80%, (b) grounding: 100% of `observed` records cite supporting segments, (c) invented-item rate (records with no basis in the transcript), per SC-008 and Art. VI.6. Runs against the scripted provider by default (harness self-test) and against each reference provider (Ollama, remote) when `DEVCOPILOT_EVAL_PROVIDER` is set; results recorded in `docs/adr/ADR-003-provedores-transcricao-ia.md`, in `crates/intelligence/tests/evaluation.rs`
+- [ ] T082 [P] [US3] Analysis service tests: scheduling (6 finals or 90 s, min 30 s, 1 in flight, hourly cap, per-session token cap → `rate_limited`), conflict → new proposed flagged, duplicate flagged, evidence ids from other sessions discarded, provider failure leaves records intact and capture unaffected, in `crates/application/tests/analysis_service.rs`
+- [ ] T083 [P] [US3] Evaluation harness with annotated non-confidential transcripts in `crates/intelligence/tests/fixtures/eval/` measuring (a) recall of explicit requirements/decisions ≥ 80%, (b) grounding: 100% of `observed` records cite supporting segments, (c) invented-item rate (records with no basis in the transcript), per SC-008 and Art. VI.6. Runs against the scripted provider by default (harness self-test) and against each reference provider (Ollama, remote) when `DEVCOPILOT_EVAL_PROVIDER` is set; results recorded in `docs/adr/ADR-003.md`, in `crates/intelligence/tests/evaluation.rs`
 - [ ] T084 [P] [US3] Record repository tests (insert proposed, apply user change with history, list) in `crates/persistence/tests/record_repo.rs`
 - [ ] T085 [P] [US3] Frontend tests: record cards show kind/nature/status/conflict badges, confirm/reject/pending via keyboard, in `apps/desktop/src/features/records/RecordCard.test.tsx`
 
@@ -247,7 +247,7 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 
 ### Tests for User Story 5 (REQUIRED) ⚠️
 
-- [ ] T109 [P] [US5] Question service tests: invalid evidence ids dropped → `no_evidence`, answers never mutate records, conversion to proposed/suggested record, runs concurrently with capture without blocking, in `crates/application/tests/question_service.rs`
+- [ ] T109 [P] [US5] Question service tests: invalid evidence ids dropped → `no_evidence`, answers never mutate records, conversion to proposed/suggested record, runs concurrently with capture without blocking, cited evidence shown in its original language (FR-053b), in `crates/application/tests/question_service.rs`
 - [ ] T110 [P] [US5] Injection cases inside questions and transcript for Q&A path in `crates/application/tests/prompt_injection.rs`
 - [ ] T111 [P] [US5] Frontend tests for QuestionsPanel (pending/answered/failed, certainty labels, citation links) in `apps/desktop/src/features/questions/QuestionsPanel.test.tsx`
 - [ ] T111a [P] [US5] Q&A evaluation on the T083 fixtures with answerable and unanswerable questions: 100% of answers cite evidence or declare `no_evidence`, and 0 invented facts on unanswerable questions (SC-011); same `DEVCOPILOT_EVAL_PROVIDER`-gated real-provider mode, in `crates/intelligence/tests/qa_evaluation.rs`
@@ -272,8 +272,8 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 
 ### Tests for User Story 6 (REQUIRED) ⚠️
 
-- [ ] T119 [P] [US6] Export tests: JSON matches `contracts/export-format.md` v1 (fixture comparison), Markdown snapshot, content selection, no providerId/credentials/paths, in `crates/application/tests/export_service.rs`
-- [ ] T120 [P] [US6] Deletion tests: cascade removes all rows, deleted content absent from list/get/questions/analysis/export (SC-012), active session deletion rejected (FR-044), WAL checkpoint executed, in `crates/persistence/tests/delete_session.rs` and `crates/application/tests/delete_session.rs`
+- [ ] T119 [P] [US6] Export tests: JSON matches `contracts/export-format.md` v1 (fixture comparison), Markdown snapshot, content selection, no providerId/credentials/paths, export during an in-flight analysis contains only persisted content, in `crates/application/tests/export_service.rs`
+- [ ] T120 [P] [US6] Deletion tests: cascade removes all rows, deleted content absent from list/get/questions/analysis/export (SC-012), active session deletion rejected (FR-044), in-flight analysis/question runs cancelled and their results discarded, WAL checkpoint executed, in `crates/persistence/tests/delete_session.rs` and `crates/application/tests/delete_session.rs`
 - [ ] T121 [P] [US6] Command test: export writes only to the dialog-returned path and cancellation writes nothing, in `apps/desktop/src-tauri/tests/export_command.rs`
 - [ ] T122 [P] [US6] Frontend tests for ExportDialog warning and DeleteSessionDialog confirmation in `apps/desktop/src/features/sessions/ExportDialog.test.tsx` and `apps/desktop/src/features/sessions/DeleteSessionDialog.test.tsx`
 
@@ -348,7 +348,7 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 
 ### Implementation for User Story 8
 
-- [ ] T150 [US8] Spike S1 on real hardware for macOS (Core Audio taps vs ScreenCaptureKit), Windows (WASAPI loopback) and Linux (monitor source via libpulse vs PipeWire); record results in `docs/adr/ADR-002-captura-de-audio.md`
+- [ ] T150 [US8] Spike S1 on real hardware for macOS (Core Audio taps vs ScreenCaptureKit), Windows (WASAPI loopback) and Linux (monitor source via libpulse vs PipeWire); record results in `docs/adr/ADR-002.md` (captura de áudio)
 - [ ] T151 [P] [US8] Implement Windows loopback adapter (cfg windows) in `crates/audio/src/system/windows.rs` if S1 approves
 - [ ] T152 [P] [US8] Implement Linux monitor-source adapter (cfg linux) in `crates/audio/src/system/linux.rs` if S1 approves
 - [ ] T153 [P] [US8] Implement macOS system audio adapter (cfg macos) with isolated `unsafe` FFI, `// SAFETY:` comments and focused tests in `crates/audio/src/system/macos.rs` if S1 approves
@@ -363,11 +363,11 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 **Purpose**: Security acceptance, platform verification, docs
 
 - [ ] T157 [P] Log redaction test running a scripted session and scanning log files for known phrases and secrets (SC-014) in `apps/desktop/src-tauri/tests/log_redaction.rs`
-- [ ] T158 [P] Storage scan test searching DB/WAL files for known phrases (SC-018) in `crates/persistence/tests/at_rest_scan.rs`
-- [ ] T159 [P] Soak test: 2 h simulated session with scripted audio and fake providers asserting bounded queues and stable memory (SC-015), ignored by default, in `crates/application/tests/soak.rs`
+- [ ] T158 [P] Storage scan test searching DB/WAL files for known phrases (SC-018), and asserting no audio files or raw PCM are written to the app data, cache or temp dirs during a scripted session incl. remote STT chunk upload (FR-020), in `crates/persistence/tests/at_rest_scan.rs`
+- [ ] T159 [P] Soak test: 2 h simulated session with scripted audio and fake providers asserting bounded queues and RSS at most 10% above the 10-minute warm-up value (SC-015), ignored by default, in `crates/application/tests/soak.rs`
 - [ ] T160 [P] Accessibility pass: axe checks on all pages and keyboard-only flow test (SC-016) in `apps/desktop/src/a11y.test.tsx`
 - [ ] T161 Security review applying, by relevance, OWASP Top 10, OWASP ASVS (IPC/trust-boundary controls), OWASP Top 10 for LLM Applications, CWE Top 25 and NIST SSDF (Art. IV.9); verify the plan.md threat model table, `apps/desktop/src-tauri/capabilities/default.json` and CSP remain least-privilege; record findings per catalog with disposition and the explicit merge approval (Art. IV.10) in `specs/001-meeting-sessions/security-review.md`
-- [ ] T162 [P] Create platform acceptance matrix following quickstart §4 in `specs/001-meeting-sessions/acceptance-matrix.md` and execute it on macOS, Windows and Linux
+- [ ] T162 [P] Create platform acceptance matrix following quickstart §4 in `specs/001-meeting-sessions/acceptance-matrix.md` and execute it on macOS, Windows and Linux, including: timed new-user create+start (SC-001) and find-previous-session (SC-017) runs, screen-reader announcement of capture state with VoiceOver, Narrator/NVDA and Orca (SC-016), default-device change (Bluetooth connect/disconnect, FR-011) and suspend/lock during capture
 - [ ] T163 [P] Document local data format, migration procedure (`PRAGMA user_version`, forward-only upgrades, behavior on newer-than-app schema, backup before migrate), data classification, retention/deletion limitations and OS permissions in `docs/local-data.md` and `docs/permissions.md`
 - [ ] T164 [P] Update `README.md` and `apps/desktop/README.md` status sections to reflect implemented (and only implemented) capabilities (Art. IX.4)
 - [ ] T165 Run all CI gates locally (fmt, clippy, test, audit, deny, gitleaks, frontend check/test) and fix findings

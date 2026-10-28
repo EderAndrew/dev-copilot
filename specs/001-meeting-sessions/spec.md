@@ -61,8 +61,9 @@ estados exibidos, indicador de captura e ausência de captura fora do intervalo 
    "capturando", nenhum áudio é captado ou armazenado, e o aplicativo explica como conceder a permissão
    nas configurações do SO.
 6. **Given** uma falha na fonte de áudio durante a captura (ex.: dispositivo desconectado), **When** a falha
-   ocorre, **Then** a sessão passa a "falhou" (ou informa a interrupção da fonte), o indicador reflete que
-   não há captura, e todo o conteúdo já finalizado permanece salvo.
+   ocorre, **Then**, se era a única fonte, a sessão passa a "falhou"; se outra fonte continua ativa, a sessão
+   segue capturando com ela e o usuário é avisado da interrupção (US8.3). O indicador reflete as fontes
+   realmente ativas, e todo o conteúdo já finalizado permanece salvo.
 
 ---
 
@@ -315,6 +316,15 @@ fragmentar a sessão, a análise e o plano em várias sessões.
   provedor local disponível permitido com aviso (FR-045b); usuário informado.
 - **Nenhum provedor de transcrição utilizável**: captura não é iniciada nem retomada (FR-045a), com
   explicação ao usuário.
+- **Suspensão do computador ou bloqueio da sessão do SO**: as fontes interrompidas pelo SO são tratadas como
+  perda de fonte (lacuna `source_lost`, mesmo comportamento de US1.6); a captura nunca é retomada
+  automaticamente ao acordar.
+- **Exclusão durante análise ou pergunta em andamento**: as execuções em andamento da sessão são canceladas
+  antes da exclusão e seus resultados são descartados.
+- **Exportação durante análise em andamento**: exporta o conteúdo persistido no momento da exportação;
+  propostas ainda não recebidas não são incluídas.
+- **Fala em idioma diferente do idioma da sessão ou mistura de idiomas**: a transcrição usa o idioma da sessão,
+  sem detecção automática; a perda de qualidade é uma limitação documentada, não uma falha.
 
 ## Out of Scope *(mandatory)*
 
@@ -396,11 +406,11 @@ validada em dispositivos reais (Art. V.2, V.5).
   indisponíveis e por quê.
 - **FR-009**: O sistema MUST solicitar as permissões aplicáveis do SO antes de capturar uma fonte e MUST NOT
   capturar uma fonte sem permissão concedida.
-- **FR-010**: Diante de negativa ou revogação de permissão, o sistema MUST não captar nem armazenar áudio
-  daquela fonte e MUST orientar o usuário sobre como alterar a permissão.
+- **FR-010**: Diante de negativa de permissão, ou de revogação durante a captura, o sistema MUST interromper
+  imediatamente a captura daquela fonte (FR-009) e MUST orientar o usuário sobre como alterar a permissão.
 - **FR-011**: O sistema MUST NOT trocar silenciosamente para outro dispositivo de entrada quando a fonte
   selecionada se torna indisponível.
-- **FR-012**: Antes de iniciar a primeira captura, o sistema MUST exibir um lembrete de que o usuário é
+- **FR-012**: Antes de cada início de captura, até que o usuário dispense o lembrete, o sistema MUST exibir um lembrete de que o usuário é
   responsável por cumprir políticas da organização e informar/obter consentimento dos participantes conforme
   aplicável, exigindo confirmação; o usuário MAY optar por não ver o lembrete novamente.
 - **FR-013**: O sistema MUST oferecer captura de microfone em macOS, Windows e Linux.
@@ -453,7 +463,7 @@ validada em dispositivos reais (Art. V.2, V.5).
   tarefas técnicas, critérios de aceitação, premissas, riscos, alternativas e perguntas não resolvidas.
 - **FR-032**: O usuário MUST poder editar o texto, mudar o status e adicionar itens manualmente ao plano;
   itens criados pelo usuário MUST ser identificados como tal.
-- **FR-033**: O usuário MAY solicitar explicitamente uma análise final da sessão encerrada; ela segue as mesmas
+- **FR-033**: O usuário MAY solicitar explicitamente uma análise final de uma sessão encerrada ou falhou; ela segue as mesmas
   regras de FR-024 e FR-025.
 
 **Perguntas contextuais**
@@ -476,7 +486,8 @@ validada em dispositivos reais (Art. V.2, V.5).
   MUST NOT ser armazenada junto dos dados nem embutida no aplicativo. Se o cofre estiver indisponível ou o
   acesso for negado, o sistema MUST NOT gravar conteúdo de sessão sem cifra e MUST impedir o início da
   captura, informando o usuário.
-- **FR-040**: O usuário MUST poder listar sessões (título, data, duração, estado) e abrir qualquer uma.
+- **FR-040**: O usuário MUST poder listar sessões (título, data, duração ativa — sem os intervalos pausados —,
+  estado) e abrir qualquer uma.
 - **FR-041**: O usuário MUST poder exportar plano e/ou transcrição de uma sessão para um arquivo em destino
   escolhido por ele, em dois formatos: um legível por humanos e um estruturado, legível por máquina, contendo
   todos os campos dos registros (tipo, texto, natureza, status, justificativa, origem, histórico) e as
@@ -605,8 +616,8 @@ definidos no plano, usando apenas dados de teste não confidenciais.
   verificado por monitoramento de rede nos testes.
 - **SC-014**: Zero ocorrências de conteúdo de sessão ou credenciais em logs de diagnóstico e exportações nos
   testes de redação.
-- **SC-015**: Uma sessão contínua de 2 horas termina sem travamentos, com interface responsiva e uso de memória
-  sem crescimento contínuo.
+- **SC-015**: Uma sessão contínua de 2 horas termina sem travamentos, com controles respondendo dentro de
+  SC-006 e memória residente do processo no máximo 10% acima do valor medido após 10 minutos de aquecimento.
 - **SC-016**: Os fluxos iniciar, parar, revisar registros e exportar são concluídos apenas com teclado, e o
   estado de captura é anunciado por leitor de tela em cada SO.
 - **SC-017**: O usuário localiza e abre uma sessão anterior em até 30 segundos em 90% das tentativas.
@@ -653,7 +664,8 @@ definidos no plano, usando apenas dados de teste não confidenciais.
   auditoria de áudio ficam fora do MVP.
 - **Q-04 — Criptografia em repouso**: resolvida em 2026-10-27 — obrigatória no MVP, com chave no cofre do SO
   (FR-039a).
-- **Q-05 — Limites de custo/frequência da análise**: quais limites padrão por sessão, especialmente com
-  provedor remoto pago?
+- **Q-05 — Limites de custo/frequência da análise**: resolvida no plano ([research.md R7](./research.md)) —
+  disparo a cada 6 trechos finais ou 90 s, intervalo mínimo de 30 s, 1 chamada em voo, teto de 40 chamadas/hora
+  e teto de tokens por sessão configurável por provedor; todos ajustáveis pelo usuário.
 - **Q-06 — Formatos de exportação**: resolvida em 2026-10-27 — legível e estruturado (FR-041); formatos
   tabulares ou específicos de ferramentas ficam fora do MVP.
