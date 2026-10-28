@@ -66,7 +66,8 @@ Estado de permissão não é persistido como verdade: é consultado ao SO a cada
 | source | Option<AudioSourceKind> | obrigatório quando a sessão tem 2 fontes (FR-016) |
 | start_offset / end_offset | Duration | relativos ao início da sessão; `end ≥ start` |
 
-- **GapReason**: `paused`, `overload`, `provider_failure`, `cancelled_on_stop`, `source_lost`.
+- **GapReason**: `paused`, `overload`, `provider_failure`, `cancelled_on_stop`, `source_lost`, `interrupted`
+  (anexado na recuperação de inicialização após o último trecho final persistido, US2.3).
 - Segmentos **parciais** existem apenas em memória e em eventos de UI; nunca são persistidos (FR-017).
 - Texto final: 1–10 000 caracteres.
 

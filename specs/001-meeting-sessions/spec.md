@@ -95,7 +95,7 @@ verificar distinção parcial/final, timestamps, origem e preservação após in
 ### User Story 3 - Receber análise técnica incremental estruturada (Priority: P1)
 
 Conforme a conversa avança, o Dev Copilot propõe registros estruturados: requisitos, decisões técnicas,
-riscos, perguntas em aberto e tarefas técnicas. Cada registro indica se é um fato observado na conversa,
+riscos, perguntas em aberto, tarefas técnicas e premissas. Cada registro indica se é um fato observado na conversa,
 uma inferência ou uma sugestão, aponta os trechos da transcrição que o originaram e começa como "proposto".
 O usuário confirma, rejeita ou marca como pendente; nada confirmado é sobrescrito sem ação explícita.
 
@@ -328,6 +328,7 @@ fragmentar a sessão, a análise e o plano em várias sessões.
 - Importação de gravações de áudio pré-existentes.
 - Armazenamento, reprodução ou retranscrição do áudio capturado (ver FR-020).
 - Gravação de vídeo ou captura de tela.
+- Empacotamento, assinatura de código e distribuição pública (feature de release separada, Art. IV.15).
 
 ## Security & Privacy *(mandatory if the feature touches audio, files, network, credentials, OS APIs, or AI)*
 
@@ -426,7 +427,7 @@ validada em dispositivos reais (Art. V.2, V.5).
 **Análise técnica incremental**
 
 - **FR-021**: O sistema MUST analisar a transcrição de forma incremental durante a sessão e gerar registros
-  dos tipos requisito, decisão técnica, risco, pergunta em aberto e tarefa técnica.
+  dos tipos requisito, decisão técnica, risco, pergunta em aberto, tarefa técnica e premissa.
 - **FR-022**: Cada registro MUST ter natureza (observado, inferido, sugerido), status (proposto, confirmado,
   rejeitado, pendente), justificativa, data/hora de criação e referência à sessão e aos trechos de origem
   quando houver.
@@ -554,7 +555,7 @@ validada em dispositivos reais (Art. V.2, V.5).
   de indisponibilidade, estado da permissão (não solicitada, concedida, negada, revogada).
 - **Trecho de transcrição**: texto reconhecido. Atributos: estado (parcial, final), timestamp relativo, fonte
   de origem, sessão. Lacunas são trechos especiais com motivo (atraso, descarte, falha, pausa).
-- **Registro técnico**: requisito, decisão, risco, pergunta em aberto ou tarefa. Atributos: tipo, texto,
+- **Registro técnico**: requisito, decisão, risco, pergunta em aberto, tarefa ou premissa. Atributos: tipo, texto,
   natureza (observado, inferido, sugerido), status (proposto, confirmado, rejeitado, pendente), justificativa,
   origem (IA ou usuário), trechos de evidência, data/hora, marca de conflito/duplicata. Tarefas podem ter
   critérios de aceitação; decisões podem ter alternativas.

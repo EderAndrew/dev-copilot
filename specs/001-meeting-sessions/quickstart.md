@@ -9,6 +9,8 @@ teste **não confidenciais** (Art. IV.16).
 - Dependências de sistema do Tauri 2 para o SO.
 - Linux: `libwebkit2gtk-4.1-dev`, `libasound2-dev`, `libpulse-dev` (spike S1), um provedor de Secret Service
   ativo (GNOME Keyring ou KWallet) — sem ele o app bloqueia a captura por design (FR-039a).
+- Para análise local: Ollama instalado e em execução em 127.0.0.1, com o modelo de referência baixado (ou um
+  provedor remoto configurado e autorizado — US7).
 - Ferramentas de verificação: `cargo install cargo-audit cargo-deny`; `gitleaks`.
 
 ## 2. Executar
