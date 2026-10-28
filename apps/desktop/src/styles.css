@@ -281,3 +281,40 @@ fieldset label {
 .transcript-final:focus {
   outline: 2px solid currentColor;
 }
+
+/* Contextual questions (US5) */
+.questions-form {
+  display: grid;
+  gap: 0.25rem;
+  max-width: 40rem;
+}
+
+.questions-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.question {
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+
+.question .badge {
+  display: inline-block;
+  font-weight: 600;
+}
+
+.question-citations blockquote {
+  margin: 0.25rem 0 0.5rem 1rem;
+  font-style: italic;
+}
+
+.question-convert {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: end;
+}

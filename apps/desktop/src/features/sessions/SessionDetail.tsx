@@ -2,7 +2,22 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import { toIpcError, type IpcClient } from "../../ipc/client";
-import type { IpcError, SessionDetailDto, SessionEvent } from "../../ipc/types";
+import type {
+  IpcError,
+  QuestionDto,
+  RecordDto,
+  SessionDetailDto,
+  SessionEvent,
+} from "../../ipc/types";
+import {
+  applyQuestionEvent,
+  citedSegments,
+  upsertQuestion,
+} from "../questions/questionState";
+import {
+  QuestionsPanel,
+  type QuestionsClient,
+} from "../questions/QuestionsPanel";
 import { PlanView, type PlanClient } from "../records/PlanView";
 import type { AnalysisView } from "../records/recordState";
 import { TranscriptView } from "../transcript/TranscriptView";
@@ -13,6 +28,7 @@ import {
 import { formatDate } from "./SessionHistory";
 
 export type DetailClient = PlanClient &
+  QuestionsClient &
   Pick<
     IpcClient,
     "sessionGet" | "sessionRename" | "analysisRunFinal" | "sessionSubscribe"
@@ -26,7 +42,8 @@ type SessionDetailProps = {
 
 /**
  * A saved session (US4.3, US4.4): its data, failure reason, transcript and plan, with rename
- * and an explicit final analysis for ended or failed sessions (FR-033).
+ * and an explicit final analysis for ended or failed sessions (FR-033), and questions about it
+ * (US5).
  */
 export function SessionDetail({
   sessionId,
@@ -40,6 +57,8 @@ export function SessionDetail({
   const [title, setTitle] = useState("");
   const [analysis, setAnalysis] = useState<AnalysisView | null>(null);
   const [planVersion, setPlanVersion] = useState(0);
+  const [questions, setQuestions] = useState<QuestionDto[]>([]);
+  const [records, setRecords] = useState<RecordDto[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -48,6 +67,10 @@ export function SessionDetail({
         if (!active) return;
         setDetail(loaded);
         setTitle(loaded.session.title);
+        setQuestions((current) =>
+          loaded.questions.reduce(upsertQuestion, current),
+        );
+        setRecords(loaded.records);
       },
       (failure: unknown) => active && setError(toIpcError(failure)),
     );
@@ -59,13 +82,17 @@ export function SessionDetail({
   const state = detail?.session.state;
   const finished = state === "ended" || state === "failed";
 
-  // Final analysis results arrive as session events.
+  // Final analysis results and answers arrive as session events.
   useEffect(() => {
     if (!finished) return;
     const onEvent = (event: SessionEvent) => {
       if (event.type === "analysis_status")
         setAnalysis({ status: event.status, created: event.created });
-      if (event.type === "record_proposed") setPlanVersion((v) => v + 1);
+      if (event.type === "record_proposed") {
+        setPlanVersion((v) => v + 1);
+        setRecords((current) => [...current, event.record]);
+      }
+      setQuestions((current) => applyQuestionEvent(current, event));
     };
     client.sessionSubscribe(sessionId, onEvent).catch(() => undefined);
   }, [client, sessionId, finished]);
@@ -74,6 +101,15 @@ export function SessionDetail({
     () => transcriptFromItems(detail?.transcript ?? []),
     [detail],
   );
+  const segments = useMemo(
+    () => citedSegments(transcript.entries),
+    [transcript],
+  );
+
+  function recordCreated(record: RecordDto) {
+    setRecords((current) => [...current, record]);
+    setPlanVersion((v) => v + 1);
+  }
 
   async function rename(event: FormEvent) {
     event.preventDefault();
@@ -191,6 +227,19 @@ export function SessionDetail({
           refreshKey={planVersion}
         />
       </div>
+      {finished && (
+        <QuestionsPanel
+          sessionId={sessionId}
+          questions={questions}
+          segments={segments}
+          records={records}
+          client={client}
+          onAsked={(question) =>
+            setQuestions((current) => upsertQuestion(current, question))
+          }
+          onRecordCreated={recordCreated}
+        />
+      )}
     </section>
   );
 }

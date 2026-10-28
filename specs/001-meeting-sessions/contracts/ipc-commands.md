@@ -38,7 +38,7 @@ type IpcError = {
 | `session_resume` | `{ sessionId }` | `SessionDto` | `invalid_state`, `permission_denied`, `source_unavailable`, `no_transcriber` |
 | `session_stop` | `{ sessionId }` | `SessionDto` (estado `stopping`) — retorna sem aguardar drenagem | `invalid_state` |
 | `session_list` | `{ cursor?: string, limit?: 1..100 }` (padrão 50; `cursor` = último id da página anterior) | `{ items: SessionDto[], nextCursor? }`, mais recentes primeiro | `invalid_input` (limite fora da faixa, cursor desconhecido) |
-| `session_get` | `{ sessionId }` | `SessionDetailDto` = `{ session: SessionDto, transcript: TranscriptItemDto[], records: RecordDto[] }`; `TranscriptItemDto` = `{ type: "final", segment: SegmentDto }` \| `{ type: "gap", reason, startMs, durationMs }` em ordem de `seq`; perguntas entram com US5 | `not_found` |
+| `session_get` | `{ sessionId }` | `SessionDetailDto` = `{ session: SessionDto, transcript: TranscriptItemDto[], records: RecordDto[], questions: QuestionDto[] }`; `TranscriptItemDto` = `{ type: "final", segment: SegmentDto }` \| `{ type: "gap", reason, startMs, durationMs }` em ordem de `seq`; perguntas em ordem de envio | `not_found` |
 | `session_rename` | `{ sessionId, title }` | `SessionDto` | `invalid_input` |
 | `session_delete` | `{ sessionId, confirmed: true }` | `{}` | `invalid_state` (sessão ativa, FR-044) |
 | `session_subscribe` | `{ sessionId }` + argumento de topo `channel: Channel<SessionEvent>` (Tauri só aceita `Channel` como argumento de comando, não dentro de `request`) | `SessionDto` atual (para ressincronizar ao reconectar) | `not_found` |
@@ -73,10 +73,18 @@ vem sempre do trecho original (FR-053b). Exemplos em `fixtures/RecordDto/`.
 
 ## Perguntas
 
-| Comando | Entrada | Saída |
-|---------|---------|-------|
-| `question_ask` | `{ sessionId, question }` | `{ questionId }` — resposta chega por evento |
-| `question_to_record` | `{ questionId, kind }` | `RecordDto` com `status = proposed`, `nature = suggested` (FR-037) |
+`QuestionDto`: `{ id, sessionId, question, answer?, certainty?: "supported" | "partial" | "no_evidence",
+evidence: ({ type: "segment", id } | { type: "record", id })[], status: "pending" | "answered" | "failed",
+providerId?, askedAt, answeredAt? }`. `answer` e `certainty` só existem com `status = answered`;
+`no_evidence` ⇔ `evidence` vazio. Evidências são ids da própria sessão (as demais são descartadas pelo
+núcleo, SC-011); o texto citado vem do trecho ou registro armazenado, nunca traduzido (FR-053b). Exemplos em
+`fixtures/QuestionDto/`. A resposta do provedor segue
+[answer-output.schema.json](./answer-output.schema.json).
+
+| Comando | Entrada | Saída | Erros específicos |
+|---------|---------|-------|-------------------|
+| `question_ask` | `{ sessionId, question }` (1–2 000 caracteres) | `QuestionDto` com `status = pending` — a resposta (ou a falha) chega pelo evento `question_answered`; captura e transcrição seguem sem esperar (US5.4) | `invalid_state` (sessão nunca iniciada, ou já há uma pergunta pendente dela), `provider_error` (sem provedor de análise utilizável) |
+| `question_to_record` | `{ questionId, kind }` | `RecordDto` novo com `status = proposed`, `nature = suggested`, `origin = user`, a pergunta como justificativa e os trechos citados como evidência; nenhum registro existente muda (FR-037) | `invalid_state` (pergunta não respondida) |
 
 ## Exportação
 

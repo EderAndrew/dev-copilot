@@ -10,6 +10,7 @@ pub mod events;
 pub mod plan;
 pub mod ports;
 pub mod provider_service;
+pub mod question_service;
 pub mod record_service;
 pub mod session_service;
 pub mod settings_service;

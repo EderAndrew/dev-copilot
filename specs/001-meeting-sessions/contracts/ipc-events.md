@@ -30,4 +30,6 @@ Garantias:
 - `final_segment` e `gap` só são emitidos depois de persistidos; `segment.source` e `partial_segment.source`
   aparecem apenas em sessões com duas fontes (FR-016). Lacunas podem chegar fora da ordem de `startMs` em
   relação aos finais (ex.: `overload` é gravada no descarte); o frontend ordena por `startMs`.
+- `question_answered` é emitido depois de persistida a resposta ou a falha (`status = failed`) de uma
+  pergunta; `QuestionDto` está em [ipc-commands.md](./ipc-commands.md#perguntas).
 - Nenhum evento carrega segredos; conteúdo de sessão só é enviado à janela `main`.

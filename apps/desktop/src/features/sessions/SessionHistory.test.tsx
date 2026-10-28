@@ -104,6 +104,8 @@ describe("SessionDetail", () => {
       recordSetStatus: vi.fn(),
       recordEdit: vi.fn(),
       recordCreate: vi.fn(),
+      questionAsk: vi.fn(),
+      questionToRecord: vi.fn(),
     };
   }
 
@@ -124,6 +126,7 @@ describe("SessionDetail", () => {
         { type: "gap", reason: "interrupted", startMs: 3000, durationMs: 0 },
       ],
       records: [],
+      questions: [],
     };
     render(
       <SessionDetail sessionId="s2" client={client(detail)} onBack={vi.fn()} />,
@@ -138,7 +141,12 @@ describe("SessionDetail", () => {
 
   it("renames and runs the final analysis by explicit action", async () => {
     const user = userEvent.setup();
-    const c = client({ session: ended, transcript: [], records: [] });
+    const c = client({
+      session: ended,
+      transcript: [],
+      records: [],
+      questions: [],
+    });
     render(<SessionDetail sessionId="s1" client={c} onBack={vi.fn()} />);
     await user.click(await screen.findByRole("button", { name: "Renomear" }));
     const input = screen.getByRole("textbox", { name: "Título" });

@@ -10,12 +10,14 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use devcopilot_domain::Redacted;
 use devcopilot_domain::analysis_run::AnalysisRun;
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
-use devcopilot_domain::ids::{ProviderId, RecordId, SessionId};
+use devcopilot_domain::ids::{ProviderId, QuestionId, RecordId, SessionId};
 use devcopilot_domain::language::SessionLanguage;
 use devcopilot_domain::provider::{CredentialRef, DataCategory, Locality, Provider};
+use devcopilot_domain::question::{Answer, Certainty, ContextQuestion};
 use devcopilot_domain::record::TechnicalRecord;
 use devcopilot_domain::record_change::RecordChange;
 use devcopilot_domain::session::Session;
+use devcopilot_domain::text::AnswerText;
 use devcopilot_domain::time::{Duration, Timestamp};
 use devcopilot_domain::transcript::TranscriptSegment;
 use tokio::sync::Notify;
@@ -24,12 +26,12 @@ use tokio_util::sync::CancellationToken;
 use crate::events::SessionEvent;
 use crate::ports::{
     AnalysisOutput, AnalysisProvider, AnalysisProviderFactory, AnalysisRequest,
-    AnalysisRunRepository, AudioChunk, AudioChunkStream, AudioError, AudioSource,
+    AnalysisRunRepository, AnswerOutput, AudioChunk, AudioChunkStream, AudioError, AudioSource,
     AuthorizationError, BoundedAudioSink, BoxFuture, CaptureHandle, Clock, EventPublisher,
-    ProviderDescriptor, ProviderError, ProviderRepository, RecordRepository, RemoteGate,
-    RepositoryError, SecretStore, SecretStoreError, SegmentRepository, SessionRepository,
-    SettingsRepository, SinkError, SourceFault, SourceFaultNotifier, Transcriber,
-    TranscriberFactory, TranscriptSink, TranscriptUpdate,
+    ProviderDescriptor, ProviderError, ProviderRepository, QuestionRepository, QuestionRequest,
+    RecordRepository, RemoteGate, RepositoryError, SecretStore, SecretStoreError,
+    SegmentRepository, SessionRepository, SettingsRepository, SinkError, SourceFault,
+    SourceFaultNotifier, Transcriber, TranscriberFactory, TranscriptSink, TranscriptUpdate,
 };
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -521,13 +523,21 @@ impl TranscriberFactory for ScriptedTranscriberFactory {
 pub type AnalysisResponder =
     Arc<dyn Fn(&AnalysisRequest) -> Result<AnalysisOutput, ProviderError> + Send + Sync>;
 
+/// Computes the reply of a [`ScriptedAnalysisProvider`] to a question.
+pub type AnswerResponder =
+    Arc<dyn Fn(&QuestionRequest) -> Result<AnswerOutput, ProviderError> + Send + Sync>;
+
 /// Analysis provider driven by the test: answers can be queued or computed from the request,
-/// calls can be held to simulate a slow provider, and every request is recorded.
+/// calls can be held to simulate a slow provider, and every request is recorded. Questions
+/// share the hold and in-flight counters with analysis.
 pub struct ScriptedAnalysisProvider {
     descriptor: ProviderDescriptor,
     script: Mutex<VecDeque<Result<AnalysisOutput, ProviderError>>>,
     responder: Mutex<Option<AnalysisResponder>>,
     requests: Mutex<Vec<AnalysisRequest>>,
+    answers: Mutex<VecDeque<Result<AnswerOutput, ProviderError>>>,
+    answer_responder: Mutex<Option<AnswerResponder>>,
+    questions: Mutex<Vec<QuestionRequest>>,
     held: AtomicBool,
     released: Notify,
     in_flight: AtomicUsize,
@@ -560,6 +570,9 @@ impl ScriptedAnalysisProvider {
             script: Mutex::new(VecDeque::new()),
             responder: Mutex::new(None),
             requests: Mutex::new(Vec::new()),
+            answers: Mutex::new(VecDeque::new()),
+            answer_responder: Mutex::new(None),
+            questions: Mutex::new(Vec::new()),
             held: AtomicBool::new(false),
             released: Notify::new(),
             in_flight: AtomicUsize::new(0),
@@ -575,6 +588,22 @@ impl ScriptedAnalysisProvider {
     /// Answers every call without a queued answer with `responder`.
     pub fn respond_with(&self, responder: AnalysisResponder) {
         *lock(&self.responder) = Some(responder);
+    }
+
+    /// Queues the reply to the next question (queued replies win over the responder).
+    pub fn push_answer(&self, answer: Result<AnswerOutput, ProviderError>) {
+        lock(&self.answers).push_back(answer);
+    }
+
+    /// Replies to every question without a queued reply with `responder`.
+    pub fn answer_with(&self, responder: AnswerResponder) {
+        *lock(&self.answer_responder) = Some(responder);
+    }
+
+    /// Questions received so far.
+    #[must_use]
+    pub fn questions(&self) -> Vec<QuestionRequest> {
+        lock(&self.questions).clone()
     }
 
     /// Makes calls wait until [`Self::release`] or cancellation.
@@ -606,12 +635,67 @@ impl ScriptedAnalysisProvider {
         self.max_in_flight.load(Ordering::SeqCst)
     }
 
-    fn answer(&self, request: &AnalysisRequest) -> Result<AnalysisOutput, ProviderError> {
+    fn analysis_reply(&self, request: &AnalysisRequest) -> Result<AnalysisOutput, ProviderError> {
         if let Some(answer) = lock(&self.script).pop_front() {
             return answer;
         }
         let responder = lock(&self.responder).clone();
         responder.map_or_else(|| Ok(AnalysisOutput::default()), |respond| respond(request))
+    }
+
+    fn question_reply(&self, request: &QuestionRequest) -> Result<AnswerOutput, ProviderError> {
+        if let Some(answer) = lock(&self.answers).pop_front() {
+            return answer;
+        }
+        let responder = lock(&self.answer_responder).clone();
+        responder.map_or_else(
+            || {
+                Ok(AnswerOutput {
+                    answer: no_evidence_answer(),
+                    tokens_used: 0,
+                })
+            },
+            |respond| respond(request),
+        )
+    }
+
+    /// Waits while held, then computes the reply; counts calls in flight.
+    async fn reply<T>(
+        &self,
+        cancel: CancellationToken,
+        compute: impl Fn() -> Result<T, ProviderError>,
+    ) -> Result<T, ProviderError> {
+        let now = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+        self.max_in_flight.fetch_max(now, Ordering::SeqCst);
+        let result = loop {
+            let released = self.released.notified();
+            tokio::pin!(released);
+            released.as_mut().enable();
+            if cancel.is_cancelled() {
+                break Err(ProviderError::Cancelled);
+            }
+            if !self.held.load(Ordering::SeqCst) {
+                break compute();
+            }
+            tokio::select! {
+                () = cancel.cancelled() => break Err(ProviderError::Cancelled),
+                () = released => {}
+            }
+        };
+        self.in_flight.fetch_sub(1, Ordering::SeqCst);
+        result
+    }
+}
+
+/// The default scripted reply: nothing in the session supports an answer.
+fn no_evidence_answer() -> Answer {
+    Answer {
+        text: Redacted::new(
+            AnswerText::parse("Não há evidência na sessão.")
+                .unwrap_or_else(|_| unreachable!("constant answer is valid")),
+        ),
+        certainty: Certainty::NoEvidence,
+        evidence: Vec::new(),
     }
 }
 
@@ -627,25 +711,18 @@ impl AnalysisProvider for ScriptedAnalysisProvider {
     ) -> BoxFuture<'_, Result<AnalysisOutput, ProviderError>> {
         Box::pin(async move {
             lock(&self.requests).push(request.clone());
-            let now = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
-            self.max_in_flight.fetch_max(now, Ordering::SeqCst);
-            let result = loop {
-                let released = self.released.notified();
-                tokio::pin!(released);
-                released.as_mut().enable();
-                if cancel.is_cancelled() {
-                    break Err(ProviderError::Cancelled);
-                }
-                if !self.held.load(Ordering::SeqCst) {
-                    break self.answer(&request);
-                }
-                tokio::select! {
-                    () = cancel.cancelled() => break Err(ProviderError::Cancelled),
-                    () = released => {}
-                }
-            };
-            self.in_flight.fetch_sub(1, Ordering::SeqCst);
-            result
+            self.reply(cancel, || self.analysis_reply(&request)).await
+        })
+    }
+
+    fn answer(
+        &self,
+        request: QuestionRequest,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'_, Result<AnswerOutput, ProviderError>> {
+        Box::pin(async move {
+            lock(&self.questions).push(request.clone());
+            self.reply(cancel, || self.question_reply(&request)).await
         })
     }
 }
@@ -994,6 +1071,65 @@ impl AnalysisRunRepository for InMemoryAnalysisRunRepository {
             .iter()
             .filter(|r| r.session_id() == session)
             .copied()
+            .collect())
+    }
+}
+
+/// In-memory question repository.
+#[derive(Debug, Default)]
+pub struct InMemoryQuestionRepository {
+    questions: Mutex<Vec<ContextQuestion>>,
+    fail_writes: Mutex<Option<RepositoryError>>,
+}
+
+impl InMemoryQuestionRepository {
+    /// Every stored question, in insertion order.
+    #[must_use]
+    pub fn all(&self) -> Vec<ContextQuestion> {
+        lock(&self.questions).clone()
+    }
+
+    /// Makes `insert` and `update` fail with `error` (`None` restores normal behaviour).
+    pub fn fail_writes_with(&self, error: Option<RepositoryError>) {
+        *lock(&self.fail_writes) = error;
+    }
+
+    fn check_writes(&self) -> Result<(), RepositoryError> {
+        lock(&self.fail_writes).clone().map_or(Ok(()), Err)
+    }
+}
+
+impl QuestionRepository for InMemoryQuestionRepository {
+    fn insert(&self, question: &ContextQuestion) -> Result<(), RepositoryError> {
+        self.check_writes()?;
+        lock(&self.questions).push(question.clone());
+        Ok(())
+    }
+
+    fn update(&self, question: &ContextQuestion) -> Result<(), RepositoryError> {
+        self.check_writes()?;
+        let mut questions = lock(&self.questions);
+        let stored = questions
+            .iter_mut()
+            .find(|q| q.id() == question.id())
+            .ok_or(RepositoryError::NotFound)?;
+        *stored = question.clone();
+        Ok(())
+    }
+
+    fn get(&self, id: QuestionId) -> Result<ContextQuestion, RepositoryError> {
+        lock(&self.questions)
+            .iter()
+            .find(|q| q.id() == id)
+            .cloned()
+            .ok_or(RepositoryError::NotFound)
+    }
+
+    fn list_by_session(&self, session: SessionId) -> Result<Vec<ContextQuestion>, RepositoryError> {
+        Ok(lock(&self.questions)
+            .iter()
+            .filter(|q| q.session_id() == session)
+            .cloned()
             .collect())
     }
 }

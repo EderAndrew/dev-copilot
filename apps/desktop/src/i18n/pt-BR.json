@@ -251,5 +251,32 @@
     "kind": "Tipo",
     "initialStatus": "Status",
     "add": "Adicionar"
+  },
+  "questions": {
+    "title": "Perguntas sobre a sessão",
+    "label": "Sua pergunta",
+    "hint": "As respostas usam somente o conteúdo desta sessão. Ctrl+Enter envia.",
+    "waitPending": "Aguarde a resposta da pergunta anterior para perguntar de novo.",
+    "ask": "Perguntar",
+    "empty": "Pergunte, por exemplo, o que foi decidido sobre um tema. A captura continua enquanto a resposta é preparada.",
+    "you": "Pergunta:",
+    "status": {
+      "pending": "Aguardando resposta… A captura e a transcrição continuam normalmente.",
+      "failed": "Não foi possível responder. Nada foi alterado e a captura e a transcrição seguem normalmente. Tente perguntar de novo."
+    },
+    "certainty": {
+      "supported": "Sustentada pela sessão",
+      "partial": "Parcialmente sustentada: parte da resposta não foi discutida",
+      "no_evidence": "Sem evidência na sessão"
+    },
+    "citations": "Evidências citadas",
+    "noCitations": "Nenhum trecho ou registro da sessão sustenta uma resposta.",
+    "segmentUnavailable": "trecho indisponível",
+    "recordCitation": "Registro ({{kind}}):",
+    "recordUnavailable": "Registro indisponível.",
+    "kindLabel": "Tipo do item",
+    "convert": "Transformar em item proposto",
+    "convertLabel": "Transformar a resposta em item: {{question}}",
+    "converted": "Item proposto adicionado ao plano. Revise-o antes de confirmar."
   }
 }

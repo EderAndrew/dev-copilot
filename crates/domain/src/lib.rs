@@ -37,6 +37,7 @@ pub mod error;
 pub mod ids;
 pub mod language;
 pub mod provider;
+pub mod question;
 pub mod record;
 pub mod record_change;
 pub mod redacted;

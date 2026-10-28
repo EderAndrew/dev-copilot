@@ -289,20 +289,28 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 
 ### Tests for User Story 5 (REQUIRED) ⚠️
 
-- [ ] T109 [P] [US5] Question service tests: invalid evidence ids dropped → `no_evidence`, answers never mutate records, conversion to proposed/suggested record, runs concurrently with capture without blocking, cited evidence shown in its original language (FR-053b), in `crates/application/tests/question_service.rs`
-- [ ] T110 [P] [US5] Injection cases inside questions and transcript for Q&A path in `crates/application/tests/prompt_injection.rs`
-- [ ] T111 [P] [US5] Frontend tests for QuestionsPanel (pending/answered/failed, certainty labels, citation links) in `apps/desktop/src/features/questions/QuestionsPanel.test.tsx`
-- [ ] T111a [P] [US5] Q&A evaluation on the T083 fixtures with answerable and unanswerable questions: 100% of answers cite evidence or declare `no_evidence`, and 0 invented facts on unanswerable questions (SC-011); same `DEVCOPILOT_EVAL_PROVIDER`-gated real-provider mode, in `crates/intelligence/tests/qa_evaluation.rs`
+- [X] T109 [P] [US5] Question service tests: invalid evidence ids dropped → `no_evidence`, answers never mutate records, conversion to proposed/suggested record, runs concurrently with capture without blocking, cited evidence shown in its original language (FR-053b), in `crates/application/tests/question_service.rs`
+- [X] T110 [P] [US5] Injection cases inside questions and transcript for Q&A path in `crates/application/tests/prompt_injection.rs`
+- [X] T111 [P] [US5] Frontend tests for QuestionsPanel (pending/answered/failed, certainty labels, citation links) in `apps/desktop/src/features/questions/QuestionsPanel.test.tsx`
+- [X] T111a [P] [US5] Q&A evaluation on the T083 fixtures with answerable and unanswerable questions: 100% of answers cite evidence or declare `no_evidence`, and 0 invented facts on unanswerable questions (SC-011); same `DEVCOPILOT_EVAL_PROVIDER`-gated real-provider mode, in `crates/intelligence/tests/qa_evaluation.rs`
 
 ### Implementation for User Story 5
 
-- [ ] T112 [P] [US5] Implement ContextQuestion, EvidenceRef, Certainty in `crates/domain/src/question.rs` with unit tests
-- [ ] T113 [P] [US5] Implement QuestionRepository in `crates/persistence/src/repos/question_repo.rs`
-- [ ] T114 [US5] Implement answer prompt and output parsing (answer, certainty, evidence refs) in `crates/intelligence/src/prompt.rs` and `crates/intelligence/src/output_validation.rs`, and `answer` in `crates/intelligence/src/ollama.rs`
-- [ ] T115 [US5] Implement `question_service` in `crates/application/src/question_service.rs`
-- [ ] T116 [US5] Implement commands `question_ask`, `question_to_record` and `question_answered` event in `apps/desktop/src-tauri/src/commands/questions.rs`
-- [ ] T117 [P] [US5] Implement QuestionsPanel in `apps/desktop/src/features/questions/QuestionsPanel.tsx`
-- [ ] T118 [US5] Add US5 strings to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
+- [X] T112 [P] [US5] Implement ContextQuestion, EvidenceRef, Certainty in `crates/domain/src/question.rs` with unit tests
+- [X] T113 [P] [US5] Implement QuestionRepository in `crates/persistence/src/repos/question_repo.rs`
+- [X] T114 [US5] Implement answer prompt and output parsing (answer, certainty, evidence refs) in `crates/intelligence/src/prompt.rs` and `crates/intelligence/src/output_validation.rs`, and `answer` in `crates/intelligence/src/ollama.rs`
+- [X] T115 [US5] Implement `question_service` in `crates/application/src/question_service.rs`
+- [X] T116 [US5] Implement commands `question_ask`, `question_to_record` and `question_answered` event in `apps/desktop/src-tauri/src/commands/questions.rs`
+- [X] T117 [P] [US5] Implement QuestionsPanel in `apps/desktop/src/features/questions/QuestionsPanel.tsx`
+- [X] T118 [US5] Add US5 strings to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
+
+**Phase 7 notes** (2026-10-28):
+- Domain (T112): `ContextQuestion` goes `pending` → `answered` | `failed`. `Answer::grounded` drops evidence outside the session, repeats and anything beyond 20 references; a `no_evidence` answer cites nothing, and an answer left without evidence becomes `no_evidence` (SC-011). Answers are `AnswerText` (1–4 000 characters). `ContextQuestion::to_record` builds the FR-037 conversion: a new record with `origin = user`, `status = proposed`, `nature = suggested`, the question as rationale and the cited segments as evidence; answers longer than a record are cut with `…`.
+- Provider output (T114): new contract `contracts/answer-output.schema.json` (`answer`, `certainty`, `evidenceSegmentIds`, `evidenceRecordIds`). The question travels inside `<session_data>` like the transcript, with fixed per-language instructions. Ollama `answer` sends the answer schema as `format`.
+- Service (T115): `QuestionService::ask` stores the question as `pending` and answers it in a spawned task, so capture and transcription never wait (US5.4). Only one question per session is in flight (`invalid_state` otherwise); sessions that never started are `invalid_state`; without a usable analysis provider it is `provider_error`. The provider gets the session's 400 most recent finals plus the record summary. Questions are not counted against the analysis hourly cap. Questions left `pending` by an unexpected exit fail on startup.
+- IPC (T116): `question_ask` returns the `pending` `QuestionDto` instead of `{ questionId }` (contract updated) so the UI shows it with the core's timestamp. `question_answered` carries failures too (`status = failed`). `session_get` now includes `questions`. New fixtures: `QuestionDto`, `QuestionAskDto`, `QuestionToRecordDto` and `SessionEvent/question-answered`.
+- T110 and T111a live in `crates/intelligence/tests/` (`prompt_injection.rs`, with 16 Q&A cases in `fixtures/injection/qa_cases.json`; `qa_evaluation.rs`), not `application/tests`, for the same reason as T081: attacks must go through the real validation. T111a extends the T083 fixtures with 13 annotated questions (7 answerable, 6 unanswerable with forbidden terms). The real-provider run is gated by `DEVCOPILOT_EVAL_PROVIDER`, like T083; its metrics are still to be recorded in ADR-003.
+- UI (T117): `QuestionsPanel` appears on the live session page (any state after `idle`) and in `SessionDetail` (ended/failed). Certainty is shown in words; cited segments are quoted as stored, in their original language (FR-053b), and link to the transcript; cited records show kind and text. Conversion to a proposed item asks for the kind. `showSegment` moved to `features/transcript/showSegment.ts`.
 
 ---
 

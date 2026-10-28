@@ -4,8 +4,7 @@
 //! points return [`BoxFuture`] so they stay object-safe and can be composed as `Arc<dyn _>`.
 //!
 //! Repository ports for entities introduced by user stories grow with those stories:
-//! `QuestionRepository` (T113); `AnalysisProvider::answer` arrives with T114; authorizations on
-//! `ProviderRepository` with T135.
+//! authorizations on `ProviderRepository` arrive with T135.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -14,13 +13,14 @@ use std::sync::{Arc, Mutex, PoisonError};
 use devcopilot_domain::Redacted;
 use devcopilot_domain::analysis_run::AnalysisRun;
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
-use devcopilot_domain::ids::{ProviderId, RecordId, SegmentId, SessionId};
+use devcopilot_domain::ids::{ProviderId, QuestionId, RecordId, SegmentId, SessionId};
 use devcopilot_domain::language::SessionLanguage;
 use devcopilot_domain::provider::{CredentialRef, DataCategory, Locality, Provider};
+use devcopilot_domain::question::{Answer, ContextQuestion};
 use devcopilot_domain::record::{Proposal, RecordKind, RecordStatus, TechnicalRecord};
 use devcopilot_domain::record_change::RecordChange;
 use devcopilot_domain::session::Session;
-use devcopilot_domain::text::{RecordText, SegmentText};
+use devcopilot_domain::text::{QuestionText, RecordText, SegmentText};
 use devcopilot_domain::time::{Duration, Timestamp};
 use devcopilot_domain::transcript::TranscriptSegment;
 use thiserror::Error;
@@ -353,7 +353,33 @@ pub struct AnalysisOutput {
     pub tokens_used: u32,
 }
 
-/// Technical analysis and contextual questions (`answer` arrives with T114).
+/// Input of one contextual question (FR-035): the question plus the session's authorized
+/// context, both sent as delimited data.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuestionRequest {
+    /// Session asked about.
+    pub session_id: SessionId,
+    /// Language the answer must be written in (FR-053b).
+    pub language: SessionLanguage,
+    /// The user's question.
+    pub question: Redacted<QuestionText>,
+    /// Final segments of the session, oldest first.
+    pub segments: Vec<AnalysisSegment>,
+    /// Records of the session.
+    pub records: Vec<RecordSummary>,
+}
+
+/// Schema-validated output of one question call; evidence is not yet checked against the
+/// session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnswerOutput {
+    /// The answer.
+    pub answer: Answer,
+    /// Tokens consumed (prompt + completion).
+    pub tokens_used: u32,
+}
+
+/// Technical analysis and contextual questions.
 ///
 /// Implementations offer no tools or functions to the model, send session content only as
 /// delimited data, and accept only output valid against `analysis-output.schema.json`
@@ -374,6 +400,18 @@ pub trait AnalysisProvider: Send + Sync {
         request: AnalysisRequest,
         cancel: CancellationToken,
     ) -> BoxFuture<'_, Result<AnalysisOutput, ProviderError>>;
+
+    /// Answers `request` from the session content only (FR-035, FR-036); honours `cancel`
+    /// promptly.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::analyze`].
+    fn answer(
+        &self,
+        request: QuestionRequest,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'_, Result<AnswerOutput, ProviderError>>;
 }
 
 /// Builds the [`AnalysisProvider`] for a configured analysis provider. Cheap: no network I/O.
@@ -554,6 +592,37 @@ pub trait RecordRepository: Send + Sync {
     ///
     /// See [`RepositoryError`].
     fn history(&self, record: RecordId) -> Result<Vec<RecordChange>, RepositoryError>;
+}
+
+/// Contextual questions with their evidence (data-model.md "ContextQuestion", FR-038).
+pub trait QuestionRepository: Send + Sync {
+    /// Stores a new question.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the session does not exist.
+    fn insert(&self, question: &ContextQuestion) -> Result<(), RepositoryError>;
+
+    /// Stores the answer or failure of a question, with its evidence, in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the question does not exist.
+    fn update(&self, question: &ContextQuestion) -> Result<(), RepositoryError>;
+
+    /// One question.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the question does not exist.
+    fn get(&self, id: QuestionId) -> Result<ContextQuestion, RepositoryError>;
+
+    /// Questions of `session`, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::Storage`].
+    fn list_by_session(&self, session: SessionId) -> Result<Vec<ContextQuestion>, RepositoryError>;
 }
 
 /// Analysis runs (data-model.md "AnalysisRun").

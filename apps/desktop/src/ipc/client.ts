@@ -14,6 +14,9 @@ import type {
   PermissionState,
   PlanDto,
   ProviderDto,
+  QuestionAskDto,
+  QuestionDto,
+  QuestionToRecordDto,
   RecordCreateDto,
   RecordDto,
   RecordEditDto,
@@ -127,6 +130,12 @@ export const ipc = {
   /** Final analysis of an ended or failed session (FR-033); results arrive as events. */
   analysisRunFinal: (sessionId: string) =>
     call<RunIdDto>("analysis_run_final", { request: { sessionId } }),
+  /** Asks about a session (FR-034); the answer arrives as a `question_answered` event. */
+  questionAsk: (request: QuestionAskDto) =>
+    call<QuestionDto>("question_ask", { request }),
+  /** Turns an answer into a new proposed record by explicit user action (FR-037). */
+  questionToRecord: (request: QuestionToRecordDto) =>
+    call<RecordDto>("question_to_record", { request }),
   sessionList: (request: SessionListDto = {}) =>
     call<SessionPageDto>("session_list", { request }),
   sessionGet: (sessionId: string) =>

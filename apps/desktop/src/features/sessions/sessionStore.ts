@@ -8,6 +8,7 @@ import type { IpcClient } from "../../ipc/client";
 import type {
   AudioSourceKind,
   Locality,
+  QuestionDto,
   RecordDto,
   SessionDto,
   SessionEvent,
@@ -18,6 +19,7 @@ import {
   upsertRecord,
   type RecordsState,
 } from "../records/recordState";
+import { applyQuestionEvent, upsertQuestion } from "../questions/questionState";
 import {
   applyTranscriptEvent,
   emptyTranscript,
@@ -48,13 +50,21 @@ export type SessionViewState = {
   providers: Partial<Record<ProviderStage, ProviderInUse>>;
   /** Technical records and the latest analysis status (US3). */
   records: RecordsState;
+  /** Questions in the order they were asked (US5). */
+  questions: QuestionDto[];
 };
 
 export type SessionAction =
   | { type: "loaded"; session: SessionDto }
   | { type: "event"; event: SessionEvent }
   | { type: "recordUpdated"; record: RecordDto }
-  | { type: "recordsLoaded"; sessionId: string; records: RecordDto[] }
+  | {
+      type: "detailLoaded";
+      sessionId: string;
+      records: RecordDto[];
+      questions: QuestionDto[];
+    }
+  | { type: "questionUpdated"; question: QuestionDto }
   | { type: "cleared" };
 
 export const INDICATOR_OFF: CaptureIndicatorState = {
@@ -72,6 +82,7 @@ export const initialSessionState: SessionViewState = {
   transcript: emptyTranscript,
   providers: {},
   records: emptyRecords,
+  questions: [],
 };
 
 function applyEvent(
@@ -84,6 +95,7 @@ function applyEvent(
     lastSeq: event.seq,
     transcript: applyTranscriptEvent(state.transcript, event),
     records: applyRecordEvent(state.records, event),
+    questions: applyQuestionEvent(state.questions, event),
   };
   switch (event.type) {
     case "state_changed":
@@ -125,7 +137,7 @@ function applyEvent(
         },
       };
     default:
-      // Transcript and record events are folded in above.
+      // Transcript, record and question events are folded in above.
       return next;
   }
 }
@@ -144,11 +156,19 @@ export function sessionReducer(
     }
     case "event":
       return applyEvent(state, action.event);
-    case "recordsLoaded":
+    case "detailLoaded":
       return action.sessionId === state.session?.id
         ? {
             ...state,
             records: action.records.reduce(upsertRecord, state.records),
+            questions: action.questions.reduce(upsertQuestion, state.questions),
+          }
+        : state;
+    case "questionUpdated":
+      return action.question.sessionId === state.session?.id
+        ? {
+            ...state,
+            questions: upsertQuestion(state.questions, action.question),
           }
         : state;
     case "recordUpdated":
@@ -179,18 +199,19 @@ export function useSessionStore(client: StoreClient) {
       });
       if (trackedId.current === sessionId)
         dispatch({ type: "loaded", session: current });
-      // Records proposed before this subscription (e.g. before a reconnect) are not replayed
-      // as events; load them from storage. Upserts make overlap with events harmless.
+      // Records and answers from before this subscription (e.g. before a reconnect) are not
+      // replayed as events; load them from storage. Upserts make overlap with events harmless.
       try {
         const detail = await client.sessionGet(sessionId);
         if (trackedId.current === sessionId)
           dispatch({
-            type: "recordsLoaded",
+            type: "detailLoaded",
             sessionId,
             records: detail.records,
+            questions: detail.questions,
           });
       } catch {
-        // Events still deliver new proposals.
+        // Events still deliver new proposals and answers.
       }
     },
     [client],
@@ -217,6 +238,11 @@ export function useSessionStore(client: StoreClient) {
     dispatch({ type: "recordUpdated", record });
   }, []);
 
+  /** Applies a question returned by a command (`question_ask`). */
+  const updateQuestion = useCallback((question: QuestionDto) => {
+    dispatch({ type: "questionUpdated", question });
+  }, []);
+
   const clear = useCallback(() => {
     trackedId.current = null;
     dispatch({ type: "cleared" });
@@ -234,7 +260,7 @@ export function useSessionStore(client: StoreClient) {
     };
   }, [refresh]);
 
-  return { state, track, refresh, clear, updateRecord };
+  return { state, track, refresh, clear, updateRecord, updateQuestion };
 }
 
 export type SessionStore = ReturnType<typeof useSessionStore>;

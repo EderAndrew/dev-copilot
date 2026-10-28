@@ -730,7 +730,7 @@ impl RunContext {
 }
 
 /// Summary of `record` for the provider, its text cut at [`SUMMARY_CHARS`].
-fn summary(record: &TechnicalRecord) -> RecordSummary {
+pub(crate) fn summary(record: &TechnicalRecord) -> RecordSummary {
     let text = record.text().expose();
     let short = if text.as_str().chars().count() > SUMMARY_CHARS {
         let cut: String = text.as_str().chars().take(SUMMARY_CHARS).collect();

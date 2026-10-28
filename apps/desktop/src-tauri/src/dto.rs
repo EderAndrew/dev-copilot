@@ -9,6 +9,7 @@ use devcopilot_domain::DomainError;
 use devcopilot_domain::audio_source::{AudioSourceKind, PermissionState, UnavailableReason};
 use devcopilot_domain::language::{SessionLanguage, UiLanguage};
 use devcopilot_domain::provider::{DataCategory, Locality, ProviderAdapterKind, ProviderRole};
+use devcopilot_domain::question::{Certainty, QuestionStatus};
 use devcopilot_domain::record::{Nature, RecordKind, RecordStatus};
 use devcopilot_domain::session::{FailureReason, SessionState};
 use devcopilot_domain::transcript::GapReason;
@@ -43,6 +44,7 @@ macro_rules! code_enum {
 
 code_enum!(
     AudioSourceKind,
+    Certainty,
     DataCategory,
     FailureReason,
     GapReason,
@@ -51,6 +53,7 @@ code_enum!(
     PermissionState,
     ProviderAdapterKind,
     ProviderRole,
+    QuestionStatus,
     RecordKind,
     RecordStatus,
     SessionLanguage,

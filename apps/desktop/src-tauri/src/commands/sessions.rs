@@ -17,6 +17,7 @@ use tauri::State;
 use tauri::ipc::Channel;
 
 use super::IpcError;
+use super::questions::QuestionDto;
 use super::records::RecordDto;
 use crate::composition::{AppState, Core};
 use crate::dto::Code;
@@ -179,7 +180,7 @@ impl From<&TranscriptSegment> for TranscriptItemDto {
     }
 }
 
-/// `session_get` output: everything persisted for a session. Questions join with US5.
+/// `session_get` output: everything persisted for a session.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[allow(missing_docs)]
@@ -189,6 +190,8 @@ pub struct SessionDetailDto {
     pub transcript: Vec<TranscriptItemDto>,
     /// Records in creation order.
     pub records: Vec<RecordDto>,
+    /// Questions in the order they were asked (FR-038).
+    pub questions: Vec<QuestionDto>,
 }
 
 /// Validates and creates an idle session.
@@ -290,6 +293,12 @@ pub fn detail(core: &Core, request: &SessionIdDto) -> Result<SessionDetailDto, I
             .map(TranscriptItemDto::from)
             .collect(),
         records: core.records.list(id)?.iter().map(RecordDto::from).collect(),
+        questions: core
+            .questions
+            .list(id)?
+            .iter()
+            .map(QuestionDto::from)
+            .collect(),
     })
 }
 

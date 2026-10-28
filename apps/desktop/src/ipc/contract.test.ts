@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { isIpcError } from "./client";
 import type {
   AudioSourceKind,
+  Certainty,
   DataCategory,
   ErrorCode,
   FailureReason,
@@ -16,6 +17,7 @@ import type {
   ProviderAdapterKind,
   ProviderRole,
   Nature,
+  QuestionStatus,
   RecordKind,
   RecordStatus,
   SessionEvent,
@@ -196,6 +198,40 @@ const recordShape: Shape = {
   },
 };
 
+const certainty = keys<Certainty>({
+  supported: true,
+  partial: true,
+  no_evidence: true,
+});
+const questionStatus = keys<QuestionStatus>({
+  pending: true,
+  answered: true,
+  failed: true,
+});
+const evidenceRef: Check = (v) =>
+  object({
+    required: {
+      type: keys<"segment" | "record">({ segment: true, record: true }),
+      id: str,
+    },
+  })(v);
+const questionShape: Shape = {
+  required: {
+    id: str,
+    sessionId: str,
+    question: str,
+    evidence: arrayOf(evidenceRef),
+    status: questionStatus,
+    askedAt: epochMs,
+  },
+  optional: {
+    answer: str,
+    certainty,
+    providerId: str,
+    answeredAt: epochMs,
+  },
+};
+
 const analysisLimits = object({
   required: {
     triggerFinals: nonNegativeInt,
@@ -284,6 +320,9 @@ const eventShapes: Record<SessionEvent["type"], Shape> = {
   }),
   record_proposed: event("record_proposed", {
     required: { record: object(recordShape) },
+  }),
+  question_answered: event("question_answered", {
+    required: { question: object(questionShape) },
   }),
   provider_in_use: event("provider_in_use", {
     required: {
@@ -404,8 +443,14 @@ const dtoShapes: Record<string, (value: unknown) => string[]> = {
               })(item);
         }),
         records: arrayOf(object(recordShape)),
+        questions: arrayOf(object(questionShape)),
       },
     }),
+  QuestionDto: (v) => problems(v, questionShape),
+  QuestionAskDto: (v) =>
+    problems(v, { required: { sessionId: str, question: str } }),
+  QuestionToRecordDto: (v) =>
+    problems(v, { required: { questionId: str, kind: recordKind } }),
   RecordEditDto: (v) =>
     problems(v, {
       required: { recordId: str },

@@ -65,6 +65,8 @@ function setup(overrides: Partial<SettingsDto> = {}) {
     settingsUpdate: vi.fn(() => Promise.resolve(settings)),
     sessionCreate: vi.fn(() => Promise.resolve(idle)),
     recordSetStatus: vi.fn(() => Promise.reject(new Error("unused"))),
+    questionAsk: vi.fn(() => Promise.reject(new Error("unused"))),
+    questionToRecord: vi.fn(() => Promise.reject(new Error("unused"))),
     sessionStart: vi.fn(() =>
       Promise.resolve({ ...idle, state: "starting" as const }),
     ),
@@ -73,7 +75,12 @@ function setup(overrides: Partial<SettingsDto> = {}) {
       Promise.resolve({ ...idle, state: "stopping" as const }),
     ),
     sessionGet: vi.fn(() =>
-      Promise.resolve({ session: idle, transcript: [], records: [] }),
+      Promise.resolve({
+        session: idle,
+        transcript: [],
+        records: [],
+        questions: [],
+      }),
     ),
     sessionSubscribe: vi.fn(
       (_id: string, onEvent: (event: SessionEvent) => void) => {
@@ -160,6 +167,64 @@ describe("SessionsPage", () => {
     emit({ type: "state_changed", seq: 6, state: "ended" });
     expect(captureStatus().textContent).toContain("Sem captura");
     expect(screen.getByText("encerrada")).toBeTruthy();
+  });
+
+  it("asks during capture and shows the answer when it arrives (US5)", async () => {
+    const user = userEvent.setup();
+    const { client, emit } = setup({ consentReminderDismissed: true });
+    client.questionAsk.mockResolvedValueOnce({
+      id: "q1",
+      sessionId: "s1",
+      question: "O que foi decidido?",
+      evidence: [],
+      status: "pending",
+      askedAt: 10,
+    });
+    await user.type(await screen.findByLabelText("Título"), "Daily");
+    await user.click(screen.getByRole("button", { name: "Criar sessão" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Iniciar captura" }),
+    );
+    emit({ type: "state_changed", seq: 1, state: "capturing" });
+    emit({
+      type: "final_segment",
+      seq: 2,
+      segment: {
+        id: "g1",
+        seq: 0,
+        startMs: 0,
+        endMs: 3000,
+        text: "Decidimos usar OAuth2",
+      },
+    });
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Sua pergunta" }),
+      "O que foi decidido?",
+    );
+    await user.click(screen.getByRole("button", { name: "Perguntar" }));
+    expect(await screen.findByText(/Aguardando resposta/)).toBeTruthy();
+
+    emit({
+      type: "question_answered",
+      seq: 3,
+      question: {
+        id: "q1",
+        sessionId: "s1",
+        question: "O que foi decidido?",
+        answer: "Usar OAuth2.",
+        certainty: "supported",
+        evidence: [{ type: "segment", id: "g1" }],
+        status: "answered",
+        askedAt: 10,
+        answeredAt: 20,
+      },
+    });
+    expect(screen.getByText("Usar OAuth2.")).toBeTruthy();
+    expect(screen.getByText("Sustentada pela sessão")).toBeTruthy();
+    expect(screen.queryByText(/Aguardando resposta/)).toBeNull();
+    // Capture is untouched by questions.
+    expect(client.sessionStop).not.toHaveBeenCalled();
   });
 
   it("skips the reminder once dismissed", async () => {

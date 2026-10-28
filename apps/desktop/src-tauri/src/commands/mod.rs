@@ -6,6 +6,7 @@
 pub mod audio;
 pub mod error;
 pub mod providers;
+pub mod questions;
 pub mod records;
 pub mod sessions;
 pub mod settings;

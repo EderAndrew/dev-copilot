@@ -211,7 +211,35 @@ export type RunIdDto = { runId: string };
 export type AnalysisStatus =
   "running" | "ok" | "invalid_output" | "provider_error" | "rate_limited";
 
-// `question_answered` is added with US5.
+// Contextual questions (contracts/ipc-commands.md "Perguntas") --------------------------------
+
+export type Certainty = "supported" | "partial" | "no_evidence";
+export type QuestionStatus = "pending" | "answered" | "failed";
+
+/** Session content cited by an answer; quoted from storage, never translated (FR-053b). */
+export type EvidenceRefDto =
+  { type: "segment"; id: string } | { type: "record"; id: string };
+
+export type QuestionDto = {
+  id: string;
+  sessionId: string;
+  question: string;
+  /** Present iff `status` is `answered`. */
+  answer?: string;
+  certainty?: Certainty;
+  /** Empty iff `certainty` is `no_evidence` (or not answered). */
+  evidence: EvidenceRefDto[];
+  status: QuestionStatus;
+  providerId?: string;
+  /** Unix epoch milliseconds. */
+  askedAt: number;
+  answeredAt?: number;
+};
+
+export type QuestionAskDto = { sessionId: string; question: string };
+
+export type QuestionToRecordDto = { questionId: string; kind: RecordKind };
+
 export type SessionEvent =
   | {
       type: "state_changed";
@@ -255,6 +283,7 @@ export type SessionEvent =
       created?: number;
     }
   | { type: "record_proposed"; seq: number; record: RecordDto }
+  | { type: "question_answered"; seq: number; question: QuestionDto }
   | {
       type: "provider_in_use";
       seq: number;
@@ -304,11 +333,13 @@ export type TranscriptItemDto =
   | { type: "final"; segment: SegmentDto }
   | { type: "gap"; reason: GapReason; startMs: number; durationMs: number };
 
-/** Everything persisted for a session (questions join with US5). */
+/** Everything persisted for a session. */
 export type SessionDetailDto = {
   session: SessionDto;
   transcript: TranscriptItemDto[];
   records: RecordDto[];
+  /** In the order they were asked (FR-038). */
+  questions: QuestionDto[];
 };
 
 // Audio sources and permissions ----------------------------------------------------------------

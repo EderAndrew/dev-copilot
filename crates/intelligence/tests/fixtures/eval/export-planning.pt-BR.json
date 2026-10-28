@@ -20,5 +20,14 @@
     { "kind": "risk", "keywords": ["pdf"], "segments": [4] },
     { "kind": "open_question", "keywords": ["agendamento"], "segments": [5] },
     { "kind": "task", "keywords": ["endpoint"], "segments": [7] }
+  ],
+  "questions": [
+    { "question": "Qual banco de dados foi escolhido para o módulo?", "answerable": true, "keywords": ["postgres"], "segments": [2] },
+    { "question": "Quais formatos o export precisa suportar?", "answerable": true, "keywords": ["csv"], "segments": [1] },
+    { "question": "Como vai funcionar a autenticação?", "answerable": true, "keywords": ["sso"], "segments": [6] },
+    { "question": "Qual o prazo para os relatórios mensais ficarem prontos?", "answerable": true, "keywords": ["dois segundos"], "segments": [3] },
+    { "question": "Qual framework de frontend será usado?", "answerable": false, "forbidden": ["react", "angular", "vue", "svelte"] },
+    { "question": "Qual é o orçamento aprovado para o projeto?", "answerable": false, "forbidden": ["mil reais", "reais", "milhões"] },
+    { "question": "Em qual nuvem o módulo será hospedado?", "answerable": false, "forbidden": ["aws", "azure", "gcp", "google cloud"] }
   ]
 }

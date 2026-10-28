@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devcopilot.local/schemas/answer-output/v1",
+  "title": "Dev Copilot answer output v1",
+  "description": "Única forma aceita de resposta a uma pergunta contextual. Qualquer desvio é descartado e a pergunta falha. Ids citados que não existam na sessão são descartados pelo núcleo; sem evidência restante, a resposta vira no_evidence (SC-011).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "answer", "certainty", "evidenceSegmentIds", "evidenceRecordIds"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "answer": { "type": "string", "minLength": 1, "maxLength": 4000 },
+    "certainty": { "enum": ["supported", "partial", "no_evidence"] },
+    "evidenceSegmentIds": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "string", "format": "uuid" }
+    },
+    "evidenceRecordIds": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "string", "format": "uuid" }
+    }
+  }
+}

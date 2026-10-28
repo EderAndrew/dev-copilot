@@ -38,6 +38,8 @@ pub fn run() -> tauri::Result<()> {
             commands::records::record_create,
             commands::records::plan_get,
             commands::records::analysis_run_final,
+            commands::questions::question_ask,
+            commands::questions::question_to_record,
             commands::sessions::session_list,
             commands::sessions::session_get,
             commands::sessions::session_rename,

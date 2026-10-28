@@ -18,6 +18,7 @@ use devcopilot_domain::session::{FailureReason, SessionState};
 use devcopilot_domain::transcript::GapReason;
 use serde::{Deserialize, Serialize};
 
+use crate::commands::questions::QuestionDto;
 use crate::commands::records::RecordDto;
 use crate::dto::Code;
 
@@ -118,6 +119,9 @@ pub enum SessionEventBody {
     RecordProposed {
         record: Box<RecordDto>,
     },
+    QuestionAnswered {
+        question: Box<QuestionDto>,
+    },
     ProviderInUse {
         role: ProviderStageDto,
         locality: Code<Locality>,
@@ -216,6 +220,9 @@ impl From<SessionEvent> for SessionEventBody {
             }
             SessionEvent::RecordProposed(record) => Self::RecordProposed {
                 record: Box::new(RecordDto::from(record.as_ref())),
+            },
+            SessionEvent::QuestionAnswered(question) => Self::QuestionAnswered {
+                question: Box::new(QuestionDto::from(question.as_ref())),
             },
             SessionEvent::ProviderInUse {
                 stage,

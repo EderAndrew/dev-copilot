@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { toIpcError, type IpcClient } from "../../ipc/client";
 import type { IpcError, RecordDto, RecordStatus } from "../../ipc/types";
+import { showSegment } from "../transcript/showSegment";
 import { RecordCard } from "./RecordCard";
 import type { RecordsState } from "./recordState";
 
@@ -15,14 +16,6 @@ type RecordsPanelProps = {
   client: RecordsClient;
   onUpdated: (record: RecordDto) => void;
 };
-
-/** Moves focus to a transcript segment rendered with id `segment-<id>`. */
-function showSegment(segmentId: string) {
-  const element = document.getElementById(`segment-${segmentId}`);
-  if (!element) return;
-  element.scrollIntoView?.({ block: "center" });
-  element.focus();
-}
 
 /**
  * Proposals from incremental analysis and their review (US3). Analysis failures are reported

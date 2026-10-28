@@ -11,6 +11,9 @@ use devcopilot_desktop_lib::commands::audio::{AudioSourceDto, PermissionHelpDto}
 use devcopilot_desktop_lib::commands::providers::{
     JobIdDto, LocalModelDownloadDto, ProviderDto, ProviderSetDefaultDto, ProviderUpsertDto,
 };
+use devcopilot_desktop_lib::commands::questions::{
+    QuestionAskDto, QuestionDto, QuestionToRecordDto,
+};
 use devcopilot_desktop_lib::commands::records::{
     PlanDto, RecordCreateDto, RecordDto, RecordEditDto, RecordSetStatusDto, RunIdDto,
 };
@@ -109,6 +112,13 @@ fn records() {
 }
 
 #[test]
+fn questions() {
+    assert_round_trip::<QuestionDto>("QuestionDto");
+    assert_round_trip::<QuestionAskDto>("QuestionAskDto");
+    assert_round_trip::<QuestionToRecordDto>("QuestionToRecordDto");
+}
+
+#[test]
 fn session_history() {
     assert_round_trip::<SessionListDto>("SessionListDto");
     assert_round_trip::<SessionPageDto>("SessionPageDto");
@@ -135,6 +145,9 @@ fn every_fixture_directory_is_covered() {
         "ProviderDto",
         "ProviderSetDefaultDto",
         "ProviderUpsertDto",
+        "QuestionAskDto",
+        "QuestionDto",
+        "QuestionToRecordDto",
         "RecordCreateDto",
         "RecordDto",
         "RecordEditDto",
@@ -169,6 +182,9 @@ fn every_fixture_directory_is_covered() {
 fn invalid_values_are_rejected() {
     let bad_event = serde_json::json!({ "type": "source_status", "seq": 1, "source": "microphone", "status": "muted" });
     assert!(serde_json::from_value::<IpcSessionEvent>(bad_event).is_err());
+    let bad_question = serde_json::json!({ "id": "q", "sessionId": "s", "question": "?",
+        "evidence": [], "status": "answered", "certainty": "certain", "askedAt": 1 });
+    assert!(serde_json::from_value::<QuestionDto>(bad_question).is_err());
     let bad_settings = serde_json::json!({ "uiLanguage": "pt-PT" });
     assert!(serde_json::from_value::<SettingsUpdateDto>(bad_settings).is_err());
 }

@@ -465,3 +465,102 @@ fn plan_and_history_commands_validate_input() {
         serde_json::from_str::<RecordEditDto>(r#"{"recordId":"x","status":"confirmed"}"#).is_err()
     );
 }
+
+#[tokio::test]
+async fn question_commands_validate_and_round_trip_through_storage() {
+    use devcopilot_desktop_lib::commands::questions::{self, QuestionAskDto, QuestionToRecordDto};
+    use devcopilot_domain::ids::QuestionId;
+    use devcopilot_domain::question::{Certainty, QuestionStatus};
+    use devcopilot_domain::record::{Nature, RecordKind, RecordStatus};
+
+    let h = harness();
+    h.core
+        .providers
+        .upsert_local(ProviderSpec {
+            id: ProviderId::new(),
+            role: ProviderRole::Analysis,
+            adapter: ProviderAdapterKind::Ollama,
+            endpoint: Some("http://127.0.0.1:11434".into()),
+            model: "llama3.1".into(),
+            credential_ref: None,
+            data_categories: BTreeSet::from([DataCategory::Transcript, DataCategory::Questions]),
+        })
+        .unwrap();
+    let session =
+        sessions::create(&h.core, create_dto("Daily", &[AudioSourceKind::Microphone])).unwrap();
+    let ask = |session_id: &str, question: &str| QuestionAskDto {
+        session_id: session_id.into(),
+        question: question.into(),
+    };
+
+    // Input validation and state rules.
+    let err = questions::ask(&h.core, ask("not-a-uuid", "Algo?")).unwrap_err();
+    assert_eq!(err.code, "invalid_input");
+    let err = questions::ask(&h.core, ask(&session.id, &"x".repeat(2_001))).unwrap_err();
+    assert_eq!(
+        (err.code.as_str(), field(&err)),
+        ("invalid_input", Some("question"))
+    );
+    let err = questions::ask(&h.core, ask(&SessionId::new().to_string(), "Algo?")).unwrap_err();
+    assert_eq!(err.code, "not_found");
+    let err = questions::ask(&h.core, ask(&session.id, "Antes de começar?")).unwrap_err();
+    assert_eq!(err.code, "invalid_state");
+
+    sessions::start(
+        &h.core,
+        SessionStartDto {
+            session_id: session.id.clone(),
+            consent_acknowledged: true,
+        },
+    )
+    .unwrap();
+    let asked = questions::ask(&h.core, ask(&session.id, "O que foi decidido?")).unwrap();
+    assert_eq!(asked.status, Code(QuestionStatus::Pending));
+    assert_eq!(asked.question, "O que foi decidido?");
+
+    // The answer is stored with the session and listed by `session_get`.
+    let id = SessionIdDto {
+        session_id: session.id.clone(),
+    };
+    let answered = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            let detail = sessions::detail(&h.core, &id).unwrap();
+            if detail.questions[0].status != Code(QuestionStatus::Pending) {
+                return detail.questions[0].clone();
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(answered.id, asked.id);
+    assert_eq!(answered.status, Code(QuestionStatus::Answered));
+    assert_eq!(answered.certainty, Some(Code(Certainty::NoEvidence)));
+    assert!(answered.evidence.is_empty());
+
+    let record = questions::to_record(
+        &h.core,
+        &QuestionToRecordDto {
+            question_id: asked.id.clone(),
+            kind: Code(RecordKind::Risk),
+        },
+    )
+    .unwrap();
+    assert_eq!(record.status, Code(RecordStatus::Proposed));
+    assert_eq!(record.nature, Code(Nature::Suggested));
+    assert_eq!(record.rationale, "O que foi decidido?");
+    assert_eq!(
+        sessions::detail(&h.core, &id).unwrap().records,
+        vec![record]
+    );
+
+    let err = questions::to_record(
+        &h.core,
+        &QuestionToRecordDto {
+            question_id: QuestionId::new().to_string(),
+            kind: Code(RecordKind::Risk),
+        },
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "not_found");
+}

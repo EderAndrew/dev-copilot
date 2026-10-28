@@ -4,24 +4,25 @@
 //! never leaves the machine. The HTTP client ignores proxy settings and follows no redirects for
 //! the same reason. Requests use `/api/chat` with the system instructions and the delimited data
 //! as separate messages, `format` set to the output schema, temperature 0 and **no tools**
-//! (Art. IV.14). The reply is accepted only through [`parse_analysis_output`].
+//! (Art. IV.14). Replies are accepted only through [`parse_analysis_output`] and
+//! [`parse_answer_output`].
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use devcopilot_application::ports::{
-    AnalysisOutput, AnalysisProvider, AnalysisProviderFactory, AnalysisRequest, BoxFuture,
-    ProviderDescriptor, ProviderError,
+    AnalysisOutput, AnalysisProvider, AnalysisProviderFactory, AnalysisRequest, AnswerOutput,
+    BoxFuture, ProviderDescriptor, ProviderError, QuestionRequest,
 };
 use devcopilot_domain::provider::{Locality, Provider, ProviderAdapterKind};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
-use crate::output_validation::{parse_analysis_output, schema};
-use crate::prompt::analysis_prompt;
+use crate::output_validation::{answer_schema, parse_analysis_output, parse_answer_output, schema};
+use crate::prompt::{AnalysisPrompt, analysis_prompt, answer_prompt};
 
-/// Deadline of one analysis call; local models can be slow on modest hardware.
+/// Deadline of one analysis or question call; local models can be slow on modest hardware.
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(180);
 
 #[derive(Serialize)]
@@ -109,8 +110,12 @@ impl OllamaAnalysisProvider {
         })
     }
 
-    async fn call(&self, request: AnalysisRequest) -> Result<AnalysisOutput, ProviderError> {
-        let prompt = analysis_prompt(&request);
+    /// Sends `prompt` constrained to `format`; returns the reply text and tokens used.
+    async fn chat(
+        &self,
+        prompt: &AnalysisPrompt,
+        format: &Value,
+    ) -> Result<(String, u32), ProviderError> {
         let body = ChatRequest {
             model: &self.model,
             messages: [
@@ -124,7 +129,7 @@ impl OllamaAnalysisProvider {
                 },
             ],
             stream: false,
-            format: schema()?,
+            format,
             options: ChatOptions { temperature: 0.0 },
         };
         let response = self
@@ -152,14 +157,31 @@ impl OllamaAnalysisProvider {
                 ProviderError::InvalidOutput
             }
         })?;
-        let proposals = parse_analysis_output(&reply.message.content)?;
         let tokens = reply
             .prompt_eval_count
             .unwrap_or(0)
             .saturating_add(reply.eval_count.unwrap_or(0));
+        Ok((
+            reply.message.content,
+            u32::try_from(tokens).unwrap_or(u32::MAX),
+        ))
+    }
+
+    async fn call(&self, request: AnalysisRequest) -> Result<AnalysisOutput, ProviderError> {
+        let (content, tokens_used) = self.chat(&analysis_prompt(&request), schema()?).await?;
         Ok(AnalysisOutput {
-            proposals,
-            tokens_used: u32::try_from(tokens).unwrap_or(u32::MAX),
+            proposals: parse_analysis_output(&content)?,
+            tokens_used,
+        })
+    }
+
+    async fn ask(&self, request: QuestionRequest) -> Result<AnswerOutput, ProviderError> {
+        let (content, tokens_used) = self
+            .chat(&answer_prompt(&request), answer_schema()?)
+            .await?;
+        Ok(AnswerOutput {
+            answer: parse_answer_output(&content)?,
+            tokens_used,
         })
     }
 }
@@ -189,6 +211,19 @@ impl AnalysisProvider for OllamaAnalysisProvider {
             tokio::select! {
                 () = cancel.cancelled() => Err(ProviderError::Cancelled),
                 result = self.call(request) => result,
+            }
+        })
+    }
+
+    fn answer(
+        &self,
+        request: QuestionRequest,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'_, Result<AnswerOutput, ProviderError>> {
+        Box::pin(async move {
+            tokio::select! {
+                () = cancel.cancelled() => Err(ProviderError::Cancelled),
+                result = self.ask(request) => result,
             }
         })
     }

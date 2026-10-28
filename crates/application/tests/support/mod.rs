@@ -11,14 +11,16 @@ use devcopilot_application::analysis_service::{AnalysisDeps, AnalysisService};
 use devcopilot_application::events::SessionEvent;
 use devcopilot_application::ports::{AudioSource, SessionRepository};
 use devcopilot_application::provider_service::ProviderService;
+use devcopilot_application::question_service::{QuestionDeps, QuestionService};
 use devcopilot_application::record_service::RecordService;
 use devcopilot_application::session_service::{NewSession, SessionDeps, SessionService};
 use devcopilot_application::settings_service::{AnalysisLimits, SettingsService, SettingsUpdate};
 use devcopilot_application::testing::{
-    FakeClock, InMemoryAnalysisRunRepository, InMemoryProviderRepository, InMemoryRecordRepository,
-    InMemorySegmentRepository, InMemorySessionRepository, InMemorySettingsRepository,
-    RecordingEventPublisher, ScriptedAnalysisProvider, ScriptedAnalysisProviderFactory,
-    ScriptedAudioSource, ScriptedTranscriber, ScriptedTranscriberFactory, ToggleableSecretStore,
+    FakeClock, InMemoryAnalysisRunRepository, InMemoryProviderRepository,
+    InMemoryQuestionRepository, InMemoryRecordRepository, InMemorySegmentRepository,
+    InMemorySessionRepository, InMemorySettingsRepository, RecordingEventPublisher,
+    ScriptedAnalysisProvider, ScriptedAnalysisProviderFactory, ScriptedAudioSource,
+    ScriptedTranscriber, ScriptedTranscriberFactory, ToggleableSecretStore,
 };
 use devcopilot_domain::audio_source::AudioSourceKind;
 use devcopilot_domain::ids::{ProviderId, SessionId};
@@ -46,6 +48,8 @@ pub struct Fixture {
     pub runs: Arc<InMemoryAnalysisRunRepository>,
     pub analysis: AnalysisService,
     pub record_service: RecordService,
+    pub questions: Arc<InMemoryQuestionRepository>,
+    pub question_service: QuestionService,
 }
 
 /// Microphone and system sources granted, a local transcriber configured, consent reminder
@@ -104,6 +108,17 @@ pub fn fixture_without_transcriber() -> Fixture {
         analysis: Some(analysis.clone()),
     });
     let record_service = RecordService::new(records.clone(), sessions.clone(), clock.clone());
+    let questions = Arc::new(InMemoryQuestionRepository::default());
+    let question_service = QuestionService::new(QuestionDeps {
+        providers: providers.clone(),
+        analyzers: analyzers.clone(),
+        questions: questions.clone(),
+        records: records.clone(),
+        segments: segments.clone(),
+        sessions: sessions.clone(),
+        clock: clock.clone(),
+        events: events.clone(),
+    });
     Fixture {
         service,
         sessions,
@@ -123,6 +138,8 @@ pub fn fixture_without_transcriber() -> Fixture {
         runs,
         analysis,
         record_service,
+        questions,
+        question_service,
     }
 }
 

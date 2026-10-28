@@ -13,6 +13,7 @@ use devcopilot_application::ports::{
     AnalysisProviderFactory, AudioSource, Clock, EventPublisher, SecretStore, TranscriberFactory,
 };
 use devcopilot_application::provider_service::ProviderService;
+use devcopilot_application::question_service::{QuestionDeps, QuestionService};
 use devcopilot_application::record_service::RecordService;
 use devcopilot_application::session_service::{SessionDeps, SessionService};
 use devcopilot_application::settings_service::SettingsService;
@@ -22,8 +23,8 @@ use devcopilot_domain::time::Timestamp;
 use devcopilot_intelligence::{AnalysisAdapterFactory, WhisperTranscriberFactory};
 use devcopilot_persistence::{
     Database, KeyringSecretStore, SqliteAnalysisRunRepository, SqliteProviderRepository,
-    SqliteRecordRepository, SqliteSegmentRepository, SqliteSessionRepository,
-    SqliteSettingsRepository,
+    SqliteQuestionRepository, SqliteRecordRepository, SqliteSegmentRepository,
+    SqliteSessionRepository, SqliteSettingsRepository,
 };
 use tauri::{AppHandle, Manager, Runtime};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -44,6 +45,8 @@ pub struct Core {
     pub records: Arc<RecordService>,
     /// Incremental and final analysis.
     pub analysis: AnalysisService,
+    /// Contextual questions.
+    pub questions: QuestionService,
 }
 
 /// Platform adapters that do not depend on storage.
@@ -119,8 +122,8 @@ impl AppState {
     }
 }
 
-/// Opens the encrypted database in `data_dir`, wires the services and fails sessions left
-/// active by an unexpected exit (FR-007).
+/// Opens the encrypted database in `data_dir`, wires the services and fails sessions and
+/// questions left active by an unexpected exit (FR-007).
 ///
 /// # Errors
 ///
@@ -133,9 +136,20 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
     let session_repo = Arc::new(SqliteSessionRepository::new(Arc::clone(&db)));
     let segment_repo = Arc::new(SqliteSegmentRepository::new(Arc::clone(&db)));
     let record_repo = Arc::new(SqliteRecordRepository::new(Arc::clone(&db)));
+    let question_repo = Arc::new(SqliteQuestionRepository::new(Arc::clone(&db)));
     let run_repo = Arc::new(SqliteAnalysisRunRepository::new(db));
     let settings = Arc::new(SettingsService::new(settings_repo.clone()));
     let providers = Arc::new(ProviderService::new(provider_repo, settings_repo));
+    let questions = QuestionService::new(QuestionDeps {
+        providers: Arc::clone(&providers),
+        analyzers: Arc::clone(&platform.analyzers),
+        questions: question_repo,
+        records: record_repo.clone(),
+        segments: segment_repo.clone(),
+        sessions: session_repo.clone(),
+        clock: Arc::clone(&platform.clock),
+        events: Arc::clone(&platform.events),
+    });
     let analysis = AnalysisService::new(AnalysisDeps {
         providers: Arc::clone(&providers),
         analyzers: platform.analyzers,
@@ -165,12 +179,14 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
         analysis: Some(analysis.clone()),
     });
     sessions.recover_on_startup()?;
+    questions.recover_on_startup()?;
     Ok(Core {
         settings,
         providers,
         sessions,
         records,
         analysis,
+        questions,
     })
 }
 

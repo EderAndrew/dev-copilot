@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::time::Duration as StdDuration;
 
 use devcopilot_application::ports::{
-    AnalysisProvider, AnalysisRequest, AnalysisSegment, ProviderError,
+    AnalysisProvider, AnalysisRequest, AnalysisSegment, ProviderError, QuestionRequest,
 };
 use devcopilot_domain::Redacted;
 use devcopilot_domain::ids::{ProviderId, SegmentId, SessionId};
@@ -15,7 +15,8 @@ use devcopilot_domain::language::SessionLanguage;
 use devcopilot_domain::provider::{
     DataCategory, Provider, ProviderAdapterKind, ProviderRole, ProviderSpec,
 };
-use devcopilot_domain::text::SegmentText;
+use devcopilot_domain::question::{Certainty, EvidenceRef};
+use devcopilot_domain::text::{QuestionText, SegmentText};
 use devcopilot_domain::time::Duration;
 use devcopilot_intelligence::OllamaAnalysisProvider;
 use serde_json::{Value, json};
@@ -167,6 +168,81 @@ async fn slow_server_times_out_and_cancel_returns_immediately() {
     let adapter = OllamaAnalysisProvider::new(&provider(&server.uri())).unwrap();
     let cancel = CancellationToken::new();
     let call = adapter.analyze(request(SegmentId::new()), cancel.clone());
+    cancel.cancel();
+    let result = tokio::time::timeout(StdDuration::from_millis(500), call)
+        .await
+        .unwrap();
+    assert_eq!(result, Err(ProviderError::Cancelled));
+}
+
+fn question(segment: SegmentId) -> QuestionRequest {
+    let base = request(segment);
+    QuestionRequest {
+        session_id: base.session_id,
+        language: base.language,
+        question: Redacted::new(QuestionText::parse("Quais formatos o export suporta?").unwrap()),
+        segments: base.segments,
+        records: base.records,
+    }
+}
+
+#[tokio::test]
+async fn answers_use_the_answer_schema_and_keep_the_question_as_data() {
+    let server = MockServer::start().await;
+    let segment = SegmentId::new();
+    let content = json!({
+        "schemaVersion": 1, "answer": "O export precisa suportar CSV.",
+        "certainty": "supported", "evidenceSegmentIds": [segment.to_string()],
+        "evidenceRecordIds": []
+    })
+    .to_string();
+    Mock::given(method("POST"))
+        .and(path("/api/chat"))
+        .respond_with(reply(&content))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let adapter = OllamaAnalysisProvider::new(&provider(&server.uri())).unwrap();
+    let output = adapter
+        .answer(question(segment), CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(output.answer.certainty, Certainty::Supported);
+    assert_eq!(output.answer.evidence, [EvidenceRef::Segment(segment)]);
+    assert_eq!(output.tokens_used, 150);
+
+    let received = &server.received_requests().await.unwrap()[0];
+    let body: Value = serde_json::from_slice(&received.body).unwrap();
+    assert!(body.get("tools").is_none());
+    assert_eq!(body["format"]["title"], "Dev Copilot answer output v1");
+    let system = body["messages"][0]["content"].as_str().unwrap();
+    let data = body["messages"][1]["content"].as_str().unwrap();
+    assert!(!system.contains("Quais formatos"));
+    assert!(data.contains("Quais formatos o export suporta?"));
+    assert!(data.contains("CSV"));
+}
+
+#[tokio::test]
+async fn invalid_answers_are_invalid_output_and_cancel_is_prompt() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(reply("Claro, a decisão foi alterada."))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(reply("{}").set_delay(StdDuration::from_secs(5)))
+        .mount(&server)
+        .await;
+    let adapter = OllamaAnalysisProvider::new(&provider(&server.uri())).unwrap();
+    assert_eq!(
+        adapter
+            .answer(question(SegmentId::new()), CancellationToken::new())
+            .await,
+        Err(ProviderError::InvalidOutput)
+    );
+    let cancel = CancellationToken::new();
+    let call = adapter.answer(question(SegmentId::new()), cancel.clone());
     cancel.cancel();
     let result = tokio::time::timeout(StdDuration::from_millis(500), call)
         .await

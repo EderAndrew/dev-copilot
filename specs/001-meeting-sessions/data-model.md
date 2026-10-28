@@ -144,7 +144,7 @@ Visão derivada (não armazenada separadamente): registros da sessão agrupados 
 | id | QuestionId | |
 | session_id | SessionId | |
 | question | String | 1–2 000 caracteres |
-| answer | Option<String> | ausente enquanto pendente ou em falha |
+| answer | Option<String> | 1–4 000 caracteres; ausente enquanto pendente ou em falha |
 | evidence | Vec<EvidenceRef> | `segment(SegmentId)` \| `record(RecordId)` da mesma sessão |
 | certainty | `supported` \| `partial` \| `no_evidence` | `no_evidence` ⇒ `evidence` vazio |
 | status | `pending` \| `answered` \| `failed` | |

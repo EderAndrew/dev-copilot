@@ -1,20 +1,23 @@
-//! Validation of analysis output against `contracts/analysis-output.schema.json` and conversion
-//! to domain [`Proposal`]s (FR-029, FR-030).
+//! Validation of model output against `contracts/analysis-output.schema.json` and
+//! `contracts/answer-output.schema.json`, and conversion to domain [`Proposal`]s and
+//! [`Answer`]s (FR-029, FR-030, FR-036).
 //!
 //! Model output is untrusted. It is accepted only as one JSON document, no larger than
 //! [`MAX_OUTPUT_BYTES`], valid against the embedded schema (unknown fields rejected, `observed`
 //! requires evidence, bounded sizes, `schemaVersion = 1`) and convertible to domain values. Any
 //! deviation discards the whole output as [`ProviderError::InvalidOutput`]. Evidence is
-//! referenced by segment id only, so quoted evidence always comes from the stored original
-//! segment and is never a model-written (or translated) copy (FR-053b).
+//! referenced by id only, so quoted evidence always comes from the stored original segment or
+//! record and is never a model-written (or translated) copy (FR-053b). Whether cited ids belong
+//! to the session is checked by the application, not here.
 
 use std::sync::OnceLock;
 
 use devcopilot_application::ports::ProviderError;
 use devcopilot_domain::Redacted;
 use devcopilot_domain::ids::{RecordId, SegmentId};
+use devcopilot_domain::question::{Answer, Certainty, EvidenceRef};
 use devcopilot_domain::record::{Nature, Proposal, RecordKind, Relation, RelationKind};
-use devcopilot_domain::text::{ListItem, Rationale, RecordText};
+use devcopilot_domain::text::{AnswerText, ListItem, Rationale, RecordText};
 use jsonschema::Validator;
 use serde::Deserialize;
 use serde_json::Value;
@@ -23,34 +26,76 @@ use serde_json::Value;
 pub const SCHEMA_JSON: &str =
     include_str!("../../../specs/001-meeting-sessions/contracts/analysis-output.schema.json");
 
+/// The answer output schema, embedded from the contracts.
+pub const ANSWER_SCHEMA_JSON: &str =
+    include_str!("../../../specs/001-meeting-sessions/contracts/answer-output.schema.json");
+
 /// Largest output accepted, in bytes (30 proposals of maximal size fit comfortably).
 pub const MAX_OUTPUT_BYTES: usize = 512 * 1024;
 
-/// The schema as JSON (also sent to providers that support constrained output).
-///
-/// # Errors
-///
-/// [`ProviderError::Other`] if the embedded schema is not valid JSON (a build defect).
-pub fn schema() -> Result<&'static Value, ProviderError> {
-    static SCHEMA: OnceLock<Option<Value>> = OnceLock::new();
-    SCHEMA
-        .get_or_init(|| serde_json::from_str(SCHEMA_JSON).ok())
+/// A schema parsed once and its compiled validator.
+struct Compiled {
+    schema: Value,
+    validator: Validator,
+}
+
+fn compile(raw: &str) -> Option<Compiled> {
+    let schema: Value = serde_json::from_str(raw).ok()?;
+    let validator = jsonschema::options()
+        .should_validate_formats(true)
+        .build(&schema)
+        .ok()?;
+    Some(Compiled { schema, validator })
+}
+
+fn analysis_compiled() -> Result<&'static Compiled, ProviderError> {
+    static COMPILED: OnceLock<Option<Compiled>> = OnceLock::new();
+    COMPILED
+        .get_or_init(|| compile(SCHEMA_JSON))
         .as_ref()
         .ok_or_else(|| ProviderError::Other("analysis schema unavailable".into()))
 }
 
-fn validator() -> Result<&'static Validator, ProviderError> {
-    static VALIDATOR: OnceLock<Option<Validator>> = OnceLock::new();
-    VALIDATOR
-        .get_or_init(|| {
-            let schema = schema().ok()?;
-            jsonschema::options()
-                .should_validate_formats(true)
-                .build(schema)
-                .ok()
-        })
+fn answer_compiled() -> Result<&'static Compiled, ProviderError> {
+    static COMPILED: OnceLock<Option<Compiled>> = OnceLock::new();
+    COMPILED
+        .get_or_init(|| compile(ANSWER_SCHEMA_JSON))
         .as_ref()
-        .ok_or_else(|| ProviderError::Other("analysis schema unavailable".into()))
+        .ok_or_else(|| ProviderError::Other("answer schema unavailable".into()))
+}
+
+/// The analysis schema as JSON (also sent to providers that support constrained output).
+///
+/// # Errors
+///
+/// [`ProviderError::Other`] if the embedded schema is not valid (a build defect).
+pub fn schema() -> Result<&'static Value, ProviderError> {
+    analysis_compiled().map(|compiled| &compiled.schema)
+}
+
+/// The answer schema as JSON (also sent to providers that support constrained output).
+///
+/// # Errors
+///
+/// [`ProviderError::Other`] if the embedded schema is not valid (a build defect).
+pub fn answer_schema() -> Result<&'static Value, ProviderError> {
+    answer_compiled().map(|compiled| &compiled.schema)
+}
+
+/// Parses `raw` as one JSON document valid against `compiled` and deserializes it.
+fn validated<T: serde::de::DeserializeOwned>(
+    raw: &str,
+    compiled: &Compiled,
+) -> Result<T, ProviderError> {
+    if raw.len() > MAX_OUTPUT_BYTES {
+        return Err(ProviderError::InvalidOutput);
+    }
+    let value: Value =
+        serde_json::from_str(raw.trim()).map_err(|_| ProviderError::InvalidOutput)?;
+    if !compiled.validator.is_valid(&value) {
+        return Err(ProviderError::InvalidOutput);
+    }
+    serde_json::from_value(value).map_err(|_| ProviderError::InvalidOutput)
 }
 
 #[derive(Deserialize)]
@@ -74,6 +119,17 @@ struct WireProposal {
     #[serde(default)]
     alternatives: Vec<String>,
     relates_to: Option<WireRelation>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WireAnswer {
+    #[allow(dead_code)]
+    schema_version: u8,
+    answer: String,
+    certainty: String,
+    evidence_segment_ids: Vec<String>,
+    evidence_record_ids: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -128,16 +184,7 @@ impl WireProposal {
 ///
 /// [`ProviderError::InvalidOutput`] for anything but a valid, schema-conforming document.
 pub fn parse_analysis_output(raw: &str) -> Result<Vec<Proposal>, ProviderError> {
-    if raw.len() > MAX_OUTPUT_BYTES {
-        return Err(ProviderError::InvalidOutput);
-    }
-    let value: Value =
-        serde_json::from_str(raw.trim()).map_err(|_| ProviderError::InvalidOutput)?;
-    if !validator()?.is_valid(&value) {
-        return Err(ProviderError::InvalidOutput);
-    }
-    let output: WireOutput =
-        serde_json::from_value(value).map_err(|_| ProviderError::InvalidOutput)?;
+    let output: WireOutput = validated(raw, analysis_compiled()?)?;
     output
         .proposals
         .into_iter()
@@ -145,13 +192,51 @@ pub fn parse_analysis_output(raw: &str) -> Result<Vec<Proposal>, ProviderError> 
         .collect()
 }
 
+/// Validates raw model output and converts it to an answer. Segment ids are cited before
+/// record ids; whether they belong to the session is checked later
+/// ([`Answer::grounded`]).
+///
+/// # Errors
+///
+/// [`ProviderError::InvalidOutput`] for anything but a valid, schema-conforming document.
+pub fn parse_answer_output(raw: &str) -> Result<Answer, ProviderError> {
+    let output: WireAnswer = validated(raw, answer_compiled()?)?;
+    let invalid = |_| ProviderError::InvalidOutput;
+    let segments = output.evidence_segment_ids.iter().map(|id| {
+        SegmentId::parse(id)
+            .map(EvidenceRef::Segment)
+            .map_err(invalid)
+    });
+    let records = output.evidence_record_ids.iter().map(|id| {
+        RecordId::parse(id)
+            .map(EvidenceRef::Record)
+            .map_err(invalid)
+    });
+    Ok(Answer {
+        text: Redacted::new(AnswerText::parse(output.answer).map_err(invalid)?),
+        certainty: Certainty::parse(&output.certainty).map_err(invalid)?,
+        evidence: segments.chain(records).collect::<Result<_, _>>()?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn embedded_schema_compiles() {
-        assert!(validator().is_ok());
+    fn embedded_schemas_compile() {
+        assert!(schema().is_ok());
+        assert!(answer_schema().is_ok());
+    }
+
+    #[test]
+    fn minimal_answer_is_valid() {
+        let answer = parse_answer_output(
+            r#"{"schemaVersion":1,"answer":"Não há evidência.","certainty":"no_evidence","evidenceSegmentIds":[],"evidenceRecordIds":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(answer.certainty, Certainty::NoEvidence);
+        assert!(answer.evidence.is_empty());
     }
 
     #[test]

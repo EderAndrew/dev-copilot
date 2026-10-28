@@ -251,5 +251,32 @@
     "kind": "Kind",
     "initialStatus": "Status",
     "add": "Add"
+  },
+  "questions": {
+    "title": "Questions about the session",
+    "label": "Your question",
+    "hint": "Answers use only this session's content. Ctrl+Enter sends.",
+    "waitPending": "Wait for the previous answer before asking again.",
+    "ask": "Ask",
+    "empty": "Ask, for example, what was decided about a topic. Capture continues while the answer is prepared.",
+    "you": "Question:",
+    "status": {
+      "pending": "Waiting for the answer… Capture and transcription continue normally.",
+      "failed": "The question could not be answered. Nothing was changed, and capture and transcription continue normally. Try asking again."
+    },
+    "certainty": {
+      "supported": "Supported by the session",
+      "partial": "Partly supported: part of the answer was not discussed",
+      "no_evidence": "No evidence in the session"
+    },
+    "citations": "Cited evidence",
+    "noCitations": "No excerpt or record of the session supports an answer.",
+    "segmentUnavailable": "excerpt unavailable",
+    "recordCitation": "Record ({{kind}}):",
+    "recordUnavailable": "Record unavailable.",
+    "kindLabel": "Item type",
+    "convert": "Turn into a proposed item",
+    "convertLabel": "Turn the answer into an item: {{question}}",
+    "converted": "Proposed item added to the plan. Review it before confirming."
   }
 }

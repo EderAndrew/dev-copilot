@@ -94,6 +94,10 @@ bounded_text!(
     QuestionText, field = "question", max = 2000, multiline = true
 );
 bounded_text!(
+    /// Answer to a contextual question: 1–4 000 characters.
+    AnswerText, field = "answer", max = 4000, multiline = true
+);
+bounded_text!(
     /// Acceptance criterion or alternative of a record: 1–500 characters.
     ListItem, field = "item", max = 500, multiline = true
 );

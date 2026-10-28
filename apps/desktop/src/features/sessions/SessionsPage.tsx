@@ -9,6 +9,8 @@ import type {
   SessionDto,
   SessionLanguage,
 } from "../../ipc/types";
+import { citedSegments } from "../questions/questionState";
+import { QuestionsPanel } from "../questions/QuestionsPanel";
 import { RecordsPanel } from "../records/RecordsPanel";
 import { ConsentReminderDialog } from "./ConsentReminderDialog";
 import { NewSessionForm } from "./NewSessionForm";
@@ -29,6 +31,8 @@ export type SessionsClient = Pick<
   | "sessionCancelStart"
   | "sessionStop"
   | "recordSetStatus"
+  | "questionAsk"
+  | "questionToRecord"
 >;
 
 type SessionsPageProps = {
@@ -38,8 +42,8 @@ type SessionsPageProps = {
 };
 
 /**
- * Create a session, control its capture (US1), follow its transcript (US2) and review the
- * records proposed by analysis (US3).
+ * Create a session, control its capture (US1), follow its transcript (US2), review the
+ * records proposed by analysis (US3) and ask about it while it runs (US5).
  */
 export function SessionsPage({
   store,
@@ -54,13 +58,11 @@ export function SessionsPage({
   const [error, setError] = useState<IpcError | null>(null);
   const session = store.state.session;
   const entries = store.state.transcript.entries;
-  const segmentNumbers = useMemo(() => {
-    const numbers = new Map<string, number>();
-    for (const entry of entries)
-      if (entry.kind === "final")
-        numbers.set(entry.segment.id, numbers.size + 1);
-    return numbers;
-  }, [entries]);
+  const segments = useMemo(() => citedSegments(entries), [entries]);
+  const segmentNumbers = useMemo(
+    () => new Map([...segments].map(([id, { number }]) => [id, number])),
+    [segments],
+  );
 
   useEffect(() => {
     let active = true;
@@ -165,6 +167,17 @@ export function SessionsPage({
                 onUpdated={store.updateRecord}
               />
             </div>
+          )}
+          {session.state !== "idle" && (
+            <QuestionsPanel
+              sessionId={session.id}
+              questions={store.state.questions}
+              segments={segments}
+              records={store.state.records.records}
+              client={client}
+              onAsked={store.updateQuestion}
+              onRecordCreated={store.updateRecord}
+            />
           )}
           {permissionProblem &&
             session.sources.map((kind) => (
