@@ -1,159 +1,93 @@
-# Turborepo starter
+# Dev Copilot
 
-This Turborepo starter is maintained by the Turborepo core team.
+Assistente de engenharia desktop multiplataforma (macOS, Windows e Linux). O objetivo é que o
+usuário inicie explicitamente a captura autorizada de áudio do sistema e/ou microfone, e o
+aplicativo transcreva conversas técnicas, extraia requisitos, riscos e decisões, mantenha um
+plano de desenvolvimento incremental e responda perguntas contextuais.
 
-## Using this example
+O Dev Copilot **não** se integra com plataformas de reunião, **não** exige backend em nuvem e
+**não** executa código ou comandos de forma autônoma.
 
-Run the following command:
+> **Status: estágio inicial.** A estrutura do monorepo e a arquitetura estão definidas, mas
+> nenhuma funcionalidade de captura, transcrição, análise ou persistência foi implementada
+> ainda. Os crates Rust são esqueletos e o app desktop é o template padrão do Tauri.
 
-```sh
-npx create-turbo@latest
+## Princípios
+
+- **Local-first**: o conteúdo das sessões fica na máquina do usuário; qualquer envio a um
+  provedor remoto exige configuração e autorização explícitas.
+- **Consentimento e controle humano**: captura só por ação do usuário, com estado visível e
+  parada efetiva; sugestões da IA são consultivas e nunca sobrescrevem decisões confirmadas.
+- **Segurança por padrão**: menor privilégio no Tauri, validação em todas as fronteiras IPC,
+  segredos no cofre do sistema operacional, saídas de LLM tratadas como não confiáveis.
+
+As regras completas estão na [Constituição](.specify/memory/constitution.md) e as decisões
+arquiteturais iniciais no [ADR-001](docs/adr/ADR-001.md).
+
+## Arquitetura
+
+Monólito modular: núcleo em Rust (Cargo Workspace) com interface Tauri 2 + React + TypeScript.
+
+```text
+apps/desktop/          App Tauri 2 + React/Vite
+  src/                 Interface (apresentação apenas, sem regras de negócio)
+  src-tauri/           Raiz de composição e comandos Tauri finos
+crates/
+  domain/              Entidades, value objects e invariantes (sem dependências de infra)
+  application/         Casos de uso e portas
+  audio/               Adaptadores de captura por SO
+  intelligence/        Adaptadores de transcrição e LLM
+  persistence/         Repositórios SQLite
+packages/              Pacotes TypeScript compartilhados
+docs/adr/              Architecture Decision Records
+.specify/              Constituição e templates do Spec Kit
 ```
 
-## What's inside?
+Direção de dependências: `domain` ← `application` ← infraestrutura (`audio`, `intelligence`,
+`persistence`) ← composição em `apps/desktop/src-tauri`.
 
-This Turborepo includes the following packages/apps:
+## Stack
 
-### Apps and Packages
+| Camada        | Tecnologia                                  |
+| ------------- | ------------------------------------------- |
+| Desktop       | Tauri 2                                     |
+| Interface     | React 19 + TypeScript + Vite                |
+| Núcleo        | Rust (edition 2024), Cargo Workspace        |
+| Persistência  | SQLite (local)                              |
+| Monorepo      | Turborepo + pnpm Workspace                  |
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+## Pré-requisitos
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+- Node.js >= 24
+- pnpm 11 (versão fixada em `packageManager` no `package.json`)
+- Rust estável com suporte à edition 2024
+- [Dependências de sistema do Tauri](https://tauri.app/start/prerequisites/) para o seu SO
 
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+## Desenvolvimento
 
 ```sh
-cd my-turborepo
-turbo build
+pnpm install
+
+# App desktop em modo de desenvolvimento (Vite + janela Tauri)
+pnpm --filter appsdesktop tauri dev
+
+# Tarefas orquestradas pelo Turborepo
+pnpm build
+pnpm lint
+pnpm check-types
 ```
 
-Without global `turbo`, use your package manager:
+Verificações do núcleo Rust:
 
 ```sh
-cd my-turborepo
-npx turbo build
-pnpm exec turbo build
-pnpm exec turbo build
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+## Fluxo de trabalho
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
-
-### Develop
-
-To develop all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo dev
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo dev
-pnpm exec turbo dev
-pnpm exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-pnpm exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-pnpm exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+Novas funcionalidades seguem o fluxo do Spec Kit: constituição → especificação → plano →
+tarefas → implementação. Decisões com consequências de longo prazo são registradas como ADR em
+`docs/adr/`. Pull requests devem descrever requisito, impacto de design, testes, considerações de
+segurança/privacidade e impacto por plataforma.

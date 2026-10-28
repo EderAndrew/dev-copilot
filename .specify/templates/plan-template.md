@@ -31,7 +31,30 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Source: `.specify/memory/constitution.md`. Mark each gate ✅ pass, ❌ violation (justify in
+Complexity Tracking with an ADR), or N/A.
+
+- [ ] **I. Idiomatic Rust**: typed errors, no `unwrap`/`expect` on recoverable paths, no
+      `unsafe` without `// SAFETY:` + tests, fmt/clippy clean.
+- [ ] **II. Architecture**: modular monolith; `domain` free of Tauri/audio/DB/AI deps; use cases
+      and ports in `application`; adapters wired in `apps/desktop/src-tauri`; no crate cycles.
+- [ ] **III. Domain modeling**: session lifecycle states/transitions explicit; requirements,
+      decisions, risks, questions, tasks are structured data; AI suggestions carry provenance
+      and status and never overwrite confirmed decisions.
+- [ ] **IV. Security & privacy**: threat model present if the feature touches audio, files,
+      network, credentials, OS APIs, or AI; Tauri capabilities least-privilege; IPC input
+      validated; secrets in OS credential storage; local-first, remote transfer disclosed and
+      authorized; retention/deletion defined.
+- [ ] **V. Cross-platform audio**: OS specifics behind adapters; bounded channels, backpressure,
+      cancellation; macOS/Windows/Linux acceptance plan.
+- [ ] **VI. AI & human control**: providers behind ports; no vendor types in domain; analysis
+      bounded and non-blocking for capture; no autonomous actions.
+- [ ] **VII. Monorepo**: correct placement (`apps/`, `crates/`, `packages/`, `tooling/`); thin
+      Tauri commands; accurate Turbo inputs/outputs; each new dependency justified.
+- [ ] **VIII. Testing/DoD**: acceptance criteria testable; unit tests for domain/use cases;
+      contract/integration tests for adapters; security acceptance cases (Art. IV.16) covered.
+- [ ] **IX. Docs**: ADRs for long-term decisions; docs updated without claiming unvalidated
+      functionality.
 
 ## Project Structure
 
@@ -56,39 +79,21 @@ specs/[###-feature]/
 -->
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
+# Dev Copilot monorepo (keep only the paths this feature touches)
+apps/desktop/
+├── src/                     # React/TypeScript UI (no business rules)
+└── src-tauri/               # Composition root + thin Tauri commands, capabilities/
 
-tests/
-├── contract/
-├── integration/
-└── unit/
+crates/
+├── domain/                  # Pure entities, value objects, invariants (no infra deps)
+├── application/             # Use cases + ports
+├── audio/                   # OS audio adapters (macOS / Windows / Linux)
+├── intelligence/            # Transcription/LLM provider adapters
+└── persistence/             # SQLite repositories
 
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+packages/                    # Shared TS packages (only with multiple consumers)
+tooling/                     # Build orchestration wrappers
+docs/adr/                    # Architecture Decision Records
 ```
 
 **Structure Decision**: [Document the selected structure and reference the real
@@ -96,9 +101,10 @@ directories captured above]
 
 ## Complexity Tracking
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
+> **Fill ONLY if Constitution Check has violations that must be justified.** Each violation
+> of a MUST requires an ADR with owner, risk, mitigation, and review/expiry date.
 
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+| Violation | Why Needed | Simpler Alternative Rejected Because | ADR |
+|-----------|------------|-------------------------------------|-----|
+| [e.g., additional process] | [current need] | [why in-process insufficient] | [ADR-NNN] |
+| [e.g., unsafe FFI block] | [specific problem] | [why safe binding insufficient] | [ADR-NNN] |

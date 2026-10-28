@@ -75,6 +75,40 @@
 - What happens when [boundary condition]?
 - How does system handle [error scenario]?
 
+### Failure Cases *(mandatory — Constitution Art. V.4, IX.2)*
+
+<!--
+  Cover at least the ones that apply: OS permission denied, stop/cancel mid-operation,
+  device change, provider error/timeout, partial transcription, storage failure.
+-->
+
+- **[Failure]**: [Expected, user-visible behavior and what is preserved]
+
+## Out of Scope *(mandatory)*
+
+- [Explicitly excluded capability]
+
+## Security & Privacy *(mandatory if the feature touches audio, files, network, credentials, OS APIs, or AI)*
+
+<!--
+  Constitution Art. IV.10: summarize the threat model here (details may live in plan/research).
+-->
+
+- **Assets**: [e.g., transcripts, API keys]
+- **Actors & trust boundaries**: [e.g., frontend ↔ native IPC, app ↔ remote provider]
+- **Abuse cases**: [e.g., prompt injection via transcript, unauthorized file access]
+- **Permissions**: [OS permissions and Tauri capabilities required]
+- **Data handling**: [local vs. remote, what is sent where, retention/deletion]
+- **Verification**: [security acceptance tests, see Art. IV.16]
+
+## Platform Impact *(mandatory if behavior differs by OS)*
+
+| Platform | Behavior / API | Acceptance verification |
+|----------|----------------|-------------------------|
+| macOS    | [ ]            | [manual/automated]      |
+| Windows  | [ ]            | [manual/automated]      |
+| Linux    | [ ]            | [manual/automated]      |
+
 ## Requirements *(mandatory)*
 
 <!--
