@@ -1,0 +1,24 @@
+[package]
+name = "devcopilot-desktop"
+description = "Dev Copilot desktop app"
+authors = ["Eder Andrew"]
+edition.workspace = true
+version.workspace = true
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "devcopilot_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+devcopilot-application = { path = "../../../crates/application" }
+devcopilot-domain = { path = "../../../crates/domain" }

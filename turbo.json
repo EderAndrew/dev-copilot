@@ -1,14 +1,23 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
+  "futureFlags": {
+    "experimentalCargoWorkspaces": true
+  },
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": [".next/**", "!.next/cache/**", "!.next/dev/**"]
     },
+    "check": {
+      "dependsOn": ["^check"]
+    },
     "lint": {
       "dependsOn": ["^lint"]
+    },
+    "test": {
+      "dependsOn": ["^test"]
     },
     "check-types": {
       "dependsOn": ["^check-types"]

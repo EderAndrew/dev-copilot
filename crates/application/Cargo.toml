@@ -1,0 +1,7 @@
+[package]
+name = "devcopilot-application"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+devcopilot-domain = { path = "../domain" }

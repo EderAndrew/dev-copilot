@@ -1,0 +1,6 @@
+[package]
+name = "devcopilot-intelligence"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
