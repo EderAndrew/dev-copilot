@@ -66,7 +66,12 @@ export function TranscriptView({
     if (entry.kind === "final") {
       const { segment } = entry;
       return (
-        <li key={segment.id} className="transcript-final">
+        <li
+          key={segment.id}
+          id={`segment-${segment.id}`}
+          tabIndex={-1}
+          className="transcript-final"
+        >
           {time(segment.startMs)} {source(segment.source)}{" "}
           <span>{segment.text}</span>
         </li>

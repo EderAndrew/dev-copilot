@@ -11,6 +11,7 @@ use devcopilot_desktop_lib::commands::audio::{AudioSourceDto, PermissionHelpDto}
 use devcopilot_desktop_lib::commands::providers::{
     JobIdDto, LocalModelDownloadDto, ProviderDto, ProviderSetDefaultDto, ProviderUpsertDto,
 };
+use devcopilot_desktop_lib::commands::records::{RecordDto, RecordSetStatusDto};
 use devcopilot_desktop_lib::commands::sessions::{
     SessionCreateDto, SessionDto, SessionIdDto, SessionStartDto,
 };
@@ -95,6 +96,12 @@ fn audio_sources() {
 }
 
 #[test]
+fn records() {
+    assert_round_trip::<RecordDto>("RecordDto");
+    assert_round_trip::<RecordSetStatusDto>("RecordSetStatusDto");
+}
+
+#[test]
 fn session_events() {
     assert_round_trip::<IpcSessionEvent>("SessionEvent");
 }
@@ -112,6 +119,8 @@ fn every_fixture_directory_is_covered() {
         "ProviderDto",
         "ProviderSetDefaultDto",
         "ProviderUpsertDto",
+        "RecordDto",
+        "RecordSetStatusDto",
         "SessionCreateDto",
         "SessionDto",
         "SessionEvent",

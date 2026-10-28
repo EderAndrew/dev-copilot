@@ -163,5 +163,54 @@
     "download": "Baixar {{name}}",
     "downloading": "Baixando…",
     "use": "Usar {{name}} para transcrever"
+  },
+  "records": {
+    "title": "Registros técnicos",
+    "empty": "As propostas da análise aparecem aqui conforme a conversa avança.",
+    "badgesLabel": "Classificação",
+    "kind": {
+      "requirement": "Requisito",
+      "decision": "Decisão",
+      "risk": "Risco",
+      "open_question": "Pergunta em aberto",
+      "task": "Tarefa",
+      "assumption": "Premissa"
+    },
+    "nature": {
+      "observed": "Observado",
+      "inferred": "Inferido",
+      "suggested": "Sugerido"
+    },
+    "status": {
+      "proposed": "Proposto",
+      "confirmed": "Confirmado",
+      "rejected": "Rejeitado",
+      "pending": "Pendente"
+    },
+    "action": {
+      "confirmed": "Confirmar",
+      "rejected": "Rejeitar",
+      "pending": "Marcar como pendente",
+      "proposed": "Voltar a proposto"
+    },
+    "actionsLabel": "Revisar: {{text}}",
+    "userCreated": "Criado por você",
+    "conflict": "Conflita com outro registro",
+    "duplicate": "Possível duplicata",
+    "rationale": "Justificativa:",
+    "acceptanceCriteria": "Critérios de aceitação",
+    "alternatives": "Alternativas",
+    "evidence": "Evidência:",
+    "noEvidence": "Sem trecho de evidência (inferido ou sugerido).",
+    "segmentNumber": "trecho {{number}}",
+    "segmentIndex": "evidência {{index}}",
+    "analysis": {
+      "running": "Analisando os trechos novos…",
+      "ok_one": "Análise concluída: {{count}} nova proposta.",
+      "ok_other": "Análise concluída: {{count}} novas propostas.",
+      "invalid_output": "A resposta da análise veio fora do formato e foi descartada. Os registros existentes foram preservados.",
+      "provider_error": "A análise falhou. Os registros existentes foram preservados; os trechos serão analisados de novo na próxima vez.",
+      "rate_limited": "Limite de análises atingido. A captura continua; os trechos novos aguardam a próxima análise permitida."
+    }
   }
 }

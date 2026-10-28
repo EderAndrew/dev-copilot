@@ -15,6 +15,9 @@ import type {
   PermissionState,
   ProviderAdapterKind,
   ProviderRole,
+  Nature,
+  RecordKind,
+  RecordStatus,
   SessionEvent,
   SessionLanguage,
   SessionState,
@@ -150,6 +153,48 @@ const permission = keys<PermissionState>({
   revoked: true,
 });
 const epochMs = nonNegativeInt;
+const recordKind = keys<RecordKind>({
+  requirement: true,
+  decision: true,
+  risk: true,
+  open_question: true,
+  task: true,
+  assumption: true,
+});
+const nature = keys<Nature>({
+  observed: true,
+  inferred: true,
+  suggested: true,
+});
+const recordStatus = keys<RecordStatus>({
+  proposed: true,
+  confirmed: true,
+  rejected: true,
+  pending: true,
+});
+const recordShape: Shape = {
+  required: {
+    id: str,
+    sessionId: str,
+    kind: recordKind,
+    text: str,
+    nature,
+    status: recordStatus,
+    rationale: str,
+    origin: keys<"ai" | "user">({ ai: true, user: true }),
+    evidence: arrayOf(str),
+    acceptanceCriteria: arrayOf(str),
+    alternatives: arrayOf(str),
+    createdAt: epochMs,
+    updatedAt: epochMs,
+  },
+  optional: {
+    providerId: str,
+    analysisRunId: str,
+    conflictsWith: str,
+    duplicateOf: str,
+  },
+};
 
 const analysisLimits = object({
   required: {
@@ -223,6 +268,9 @@ const eventShapes: Record<SessionEvent["type"], Shape> = {
       }),
     },
     optional: { created: nonNegativeInt },
+  }),
+  record_proposed: event("record_proposed", {
+    required: { record: object(recordShape) },
   }),
   provider_in_use: event("provider_in_use", {
     required: {
@@ -320,6 +368,9 @@ const dtoShapes: Record<string, (value: unknown) => string[]> = {
   SessionStartDto: (v) =>
     problems(v, { required: { sessionId: str, consentAcknowledged: bool } }),
   SessionIdDto: (v) => problems(v, { required: { sessionId: str } }),
+  RecordDto: (v) => problems(v, recordShape),
+  RecordSetStatusDto: (v) =>
+    problems(v, { required: { recordId: str, status: recordStatus } }),
   AudioSourceDto: (v) =>
     problems(v, {
       required: {

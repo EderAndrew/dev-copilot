@@ -8,19 +8,22 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use devcopilot_application::ApplicationError;
+use devcopilot_application::analysis_service::{AnalysisDeps, AnalysisService, DEFAULT_TICK};
 use devcopilot_application::ports::{
-    AudioSource, Clock, EventPublisher, SecretStore, TranscriberFactory,
+    AnalysisProviderFactory, AudioSource, Clock, EventPublisher, SecretStore, TranscriberFactory,
 };
 use devcopilot_application::provider_service::ProviderService;
+use devcopilot_application::record_service::RecordService;
 use devcopilot_application::session_service::{SessionDeps, SessionService};
 use devcopilot_application::settings_service::SettingsService;
 use devcopilot_audio::{CpalMicrophone, UnavailableSource};
 use devcopilot_domain::audio_source::{AudioSourceKind, UnavailableReason};
 use devcopilot_domain::time::Timestamp;
-use devcopilot_intelligence::WhisperTranscriberFactory;
+use devcopilot_intelligence::{AnalysisAdapterFactory, WhisperTranscriberFactory};
 use devcopilot_persistence::{
-    Database, KeyringSecretStore, SqliteProviderRepository, SqliteSegmentRepository,
-    SqliteSessionRepository, SqliteSettingsRepository,
+    Database, KeyringSecretStore, SqliteAnalysisRunRepository, SqliteProviderRepository,
+    SqliteRecordRepository, SqliteSegmentRepository, SqliteSessionRepository,
+    SqliteSettingsRepository,
 };
 use tauri::{AppHandle, Manager, Runtime};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -37,6 +40,8 @@ pub struct Core {
     pub providers: Arc<ProviderService>,
     /// Session lifecycle use cases.
     pub sessions: SessionService,
+    /// Record review use cases.
+    pub records: Arc<RecordService>,
 }
 
 /// Platform adapters that do not depend on storage.
@@ -51,6 +56,8 @@ pub struct Platform {
     pub events: Arc<dyn EventPublisher>,
     /// Builds transcribers for configured providers.
     pub transcribers: Arc<dyn TranscriberFactory>,
+    /// Builds analysis adapters for configured providers.
+    pub analyzers: Arc<dyn AnalysisProviderFactory>,
 }
 
 /// Wall clock from the OS.
@@ -122,9 +129,23 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
     let settings_repo = Arc::new(SqliteSettingsRepository::new(Arc::clone(&db)));
     let provider_repo = Arc::new(SqliteProviderRepository::new(Arc::clone(&db)));
     let session_repo = Arc::new(SqliteSessionRepository::new(Arc::clone(&db)));
-    let segment_repo = Arc::new(SqliteSegmentRepository::new(db));
+    let segment_repo = Arc::new(SqliteSegmentRepository::new(Arc::clone(&db)));
+    let record_repo = Arc::new(SqliteRecordRepository::new(Arc::clone(&db)));
+    let run_repo = Arc::new(SqliteAnalysisRunRepository::new(db));
     let settings = Arc::new(SettingsService::new(settings_repo.clone()));
     let providers = Arc::new(ProviderService::new(provider_repo, settings_repo));
+    let analysis = AnalysisService::new(AnalysisDeps {
+        providers: Arc::clone(&providers),
+        analyzers: platform.analyzers,
+        records: record_repo.clone(),
+        runs: run_repo,
+        segments: segment_repo.clone(),
+        settings: Arc::clone(&settings),
+        clock: Arc::clone(&platform.clock),
+        events: Arc::clone(&platform.events),
+        tick: DEFAULT_TICK,
+    });
+    let records = Arc::new(RecordService::new(record_repo, Arc::clone(&platform.clock)));
     let sessions = SessionService::new(SessionDeps {
         sessions: session_repo,
         segments: segment_repo,
@@ -135,12 +156,14 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
         sources: platform.sources,
         clock: platform.clock,
         events: platform.events,
+        analysis: Some(analysis),
     });
     sessions.recover_on_startup()?;
     Ok(Core {
         settings,
         providers,
         sessions,
+        records,
     })
 }
 
@@ -194,6 +217,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> AppState {
             clock: Arc::new(SystemClock),
             events: Arc::clone(&events) as Arc<dyn EventPublisher>,
             transcribers: Arc::new(WhisperTranscriberFactory::new(models_dir(&dir))),
+            analyzers: Arc::new(AnalysisAdapterFactory),
         };
         compose_core(&dir, platform)
     });

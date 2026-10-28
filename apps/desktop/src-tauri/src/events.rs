@@ -18,6 +18,7 @@ use devcopilot_domain::session::{FailureReason, SessionState};
 use devcopilot_domain::transcript::GapReason;
 use serde::{Deserialize, Serialize};
 
+use crate::commands::records::RecordDto;
 use crate::dto::Code;
 
 /// Final segment as sent to the UI.
@@ -113,6 +114,9 @@ pub enum SessionEventBody {
         status: AnalysisStatusDto,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         created: Option<u32>,
+    },
+    RecordProposed {
+        record: Box<RecordDto>,
     },
     ProviderInUse {
         role: ProviderStageDto,
@@ -210,6 +214,9 @@ impl From<SessionEvent> for SessionEventBody {
                     created,
                 }
             }
+            SessionEvent::RecordProposed(record) => Self::RecordProposed {
+                record: Box::new(RecordDto::from(record.as_ref())),
+            },
             SessionEvent::ProviderInUse {
                 stage,
                 locality,

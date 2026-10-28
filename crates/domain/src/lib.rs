@@ -31,11 +31,14 @@ macro_rules! code_enum {
     };
 }
 
+pub mod analysis_run;
 pub mod audio_source;
 pub mod error;
 pub mod ids;
 pub mod language;
 pub mod provider;
+pub mod record;
+pub mod record_change;
 pub mod redacted;
 pub mod session;
 pub mod text;

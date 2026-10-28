@@ -7,15 +7,17 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration as StdDuration;
 
+use devcopilot_application::analysis_service::{AnalysisDeps, AnalysisService};
 use devcopilot_application::events::SessionEvent;
 use devcopilot_application::ports::{AudioSource, SessionRepository};
 use devcopilot_application::provider_service::ProviderService;
 use devcopilot_application::session_service::{NewSession, SessionDeps, SessionService};
-use devcopilot_application::settings_service::{SettingsService, SettingsUpdate};
+use devcopilot_application::settings_service::{AnalysisLimits, SettingsService, SettingsUpdate};
 use devcopilot_application::testing::{
-    FakeClock, InMemoryProviderRepository, InMemorySegmentRepository, InMemorySessionRepository,
-    InMemorySettingsRepository, RecordingEventPublisher, ScriptedAudioSource, ScriptedTranscriber,
-    ScriptedTranscriberFactory, ToggleableSecretStore,
+    FakeClock, InMemoryAnalysisRunRepository, InMemoryProviderRepository, InMemoryRecordRepository,
+    InMemorySegmentRepository, InMemorySessionRepository, InMemorySettingsRepository,
+    RecordingEventPublisher, ScriptedAnalysisProvider, ScriptedAnalysisProviderFactory,
+    ScriptedAudioSource, ScriptedTranscriber, ScriptedTranscriberFactory, ToggleableSecretStore,
 };
 use devcopilot_domain::audio_source::AudioSourceKind;
 use devcopilot_domain::ids::{ProviderId, SessionId};
@@ -37,6 +39,10 @@ pub struct Fixture {
     pub system: Arc<ScriptedAudioSource>,
     pub clock: Arc<FakeClock>,
     pub events: Arc<RecordingEventPublisher>,
+    pub analyzer: Arc<ScriptedAnalysisProvider>,
+    pub analyzers: Arc<ScriptedAnalysisProviderFactory>,
+    pub records: Arc<InMemoryRecordRepository>,
+    pub runs: Arc<InMemoryAnalysisRunRepository>,
 }
 
 /// Microphone and system sources granted, a local transcriber configured, consent reminder
@@ -64,6 +70,21 @@ pub fn fixture_without_transcriber() -> Fixture {
     let system = Arc::new(ScriptedAudioSource::granted(AudioSourceKind::System));
     let clock = Arc::new(FakeClock::default());
     let events = Arc::new(RecordingEventPublisher::default());
+    let analyzer = Arc::new(ScriptedAnalysisProvider::local());
+    let analyzers = Arc::new(ScriptedAnalysisProviderFactory::new(analyzer.clone()));
+    let records = Arc::new(InMemoryRecordRepository::default());
+    let runs = Arc::new(InMemoryAnalysisRunRepository::default());
+    let analysis = AnalysisService::new(AnalysisDeps {
+        providers: providers.clone(),
+        analyzers: analyzers.clone(),
+        records: records.clone(),
+        runs: runs.clone(),
+        segments: segments.clone(),
+        settings: settings.clone(),
+        clock: clock.clone(),
+        events: events.clone(),
+        tick: StdDuration::from_millis(5),
+    });
     let service = SessionService::new(SessionDeps {
         sessions: sessions.clone(),
         segments: segments.clone(),
@@ -77,6 +98,7 @@ pub fn fixture_without_transcriber() -> Fixture {
         ],
         clock: clock.clone(),
         events: events.clone(),
+        analysis: Some(analysis),
     });
     Fixture {
         service,
@@ -91,6 +113,10 @@ pub fn fixture_without_transcriber() -> Fixture {
         system,
         clock,
         events,
+        analyzer,
+        analyzers,
+        records,
+        runs,
     }
 }
 
@@ -105,6 +131,32 @@ impl Fixture {
                 model: "ggml-base".into(),
                 credential_ref: None,
                 data_categories: BTreeSet::from([DataCategory::Audio]),
+            })
+            .unwrap();
+    }
+
+    /// Configures a local (Ollama) analysis provider; returns its id.
+    pub fn add_analyzer(&self) -> ProviderId {
+        let id = ProviderId::new();
+        self.providers
+            .upsert_local(ProviderSpec {
+                id,
+                role: ProviderRole::Analysis,
+                adapter: ProviderAdapterKind::Ollama,
+                endpoint: Some("http://127.0.0.1:11434".into()),
+                model: "llama3.1".into(),
+                credential_ref: None,
+                data_categories: BTreeSet::from([DataCategory::Transcript, DataCategory::Records]),
+            })
+            .unwrap();
+        id
+    }
+
+    pub fn set_analysis_limits(&self, limits: AnalysisLimits) {
+        self.settings
+            .update(SettingsUpdate {
+                analysis_limits: Some(limits),
+                ..SettingsUpdate::default()
             })
             .unwrap();
     }

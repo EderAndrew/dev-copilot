@@ -53,6 +53,11 @@ type IpcError = {
 
 ## Registros e plano
 
+`RecordDto`: `{ id, sessionId, kind, text, nature, status, rationale, origin: "ai" | "user", providerId?,
+analysisRunId?, evidence: string[] (ids de trechos), acceptanceCriteria: string[], alternatives: string[],
+conflictsWith?, duplicateOf?, createdAt, updatedAt }`. Evidências são ids de trechos persistidos; o texto citado
+vem sempre do trecho original (FR-053b). Exemplos em `fixtures/RecordDto/`.
+
 | Comando | Entrada | Saída | Regras |
 |---------|---------|-------|--------|
 | `record_set_status` | `{ recordId, status }` | `RecordDto` | ator sempre `user`; transições do data-model |

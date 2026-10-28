@@ -4,21 +4,23 @@
 //! points return [`BoxFuture`] so they stay object-safe and can be composed as `Arc<dyn _>`.
 //!
 //! Repository ports for entities introduced by user stories grow with those stories:
-//! `RecordRepository` (T088),
-//! `QuestionRepository` (T113); `AnalysisProvider::analyze`/`answer` arrive with T089–T091 and
-//! T114; authorizations on `ProviderRepository` with T135.
+//! `QuestionRepository` (T113); `AnalysisProvider::answer` arrives with T114; authorizations on
+//! `ProviderRepository` with T135.
 
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use devcopilot_domain::Redacted;
+use devcopilot_domain::analysis_run::AnalysisRun;
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
-use devcopilot_domain::ids::{ProviderId, SessionId};
+use devcopilot_domain::ids::{ProviderId, RecordId, SegmentId, SessionId};
 use devcopilot_domain::language::SessionLanguage;
 use devcopilot_domain::provider::{CredentialRef, DataCategory, Locality, Provider};
+use devcopilot_domain::record::{Proposal, RecordKind, RecordStatus, TechnicalRecord};
+use devcopilot_domain::record_change::RecordChange;
 use devcopilot_domain::session::Session;
-use devcopilot_domain::text::SegmentText;
+use devcopilot_domain::text::{RecordText, SegmentText};
 use devcopilot_domain::time::{Duration, Timestamp};
 use devcopilot_domain::transcript::TranscriptSegment;
 use thiserror::Error;
@@ -302,10 +304,86 @@ pub trait TranscriberFactory: Send + Sync {
     ) -> Result<Arc<dyn Transcriber>, ProviderError>;
 }
 
-/// Technical analysis and contextual questions (methods added by T089–T091 and T114).
+/// A final segment sent for analysis.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnalysisSegment {
+    /// Segment id the model may cite as evidence.
+    pub id: SegmentId,
+    /// Source, when the session has two sources.
+    pub source: Option<AudioSourceKind>,
+    /// Start offset.
+    pub start: Duration,
+    /// Text, exactly as transcribed (never translated, FR-053b).
+    pub text: Redacted<SegmentText>,
+}
+
+/// Short summary of an existing record, so the model can point at duplicates and conflicts
+/// (research R7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordSummary {
+    /// Record id the model may reference in `relatesTo`.
+    pub id: RecordId,
+    /// Kind.
+    pub kind: RecordKind,
+    /// Status.
+    pub status: RecordStatus,
+    /// Text, possibly shortened.
+    pub text: Redacted<RecordText>,
+}
+
+/// Input of one analysis call. Everything in it is untrusted session content (FR-029).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnalysisRequest {
+    /// Analysed session.
+    pub session_id: SessionId,
+    /// Language of the session; proposals are written in it (FR-053b).
+    pub language: SessionLanguage,
+    /// New final segments, in `seq` order.
+    pub segments: Vec<AnalysisSegment>,
+    /// Existing records of the session.
+    pub records: Vec<RecordSummary>,
+}
+
+/// Schema-validated output of one analysis call.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct AnalysisOutput {
+    /// Proposed records; the application decides what becomes a record.
+    pub proposals: Vec<Proposal>,
+    /// Tokens consumed (prompt + completion), for the per-session budget (FR-028).
+    pub tokens_used: u32,
+}
+
+/// Technical analysis and contextual questions (`answer` arrives with T114).
+///
+/// Implementations offer no tools or functions to the model, send session content only as
+/// delimited data, and accept only output valid against `analysis-output.schema.json`
+/// (contracts/provider-ports.md "Regras de segurança").
 pub trait AnalysisProvider: Send + Sync {
     /// Non-sensitive description.
     fn descriptor(&self) -> ProviderDescriptor;
+
+    /// Analyses `request`; honours `cancel` promptly.
+    ///
+    /// # Errors
+    ///
+    /// [`ProviderError::InvalidOutput`] when the output fails validation (FR-030);
+    /// [`ProviderError::Cancelled`], [`ProviderError::Timeout`], [`ProviderError::Unavailable`]
+    /// or [`ProviderError::Other`] otherwise.
+    fn analyze(
+        &self,
+        request: AnalysisRequest,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'_, Result<AnalysisOutput, ProviderError>>;
+}
+
+/// Builds the [`AnalysisProvider`] for a configured analysis provider. Cheap: no network I/O.
+pub trait AnalysisProviderFactory: Send + Sync {
+    /// Analysis provider for `provider`.
+    ///
+    /// # Errors
+    ///
+    /// [`ProviderError::Unavailable`] when the adapter is not supported on this build.
+    fn create(&self, provider: &Provider) -> Result<Arc<dyn AnalysisProvider>, ProviderError>;
 }
 
 /// Refusal by the [`RemoteGate`].
@@ -426,6 +504,81 @@ pub trait SegmentRepository: Send + Sync {
     ///
     /// See [`RepositoryError`].
     fn next_seq(&self, session: SessionId) -> Result<u64, RepositoryError>;
+}
+
+/// Technical records and their history (data-model.md "TechnicalRecord", "RecordChange").
+///
+/// Each write is one transaction: a record is never stored without its history entry.
+pub trait RecordRepository: Send + Sync {
+    /// Inserts a new record with its creation entry and evidence.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the session or a cited segment does not exist;
+    /// [`RepositoryError::Storage`].
+    fn insert(
+        &self,
+        record: &TechnicalRecord,
+        creation: &RecordChange,
+    ) -> Result<(), RepositoryError>;
+
+    /// Stores the mutable fields of an existing record (text, status, rationale, lists,
+    /// `updated_at`) and appends `changes`.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent; [`RepositoryError::Storage`].
+    fn update(
+        &self,
+        record: &TechnicalRecord,
+        changes: &[RecordChange],
+    ) -> Result<(), RepositoryError>;
+
+    /// One record.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent.
+    fn get(&self, id: RecordId) -> Result<TechnicalRecord, RepositoryError>;
+
+    /// Every record of `session`, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn list_by_session(&self, session: SessionId) -> Result<Vec<TechnicalRecord>, RepositoryError>;
+
+    /// History of `record`, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn history(&self, record: RecordId) -> Result<Vec<RecordChange>, RepositoryError>;
+}
+
+/// Analysis runs (data-model.md "AnalysisRun").
+pub trait AnalysisRunRepository: Send + Sync {
+    /// Inserts a run.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the session does not exist;
+    /// [`RepositoryError::Storage`].
+    fn insert(&self, run: &AnalysisRun) -> Result<(), RepositoryError>;
+
+    /// Stores the outcome and end of a run.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent; [`RepositoryError::Storage`].
+    fn update(&self, run: &AnalysisRun) -> Result<(), RepositoryError>;
+
+    /// Every run of `session`, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn list_by_session(&self, session: SessionId) -> Result<Vec<AnalysisRun>, RepositoryError>;
 }
 
 /// Configured providers (authorizations are added with US7, T135).

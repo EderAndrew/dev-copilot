@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use devcopilot_application::ports::{AudioSource, EventPublisher};
 use devcopilot_application::testing::{
-    FakeClock, RecordingEventPublisher, ScriptedAudioSource, ScriptedTranscriber,
-    ScriptedTranscriberFactory, ToggleableSecretStore,
+    FakeClock, RecordingEventPublisher, ScriptedAnalysisProvider, ScriptedAnalysisProviderFactory,
+    ScriptedAudioSource, ScriptedTranscriber, ScriptedTranscriberFactory, ToggleableSecretStore,
 };
 use devcopilot_desktop_lib::commands::IpcError;
 use devcopilot_desktop_lib::commands::audio::{self, AvailabilityDto};
@@ -50,6 +50,9 @@ fn harness() -> Harness {
             events: Arc::new(RecordingEventPublisher::default()) as Arc<dyn EventPublisher>,
             transcribers: Arc::new(ScriptedTranscriberFactory::new(Arc::new(
                 ScriptedTranscriber::local(Vec::new()),
+            ))),
+            analyzers: Arc::new(ScriptedAnalysisProviderFactory::new(Arc::new(
+                ScriptedAnalysisProvider::local(),
             ))),
         },
     )
@@ -271,6 +274,9 @@ async fn interrupted_sessions_are_failed_on_startup() {
         transcribers: Arc::new(ScriptedTranscriberFactory::new(Arc::new(
             ScriptedTranscriber::local(Vec::new()),
         ))),
+        analyzers: Arc::new(ScriptedAnalysisProviderFactory::new(Arc::new(
+            ScriptedAnalysisProvider::local(),
+        ))),
     };
     let id = {
         let core = compose_core(dir.path(), platform()).unwrap();
@@ -305,4 +311,21 @@ async fn interrupted_sessions_are_failed_on_startup() {
         session.failure(),
         Some(devcopilot_domain::session::FailureReason::Interrupted)
     );
+}
+
+#[test]
+fn record_set_status_validates_ids() {
+    use devcopilot_desktop_lib::commands::records::{self, RecordSetStatusDto};
+    use devcopilot_domain::ids::RecordId;
+    use devcopilot_domain::record::RecordStatus;
+
+    let h = harness();
+    let request = |record_id: String| RecordSetStatusDto {
+        record_id,
+        status: Code(RecordStatus::Confirmed),
+    };
+    let err = records::set_status(&h.core, &request("not-a-uuid".into())).unwrap_err();
+    assert_eq!(err.code, "invalid_input");
+    let err = records::set_status(&h.core, &request(RecordId::new().to_string())).unwrap_err();
+    assert_eq!(err.code, "not_found");
 }

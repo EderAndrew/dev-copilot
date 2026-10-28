@@ -93,6 +93,54 @@ bounded_text!(
     /// Contextual question: 1–2 000 characters.
     QuestionText, field = "question", max = 2000, multiline = true
 );
+bounded_text!(
+    /// Acceptance criterion or alternative of a record: 1–500 characters.
+    ListItem, field = "item", max = 500, multiline = true
+);
+
+/// Rationale of a technical record: 0–2 000 characters (may be empty).
+///
+/// `Debug` is redacted because the value is session content (FR-051).
+#[derive(Clone, PartialEq, Eq, Hash, Default)]
+pub struct Rationale(String);
+
+impl Rationale {
+    /// Maximum length in characters.
+    pub const MAX_CHARS: usize = 2000;
+
+    /// Validates and wraps `value`; blank values become empty.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DomainError::InvalidInput`] on `rationale` when the value is too long or
+    /// contains control characters other than line breaks and tabs.
+    pub fn parse(value: impl Into<String>) -> Result<Self, DomainError> {
+        let value = value.into();
+        if value.trim().is_empty() {
+            return Ok(Self::default());
+        }
+        validate(&value, "rationale", Self::MAX_CHARS, true)?;
+        Ok(Self(value))
+    }
+
+    /// The validated text (possibly empty).
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Whether the rationale is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl fmt::Debug for Rationale {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Rationale([redacted])")
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -154,6 +202,33 @@ mod tests {
             Err(DomainError::invalid("text", InputProblem::ControlCharacter))
         );
         assert!(SegmentText::parse("a\u{1b}b").is_err());
+    }
+
+    #[test]
+    fn rationale_may_be_empty_but_is_bounded() {
+        assert!(Rationale::parse("  ").unwrap().is_empty());
+        assert_eq!(
+            Rationale::parse("porque sim").unwrap().as_str(),
+            "porque sim"
+        );
+        assert_eq!(
+            Rationale::parse("x".repeat(2001)),
+            Err(DomainError::invalid("rationale", InputProblem::TooLong))
+        );
+        assert!(Rationale::parse("a\u{0}b").is_err());
+        assert_eq!(
+            format!("{:?}", Rationale::parse("segredo").unwrap()),
+            "Rationale([redacted])"
+        );
+    }
+
+    #[test]
+    fn list_items_are_bounded() {
+        assert!(ListItem::parse("x".repeat(500)).is_ok());
+        assert_eq!(
+            ListItem::parse("x".repeat(501)),
+            Err(DomainError::invalid("item", InputProblem::TooLong))
+        );
     }
 
     #[test]

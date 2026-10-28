@@ -213,3 +213,71 @@ fieldset label {
   display: grid;
   gap: 0.75rem;
 }
+
+/* Technical records (US3) */
+.session-workspace {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  align-items: start;
+}
+
+.records-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.record-card {
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+
+.record-rejected .record-text {
+  text-decoration: line-through;
+}
+
+.record-badges {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.badge {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0 0.5rem;
+  font-size: 0.85em;
+}
+
+.badge-status {
+  font-weight: 600;
+}
+
+.badge-warning {
+  border-style: dashed;
+}
+
+.record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0 0.25rem;
+  text-decoration: underline;
+  cursor: pointer;
+  color: inherit;
+}
+
+.transcript-final:focus {
+  outline: 2px solid currentColor;
+}

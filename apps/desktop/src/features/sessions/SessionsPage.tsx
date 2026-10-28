@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ipc, toIpcError, type IpcClient } from "../../ipc/client";
@@ -9,6 +9,7 @@ import type {
   SessionDto,
   SessionLanguage,
 } from "../../ipc/types";
+import { RecordsPanel } from "../records/RecordsPanel";
 import { ConsentReminderDialog } from "./ConsentReminderDialog";
 import { NewSessionForm } from "./NewSessionForm";
 import { TranscriptView } from "../transcript/TranscriptView";
@@ -27,6 +28,7 @@ export type SessionsClient = Pick<
   | "sessionStart"
   | "sessionCancelStart"
   | "sessionStop"
+  | "recordSetStatus"
 >;
 
 type SessionsPageProps = {
@@ -35,7 +37,10 @@ type SessionsPageProps = {
   client?: SessionsClient;
 };
 
-/** Create a session, control its capture (US1) and follow its transcript (US2). */
+/**
+ * Create a session, control its capture (US1), follow its transcript (US2) and review the
+ * records proposed by analysis (US3).
+ */
 export function SessionsPage({
   store,
   defaultLanguage,
@@ -48,6 +53,14 @@ export function SessionsPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<IpcError | null>(null);
   const session = store.state.session;
+  const entries = store.state.transcript.entries;
+  const segmentNumbers = useMemo(() => {
+    const numbers = new Map<string, number>();
+    for (const entry of entries)
+      if (entry.kind === "final")
+        numbers.set(entry.segment.id, numbers.size + 1);
+    return numbers;
+  }, [entries]);
 
   useEffect(() => {
     let active = true;
@@ -140,10 +153,18 @@ export function SessionsPage({
           />
           <ProviderBadge providers={store.state.providers} />
           {session.state !== "idle" && (
-            <TranscriptView
-              transcript={store.state.transcript}
-              showSources={session.sources.length > 1}
-            />
+            <div className="session-workspace">
+              <TranscriptView
+                transcript={store.state.transcript}
+                showSources={session.sources.length > 1}
+              />
+              <RecordsPanel
+                records={store.state.records}
+                segmentNumbers={segmentNumbers}
+                client={client}
+                onUpdated={store.updateRecord}
+              />
+            </div>
           )}
           {permissionProblem &&
             session.sources.map((kind) => (

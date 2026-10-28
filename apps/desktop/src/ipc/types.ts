@@ -153,7 +153,41 @@ export type SegmentDto = {
   text: string;
 };
 
-// `record_proposed` and `question_answered` are added with US3 and US5.
+// Technical records (contracts/ipc-commands.md "Registros e plano") ----------------------------
+
+export type RecordKind =
+  "requirement" | "decision" | "risk" | "open_question" | "task" | "assumption";
+export type Nature = "observed" | "inferred" | "suggested";
+export type RecordStatus = "proposed" | "confirmed" | "rejected" | "pending";
+
+export type RecordDto = {
+  id: string;
+  sessionId: string;
+  kind: RecordKind;
+  text: string;
+  nature: Nature;
+  status: RecordStatus;
+  rationale: string;
+  origin: "ai" | "user";
+  providerId?: string;
+  analysisRunId?: string;
+  /** Ids of the transcript segments cited as evidence. */
+  evidence: string[];
+  acceptanceCriteria: string[];
+  alternatives: string[];
+  conflictsWith?: string;
+  duplicateOf?: string;
+  /** Unix epoch milliseconds. */
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type RecordSetStatusDto = { recordId: string; status: RecordStatus };
+
+export type AnalysisStatus =
+  "running" | "ok" | "invalid_output" | "provider_error" | "rate_limited";
+
+// `question_answered` is added with US5.
 export type SessionEvent =
   | {
       type: "state_changed";
@@ -193,10 +227,10 @@ export type SessionEvent =
       type: "analysis_status";
       seq: number;
       runId: string;
-      status:
-        "running" | "ok" | "invalid_output" | "provider_error" | "rate_limited";
+      status: AnalysisStatus;
       created?: number;
     }
+  | { type: "record_proposed"; seq: number; record: RecordDto }
   | {
       type: "provider_in_use";
       seq: number;

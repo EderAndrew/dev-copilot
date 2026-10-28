@@ -3,14 +3,18 @@
 //! Fakes favour observability: each one records what happened so tests can assert on it.
 
 use std::collections::{BTreeMap, VecDeque};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::fmt;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use devcopilot_domain::Redacted;
+use devcopilot_domain::analysis_run::AnalysisRun;
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
-use devcopilot_domain::ids::{ProviderId, SessionId};
+use devcopilot_domain::ids::{ProviderId, RecordId, SessionId};
 use devcopilot_domain::language::SessionLanguage;
 use devcopilot_domain::provider::{CredentialRef, DataCategory, Locality, Provider};
+use devcopilot_domain::record::TechnicalRecord;
+use devcopilot_domain::record_change::RecordChange;
 use devcopilot_domain::session::Session;
 use devcopilot_domain::time::{Duration, Timestamp};
 use devcopilot_domain::transcript::TranscriptSegment;
@@ -19,11 +23,13 @@ use tokio_util::sync::CancellationToken;
 
 use crate::events::SessionEvent;
 use crate::ports::{
-    AnalysisProvider, AudioChunk, AudioChunkStream, AudioError, AudioSource, AuthorizationError,
-    BoundedAudioSink, BoxFuture, CaptureHandle, Clock, EventPublisher, ProviderDescriptor,
-    ProviderError, ProviderRepository, RemoteGate, RepositoryError, SecretStore, SecretStoreError,
-    SegmentRepository, SessionRepository, SettingsRepository, SinkError, SourceFault,
-    SourceFaultNotifier, Transcriber, TranscriberFactory, TranscriptSink, TranscriptUpdate,
+    AnalysisOutput, AnalysisProvider, AnalysisProviderFactory, AnalysisRequest,
+    AnalysisRunRepository, AudioChunk, AudioChunkStream, AudioError, AudioSource,
+    AuthorizationError, BoundedAudioSink, BoxFuture, CaptureHandle, Clock, EventPublisher,
+    ProviderDescriptor, ProviderError, ProviderRepository, RecordRepository, RemoteGate,
+    RepositoryError, SecretStore, SecretStoreError, SegmentRepository, SessionRepository,
+    SettingsRepository, SinkError, SourceFault, SourceFaultNotifier, Transcriber,
+    TranscriberFactory, TranscriptSink, TranscriptUpdate,
 };
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -511,14 +517,34 @@ impl TranscriberFactory for ScriptedTranscriberFactory {
     }
 }
 
-/// Analysis provider fake (behaviour scripted by US3/US5 tests as methods are added).
-#[derive(Debug)]
+/// Computes the answer of a [`ScriptedAnalysisProvider`] from the request it received.
+pub type AnalysisResponder =
+    Arc<dyn Fn(&AnalysisRequest) -> Result<AnalysisOutput, ProviderError> + Send + Sync>;
+
+/// Analysis provider driven by the test: answers can be queued or computed from the request,
+/// calls can be held to simulate a slow provider, and every request is recorded.
 pub struct ScriptedAnalysisProvider {
     descriptor: ProviderDescriptor,
+    script: Mutex<VecDeque<Result<AnalysisOutput, ProviderError>>>,
+    responder: Mutex<Option<AnalysisResponder>>,
+    requests: Mutex<Vec<AnalysisRequest>>,
+    held: AtomicBool,
+    released: Notify,
+    in_flight: AtomicUsize,
+    max_in_flight: AtomicUsize,
+}
+
+impl fmt::Debug for ScriptedAnalysisProvider {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ScriptedAnalysisProvider")
+            .field("descriptor", &self.descriptor)
+            .field("calls", &lock(&self.requests).len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl ScriptedAnalysisProvider {
-    /// Local analysis provider.
+    /// Local analysis provider answering with no proposals until scripted.
     #[must_use]
     pub fn local() -> Self {
         Self {
@@ -531,13 +557,128 @@ impl ScriptedAnalysisProvider {
                     DataCategory::Questions,
                 ],
             ),
+            script: Mutex::new(VecDeque::new()),
+            responder: Mutex::new(None),
+            requests: Mutex::new(Vec::new()),
+            held: AtomicBool::new(false),
+            released: Notify::new(),
+            in_flight: AtomicUsize::new(0),
+            max_in_flight: AtomicUsize::new(0),
         }
+    }
+
+    /// Queues the answer of the next call (queued answers win over the responder).
+    pub fn push(&self, answer: Result<AnalysisOutput, ProviderError>) {
+        lock(&self.script).push_back(answer);
+    }
+
+    /// Answers every call without a queued answer with `responder`.
+    pub fn respond_with(&self, responder: AnalysisResponder) {
+        *lock(&self.responder) = Some(responder);
+    }
+
+    /// Makes calls wait until [`Self::release`] or cancellation.
+    pub fn hold(&self) {
+        self.held.store(true, Ordering::SeqCst);
+    }
+
+    /// Lets held calls answer.
+    pub fn release(&self) {
+        self.held.store(false, Ordering::SeqCst);
+        self.released.notify_waiters();
+    }
+
+    /// Requests received so far.
+    #[must_use]
+    pub fn requests(&self) -> Vec<AnalysisRequest> {
+        lock(&self.requests).clone()
+    }
+
+    /// Calls received so far.
+    #[must_use]
+    pub fn call_count(&self) -> usize {
+        lock(&self.requests).len()
+    }
+
+    /// Most calls that were in flight at the same time.
+    #[must_use]
+    pub fn max_in_flight(&self) -> usize {
+        self.max_in_flight.load(Ordering::SeqCst)
+    }
+
+    fn answer(&self, request: &AnalysisRequest) -> Result<AnalysisOutput, ProviderError> {
+        if let Some(answer) = lock(&self.script).pop_front() {
+            return answer;
+        }
+        let responder = lock(&self.responder).clone();
+        responder.map_or_else(|| Ok(AnalysisOutput::default()), |respond| respond(request))
     }
 }
 
 impl AnalysisProvider for ScriptedAnalysisProvider {
     fn descriptor(&self) -> ProviderDescriptor {
         self.descriptor.clone()
+    }
+
+    fn analyze(
+        &self,
+        request: AnalysisRequest,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'_, Result<AnalysisOutput, ProviderError>> {
+        Box::pin(async move {
+            lock(&self.requests).push(request.clone());
+            let now = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+            self.max_in_flight.fetch_max(now, Ordering::SeqCst);
+            let result = loop {
+                let released = self.released.notified();
+                tokio::pin!(released);
+                released.as_mut().enable();
+                if cancel.is_cancelled() {
+                    break Err(ProviderError::Cancelled);
+                }
+                if !self.held.load(Ordering::SeqCst) {
+                    break self.answer(&request);
+                }
+                tokio::select! {
+                    () = cancel.cancelled() => break Err(ProviderError::Cancelled),
+                    () = released => {}
+                }
+            };
+            self.in_flight.fetch_sub(1, Ordering::SeqCst);
+            result
+        })
+    }
+}
+
+/// Factory handing out one shared [`ScriptedAnalysisProvider`].
+#[derive(Debug)]
+pub struct ScriptedAnalysisProviderFactory {
+    provider: Arc<ScriptedAnalysisProvider>,
+    unavailable: AtomicBool,
+}
+
+impl ScriptedAnalysisProviderFactory {
+    /// Factory returning `provider` for every configured provider.
+    #[must_use]
+    pub fn new(provider: Arc<ScriptedAnalysisProvider>) -> Self {
+        Self {
+            provider,
+            unavailable: AtomicBool::new(false),
+        }
+    }
+
+    /// Makes `create` fail with [`ProviderError::Unavailable`].
+    pub fn set_unavailable(&self, unavailable: bool) {
+        self.unavailable.store(unavailable, Ordering::SeqCst);
+    }
+}
+
+impl AnalysisProviderFactory for ScriptedAnalysisProviderFactory {
+    fn create(&self, _provider: &Provider) -> Result<Arc<dyn AnalysisProvider>, ProviderError> {
+        if self.unavailable.load(Ordering::SeqCst) {
+            return Err(ProviderError::Unavailable);
+        }
+        Ok(Arc::clone(&self.provider) as Arc<dyn AnalysisProvider>)
     }
 }
 
@@ -721,6 +862,139 @@ impl SegmentRepository for InMemorySegmentRepository {
             .map(|s| s.seq() + 1)
             .max()
             .unwrap_or(0))
+    }
+}
+
+/// In-memory record repository whose writes can be made to fail.
+#[derive(Debug, Default)]
+pub struct InMemoryRecordRepository {
+    records: Mutex<Vec<TechnicalRecord>>,
+    changes: Mutex<Vec<RecordChange>>,
+    fail_writes: Mutex<Option<RepositoryError>>,
+}
+
+impl InMemoryRecordRepository {
+    /// Stores `record` directly, with its creation entry.
+    pub fn seed(&self, record: TechnicalRecord) {
+        lock(&self.changes).push(record.creation());
+        lock(&self.records).push(record);
+    }
+
+    /// Makes `insert` and `update` fail with `error` (`None` restores them).
+    pub fn fail_writes_with(&self, error: Option<RepositoryError>) {
+        *lock(&self.fail_writes) = error;
+    }
+
+    /// Every stored record, in insertion order.
+    #[must_use]
+    pub fn all(&self) -> Vec<TechnicalRecord> {
+        lock(&self.records).clone()
+    }
+
+    /// Every history entry, in insertion order.
+    #[must_use]
+    pub fn changes(&self) -> Vec<RecordChange> {
+        lock(&self.changes).clone()
+    }
+
+    fn check_writable(&self) -> Result<(), RepositoryError> {
+        lock(&self.fail_writes).clone().map_or(Ok(()), Err)
+    }
+}
+
+impl RecordRepository for InMemoryRecordRepository {
+    fn insert(
+        &self,
+        record: &TechnicalRecord,
+        creation: &RecordChange,
+    ) -> Result<(), RepositoryError> {
+        self.check_writable()?;
+        let mut records = lock(&self.records);
+        if records.iter().any(|r| r.id() == record.id()) {
+            return Err(RepositoryError::Storage("duplicate id".into()));
+        }
+        records.push(record.clone());
+        lock(&self.changes).push(creation.clone());
+        Ok(())
+    }
+
+    fn update(
+        &self,
+        record: &TechnicalRecord,
+        changes: &[RecordChange],
+    ) -> Result<(), RepositoryError> {
+        self.check_writable()?;
+        let mut records = lock(&self.records);
+        let stored = records
+            .iter_mut()
+            .find(|r| r.id() == record.id())
+            .ok_or(RepositoryError::NotFound)?;
+        *stored = record.clone();
+        lock(&self.changes).extend_from_slice(changes);
+        Ok(())
+    }
+
+    fn get(&self, id: RecordId) -> Result<TechnicalRecord, RepositoryError> {
+        lock(&self.records)
+            .iter()
+            .find(|r| r.id() == id)
+            .cloned()
+            .ok_or(RepositoryError::NotFound)
+    }
+
+    fn list_by_session(&self, session: SessionId) -> Result<Vec<TechnicalRecord>, RepositoryError> {
+        Ok(lock(&self.records)
+            .iter()
+            .filter(|r| r.session_id() == session)
+            .cloned()
+            .collect())
+    }
+
+    fn history(&self, record: RecordId) -> Result<Vec<RecordChange>, RepositoryError> {
+        Ok(lock(&self.changes)
+            .iter()
+            .filter(|c| c.record_id() == record)
+            .cloned()
+            .collect())
+    }
+}
+
+/// In-memory analysis run repository.
+#[derive(Debug, Default)]
+pub struct InMemoryAnalysisRunRepository {
+    runs: Mutex<Vec<AnalysisRun>>,
+}
+
+impl InMemoryAnalysisRunRepository {
+    /// Every stored run, in insertion order.
+    #[must_use]
+    pub fn all(&self) -> Vec<AnalysisRun> {
+        lock(&self.runs).clone()
+    }
+}
+
+impl AnalysisRunRepository for InMemoryAnalysisRunRepository {
+    fn insert(&self, run: &AnalysisRun) -> Result<(), RepositoryError> {
+        lock(&self.runs).push(*run);
+        Ok(())
+    }
+
+    fn update(&self, run: &AnalysisRun) -> Result<(), RepositoryError> {
+        let mut runs = lock(&self.runs);
+        let stored = runs
+            .iter_mut()
+            .find(|r| r.id() == run.id())
+            .ok_or(RepositoryError::NotFound)?;
+        *stored = *run;
+        Ok(())
+    }
+
+    fn list_by_session(&self, session: SessionId) -> Result<Vec<AnalysisRun>, RepositoryError> {
+        Ok(lock(&self.runs)
+            .iter()
+            .filter(|r| r.session_id() == session)
+            .copied()
+            .collect())
     }
 }
 

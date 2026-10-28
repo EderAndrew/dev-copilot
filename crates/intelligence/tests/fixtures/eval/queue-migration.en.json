@@ -1,0 +1,24 @@
+{
+  "id": "queue-migration-en",
+  "language": "en",
+  "segments": [
+    "Let's go over the notification service migration.",
+    "We decided to replace the cron job with a message queue.",
+    "The queue will be RabbitMQ because ops already runs it.",
+    "Notifications must be delivered within thirty seconds.",
+    "Every notification must be retried at least three times on failure.",
+    "There's a risk that duplicate messages spam users during the cutover.",
+    "We still don't know who owns the dead letter queue.",
+    "Action item: write a consumer with idempotency keys.",
+    "Thanks everyone."
+  ],
+  "expected": [
+    { "kind": "decision", "keywords": ["queue"], "segments": [1, 2] },
+    { "kind": "decision", "keywords": ["rabbitmq"], "segments": [2] },
+    { "kind": "requirement", "keywords": ["thirty seconds"], "segments": [3] },
+    { "kind": "requirement", "keywords": ["retr"], "segments": [4] },
+    { "kind": "risk", "keywords": ["duplicate"], "segments": [5] },
+    { "kind": "open_question", "keywords": ["dead letter"], "segments": [6] },
+    { "kind": "task", "keywords": ["idempoten"], "segments": [7] }
+  ]
+}

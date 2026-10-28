@@ -163,5 +163,54 @@
     "download": "Download {{name}}",
     "downloading": "Downloading…",
     "use": "Use {{name}} for transcription"
+  },
+  "records": {
+    "title": "Technical records",
+    "empty": "Proposals from the analysis show up here as the conversation goes on.",
+    "badgesLabel": "Classification",
+    "kind": {
+      "requirement": "Requirement",
+      "decision": "Decision",
+      "risk": "Risk",
+      "open_question": "Open question",
+      "task": "Task",
+      "assumption": "Assumption"
+    },
+    "nature": {
+      "observed": "Observed",
+      "inferred": "Inferred",
+      "suggested": "Suggested"
+    },
+    "status": {
+      "proposed": "Proposed",
+      "confirmed": "Confirmed",
+      "rejected": "Rejected",
+      "pending": "Pending"
+    },
+    "action": {
+      "confirmed": "Confirm",
+      "rejected": "Reject",
+      "pending": "Mark as pending",
+      "proposed": "Back to proposed"
+    },
+    "actionsLabel": "Review: {{text}}",
+    "userCreated": "Created by you",
+    "conflict": "Conflicts with another record",
+    "duplicate": "Possible duplicate",
+    "rationale": "Rationale:",
+    "acceptanceCriteria": "Acceptance criteria",
+    "alternatives": "Alternatives",
+    "evidence": "Evidence:",
+    "noEvidence": "No evidence segment (inferred or suggested).",
+    "segmentNumber": "segment {{number}}",
+    "segmentIndex": "evidence {{index}}",
+    "analysis": {
+      "running": "Analysing new segments…",
+      "ok_one": "Analysis finished: {{count}} new proposal.",
+      "ok_other": "Analysis finished: {{count}} new proposals.",
+      "invalid_output": "The analysis reply was not in the expected format and was discarded. Existing records were kept.",
+      "provider_error": "The analysis failed. Existing records were kept; the segments will be analysed again next time.",
+      "rate_limited": "Analysis limit reached. Capture continues; new segments wait for the next allowed analysis."
+    }
   }
 }

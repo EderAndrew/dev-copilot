@@ -209,30 +209,40 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 
 ### Tests for User Story 3 (REQUIRED) ⚠️
 
-- [ ] T079 [P] [US3] Domain tests: record status transitions, `observed` requires evidence, AI actor cannot change existing records, user changes produce RecordChange, in `crates/domain/src/record.rs` test module
-- [ ] T080 [P] [US3] Output validation tests against `specs/001-meeting-sessions/contracts/analysis-output.schema.json` (unknown fields, observed without evidence, oversize, wrong version → InvalidOutput; evidence references keep the original segment text, never translated — FR-053b) in `crates/intelligence/tests/output_validation.rs`
-- [ ] T081 [P] [US3] Prompt-injection suite (≥ 20 cases pt-BR/en in `crates/intelligence/tests/fixtures/injection/`) asserting zero status changes, deletions or extra effects (SC-010) in `crates/application/tests/prompt_injection.rs`
-- [ ] T082 [P] [US3] Analysis service tests: scheduling (6 finals or 90 s, min 30 s, 1 in flight, hourly cap, per-session token cap → `rate_limited`), conflict → new proposed flagged, duplicate flagged, evidence ids from other sessions discarded, provider failure leaves records intact and capture unaffected, in `crates/application/tests/analysis_service.rs`
-- [ ] T083 [P] [US3] Evaluation harness with annotated non-confidential transcripts in `crates/intelligence/tests/fixtures/eval/` measuring (a) recall of explicit requirements/decisions ≥ 80%, (b) grounding: 100% of `observed` records cite supporting segments, (c) invented-item rate (records with no basis in the transcript), per SC-008 and Art. VI.6. Runs against the scripted provider by default (harness self-test) and against each reference provider (Ollama, remote) when `DEVCOPILOT_EVAL_PROVIDER` is set; results recorded in `docs/adr/ADR-003.md`, in `crates/intelligence/tests/evaluation.rs`
-- [ ] T084 [P] [US3] Record repository tests (insert proposed, apply user change with history, list) in `crates/persistence/tests/record_repo.rs`
-- [ ] T085 [P] [US3] Frontend tests: record cards show kind/nature/status/conflict badges, confirm/reject/pending via keyboard, in `apps/desktop/src/features/records/RecordCard.test.tsx`
+- [X] T079 [P] [US3] Domain tests: record status transitions, `observed` requires evidence, AI actor cannot change existing records, user changes produce RecordChange, in `crates/domain/src/record.rs` test module
+- [X] T080 [P] [US3] Output validation tests against `specs/001-meeting-sessions/contracts/analysis-output.schema.json` (unknown fields, observed without evidence, oversize, wrong version → InvalidOutput; evidence references keep the original segment text, never translated — FR-053b) in `crates/intelligence/tests/output_validation.rs`
+- [X] T081 [P] [US3] Prompt-injection suite (≥ 20 cases pt-BR/en in `crates/intelligence/tests/fixtures/injection/`) asserting zero status changes, deletions or extra effects (SC-010) in `crates/application/tests/prompt_injection.rs`
+- [X] T082 [P] [US3] Analysis service tests: scheduling (6 finals or 90 s, min 30 s, 1 in flight, hourly cap, per-session token cap → `rate_limited`), conflict → new proposed flagged, duplicate flagged, evidence ids from other sessions discarded, provider failure leaves records intact and capture unaffected, in `crates/application/tests/analysis_service.rs`
+- [X] T083 [P] [US3] Evaluation harness with annotated non-confidential transcripts in `crates/intelligence/tests/fixtures/eval/` measuring (a) recall of explicit requirements/decisions ≥ 80%, (b) grounding: 100% of `observed` records cite supporting segments, (c) invented-item rate (records with no basis in the transcript), per SC-008 and Art. VI.6. Runs against the scripted provider by default (harness self-test) and against each reference provider (Ollama, remote) when `DEVCOPILOT_EVAL_PROVIDER` is set; results recorded in `docs/adr/ADR-003.md`, in `crates/intelligence/tests/evaluation.rs`
+- [X] T084 [P] [US3] Record repository tests (insert proposed, apply user change with history, list) in `crates/persistence/tests/record_repo.rs`
+- [X] T085 [P] [US3] Frontend tests: record cards show kind/nature/status/conflict badges, confirm/reject/pending via keyboard, in `apps/desktop/src/features/records/RecordCard.test.tsx`
 
 ### Implementation for User Story 3
 
-- [ ] T086 [P] [US3] Implement TechnicalRecord, RecordKind (incl. assumption), Nature, RecordStatus, Origin, RecordFlags and transitions in `crates/domain/src/record.rs`
-- [ ] T087 [P] [US3] Implement RecordChange and AnalysisRun in `crates/domain/src/record_change.rs` and `crates/domain/src/analysis_run.rs`
-- [ ] T088 [US3] Implement RecordRepository and AnalysisRun repository in `crates/persistence/src/repos/record_repo.rs` and `crates/persistence/src/repos/analysis_run_repo.rs`
-- [ ] T089 [P] [US3] Implement prompt builder (delimited untrusted data, existing-record summary, session language, no tools) in `crates/intelligence/src/prompt.rs`
-- [ ] T090 [P] [US3] Implement JSON schema validation and conversion to domain proposals in `crates/intelligence/src/output_validation.rs` (embed schema from contracts)
-- [ ] T091 [US3] Implement Ollama `AnalysisProvider` (local `127.0.0.1` endpoint configured by user, timeouts, cancellation) in `crates/intelligence/src/ollama.rs`
-- [ ] T092 [US3] Implement `analysis_service` (scheduler, limits from settings, dedup by normalized text, create proposals only) in `crates/application/src/analysis_service.rs`
-- [ ] T093 [US3] Implement `record_service` (user status changes, history) in `crates/application/src/record_service.rs`
-- [ ] T094 [US3] Hook analysis scheduler into the session pipeline without blocking capture in `crates/application/src/capture_pipeline.rs`
-- [ ] T095 [US3] Implement commands `record_set_status` in `apps/desktop/src-tauri/src/commands/records.rs` and emit `record_proposed`/`analysis_status` events
-- [ ] T096 [P] [US3] Implement RecordsPanel and RecordCard (badges, evidence links scrolling to transcript segments, conflict/duplicate markers) in `apps/desktop/src/features/records/RecordsPanel.tsx` and `apps/desktop/src/features/records/RecordCard.tsx`
-- [ ] T097 [US3] Add US3 strings to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
+- [X] T086 [P] [US3] Implement TechnicalRecord, RecordKind (incl. assumption), Nature, RecordStatus, Origin, RecordFlags and transitions in `crates/domain/src/record.rs`
+- [X] T087 [P] [US3] Implement RecordChange and AnalysisRun in `crates/domain/src/record_change.rs` and `crates/domain/src/analysis_run.rs`
+- [X] T088 [US3] Implement RecordRepository and AnalysisRun repository in `crates/persistence/src/repos/record_repo.rs` and `crates/persistence/src/repos/analysis_run_repo.rs`
+- [X] T089 [P] [US3] Implement prompt builder (delimited untrusted data, existing-record summary, session language, no tools) in `crates/intelligence/src/prompt.rs`
+- [X] T090 [P] [US3] Implement JSON schema validation and conversion to domain proposals in `crates/intelligence/src/output_validation.rs` (embed schema from contracts)
+- [X] T091 [US3] Implement Ollama `AnalysisProvider` (local `127.0.0.1` endpoint configured by user, timeouts, cancellation) in `crates/intelligence/src/ollama.rs`
+- [X] T092 [US3] Implement `analysis_service` (scheduler, limits from settings, dedup by normalized text, create proposals only) in `crates/application/src/analysis_service.rs`
+- [X] T093 [US3] Implement `record_service` (user status changes, history) in `crates/application/src/record_service.rs`
+- [X] T094 [US3] Hook analysis scheduler into the session pipeline without blocking capture in `crates/application/src/capture_pipeline.rs`
+- [X] T095 [US3] Implement commands `record_set_status` in `apps/desktop/src-tauri/src/commands/records.rs` and emit `record_proposed`/`analysis_status` events
+- [X] T096 [P] [US3] Implement RecordsPanel and RecordCard (badges, evidence links scrolling to transcript segments, conflict/duplicate markers) in `apps/desktop/src/features/records/RecordsPanel.tsx` and `apps/desktop/src/features/records/RecordCard.tsx`
+- [X] T097 [US3] Add US3 strings to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
 
 **Checkpoint**: Live session produces reviewable structured proposals
+
+**Phase 5 notes** (2026-10-28):
+- T081 lives in `crates/intelligence/tests/prompt_injection.rs` (22 cases in `fixtures/injection/cases.json`) instead of `crates/application/tests/`: each attack runs through the real prompt builder and schema validation and then the real `AnalysisService` with in-memory stores; `application` cannot depend on `intelligence`.
+- T094: like the transcription stage (Phase 4 notes), analysis is hooked in `transcription.rs` (persisted finals go to an `AnalysisFeed` without waiting) and `session_service.rs` (attach on `capturing`; on stop or failure scheduling stops and a run in flight gets `DRAIN_DEADLINE` before it is cancelled) rather than `capture_pipeline.rs`.
+- New ports: `AnalysisProvider::analyze`, `AnalysisProviderFactory`, `RecordRepository` (`insert` with the creation entry, `update` with history, `get`, `list_by_session`, `history`) and `AnalysisRunRepository`. Runs and records start only in `capturing` (no analysis without an analysis provider; capture is unaffected).
+- Scheduling (R7): 6 finals or 90 s of speech, ≥ 30 s apart, one run in flight; the hourly cap is shared across sessions (in memory) and the token budget is per session and provider (from provider-reported usage). A capped run is recorded once as `rate_limited`; failed runs (`provider_error`, `invalid_output`) keep their segments pending for the next run; at most 60 segments per run.
+- Proposal rules: evidence outside the session is dropped and an `observed` proposal left without evidence becomes `inferred`; `relatesTo` to a record of the session sets `duplicate_of`/`conflicts_with` (`refines` sets nothing); a proposal with the same normalized text and kind as an existing record is grouped (not created) — FR-027.
+- `RecordDto` defined in `contracts/ipc-commands.md`; fixtures `RecordDto/`, `RecordSetStatusDto/`, `SessionEvent/record-proposed.json`. Records reach the UI through `record_proposed` and command results only; a reconnect does not replay them until `session_get` returns them (US4).
+- Remote analysis adapters (Anthropic, OpenAI-compatible) and the `RemoteGate` check arrive with US7; `AnalysisAdapterFactory` returns `Unavailable` for them meanwhile.
+- T083: the harness runs as a self-test by default; ADR-003 keeps the reference-provider table pending (no Ollama on the implementation machine).
 
 ---
 

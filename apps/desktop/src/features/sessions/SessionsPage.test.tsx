@@ -45,6 +45,15 @@ const idle: SessionDto = {
   activeDurationMs: 0,
 };
 
+/** The capture indicator's live region (the records panel has its own). */
+function captureStatus(): HTMLElement {
+  const status = screen
+    .getAllByRole("status")
+    .find((element) => element.querySelector("[aria-hidden='true']"));
+  if (!status) throw new Error("capture indicator not found");
+  return status;
+}
+
 function setup(overrides: Partial<SettingsDto> = {}) {
   let emit: (event: SessionEvent) => void = () => undefined;
   const client = {
@@ -55,6 +64,7 @@ function setup(overrides: Partial<SettingsDto> = {}) {
     settingsGet: vi.fn(() => Promise.resolve({ ...settings, ...overrides })),
     settingsUpdate: vi.fn(() => Promise.resolve(settings)),
     sessionCreate: vi.fn(() => Promise.resolve(idle)),
+    recordSetStatus: vi.fn(() => Promise.reject(new Error("unused"))),
     sessionStart: vi.fn(() =>
       Promise.resolve({ ...idle, state: "starting" as const }),
     ),
@@ -132,9 +142,7 @@ describe("SessionsPage", () => {
       paused: false,
       sources: ["microphone"],
     });
-    expect(screen.getByRole("status").textContent).toContain(
-      "Capturando: Microfone",
-    );
+    expect(captureStatus().textContent).toContain("Capturando: Microfone");
 
     await user.click(screen.getByRole("button", { name: "Parar captura" }));
     expect(client.sessionStop).toHaveBeenCalledWith("s1");
@@ -147,7 +155,7 @@ describe("SessionsPage", () => {
     });
     emit({ type: "state_changed", seq: 5, state: "stopping" });
     emit({ type: "state_changed", seq: 6, state: "ended" });
-    expect(screen.getByRole("status").textContent).toContain("Sem captura");
+    expect(captureStatus().textContent).toContain("Sem captura");
     expect(screen.getByText("encerrada")).toBeTruthy();
   });
 

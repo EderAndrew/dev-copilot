@@ -13,6 +13,8 @@ import type {
   PermissionHelpDto,
   PermissionState,
   ProviderDto,
+  RecordDto,
+  RecordSetStatusDto,
   ProviderSetDefaultDto,
   ProviderUpsertDto,
   SessionCreateDto,
@@ -106,6 +108,9 @@ export const ipc = {
       channel,
     });
   },
+  /** Changes a record's status by explicit user action (FR-024). */
+  recordSetStatus: (request: RecordSetStatusDto) =>
+    call<RecordDto>("record_set_status", { request }),
   audioSourcesList: () => call<AudioSourceDto[]>("audio_sources_list"),
   audioPermissionRequest: (kind: AudioSourceKind) =>
     call<PermissionState>("audio_permission_request", { request: { kind } }),

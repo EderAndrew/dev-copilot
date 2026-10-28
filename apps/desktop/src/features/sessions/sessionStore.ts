@@ -8,9 +8,16 @@ import type { IpcClient } from "../../ipc/client";
 import type {
   AudioSourceKind,
   Locality,
+  RecordDto,
   SessionDto,
   SessionEvent,
 } from "../../ipc/types";
+import {
+  applyRecordEvent,
+  emptyRecords,
+  upsertRecord,
+  type RecordsState,
+} from "../records/recordState";
 import {
   applyTranscriptEvent,
   emptyTranscript,
@@ -39,11 +46,14 @@ export type SessionViewState = {
   transcript: TranscriptState;
   /** Provider used per stage, from `provider_in_use` (FR-050). */
   providers: Partial<Record<ProviderStage, ProviderInUse>>;
+  /** Technical records and the latest analysis status (US3). */
+  records: RecordsState;
 };
 
 export type SessionAction =
   | { type: "loaded"; session: SessionDto }
   | { type: "event"; event: SessionEvent }
+  | { type: "recordUpdated"; record: RecordDto }
   | { type: "cleared" };
 
 export const INDICATOR_OFF: CaptureIndicatorState = {
@@ -60,6 +70,7 @@ export const initialSessionState: SessionViewState = {
   storageErrorKey: null,
   transcript: emptyTranscript,
   providers: {},
+  records: emptyRecords,
 };
 
 function applyEvent(
@@ -71,6 +82,7 @@ function applyEvent(
     ...state,
     lastSeq: event.seq,
     transcript: applyTranscriptEvent(state.transcript, event),
+    records: applyRecordEvent(state.records, event),
   };
   switch (event.type) {
     case "state_changed":
@@ -112,7 +124,7 @@ function applyEvent(
         },
       };
     default:
-      // Transcript events are folded in above; analysis events arrive with US3.
+      // Transcript and record events are folded in above.
       return next;
   }
 }
@@ -131,6 +143,10 @@ export function sessionReducer(
     }
     case "event":
       return applyEvent(state, action.event);
+    case "recordUpdated":
+      return action.record.sessionId === state.session?.id
+        ? { ...state, records: upsertRecord(state.records, action.record) }
+        : state;
     case "cleared":
       return initialSessionState;
   }
@@ -175,6 +191,11 @@ export function useSessionStore(client: StoreClient) {
     if (trackedId.current) void subscribe(trackedId.current);
   }, [subscribe]);
 
+  /** Applies a record returned by a command (e.g. `record_set_status`). */
+  const updateRecord = useCallback((record: RecordDto) => {
+    dispatch({ type: "recordUpdated", record });
+  }, []);
+
   const clear = useCallback(() => {
     trackedId.current = null;
     dispatch({ type: "cleared" });
@@ -192,7 +213,7 @@ export function useSessionStore(client: StoreClient) {
     };
   }, [refresh]);
 
-  return { state, track, refresh, clear };
+  return { state, track, refresh, clear, updateRecord };
 }
 
 export type SessionStore = ReturnType<typeof useSessionStore>;

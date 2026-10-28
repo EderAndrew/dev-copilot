@@ -1,0 +1,16 @@
+{
+  "id": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a92",
+  "sessionId": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a70",
+  "kind": "decision",
+  "text": "Usar Postgres",
+  "nature": "suggested",
+  "status": "confirmed",
+  "rationale": "",
+  "origin": "user",
+  "evidence": [],
+  "acceptanceCriteria": [],
+  "alternatives": ["SQLite"],
+  "duplicateOf": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a93",
+  "createdAt": 1761600000000,
+  "updatedAt": 1761600060000
+}

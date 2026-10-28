@@ -2,7 +2,10 @@
 //! FR-039a, FR-045a). Pause and resume arrive with US9 (T145).
 //!
 //! While capturing, the audio queue feeds the session's [`Transcription`], which persists
-//! finals and gaps as they arrive (US2).
+//! finals and gaps as they arrive (US2) and announces finals to the session's incremental
+//! analysis (US3). Analysis never holds up capture: it starts with capture when an analysis
+//! provider is usable, stops scheduling when capture ends, and a run still in flight gets
+//! [`DRAIN_DEADLINE`] before it is cancelled.
 //!
 //! Controls never wait for audio or providers (SC-006): `start` checks the preconditions,
 //! moves the session to `starting` and returns while a background task asks for permission and
@@ -24,6 +27,7 @@ use devcopilot_domain::transcript::GapReason;
 use tokio::runtime::Handle;
 use tokio_util::sync::CancellationToken;
 
+use crate::analysis_service::{AnalysisService, SessionAnalysis};
 use crate::capture_pipeline::{CapturePipeline, FaultStream, OpenError, indicator};
 use crate::error::ApplicationError;
 use crate::events::{ProviderStage, SessionEvent, SourceStatus};
@@ -61,6 +65,8 @@ pub struct SessionDeps {
     pub clock: Arc<dyn Clock>,
     /// Session event delivery.
     pub events: Arc<dyn EventPublisher>,
+    /// Incremental analysis; `None` runs capture without it.
+    pub analysis: Option<AnalysisService>,
 }
 
 /// Input of [`SessionService::create`].
@@ -90,6 +96,7 @@ struct Active {
     cancel: CancellationToken,
     pipeline: Option<CapturePipeline>,
     transcription: Option<Transcription>,
+    analysis: Option<SessionAnalysis>,
 }
 
 struct Inner {
@@ -276,6 +283,7 @@ impl SessionService {
             cancel: cancel.clone(),
             pipeline: None,
             transcription: None,
+            analysis: None,
         });
         inner.publish_state(&session);
         drop(active);
@@ -339,15 +347,19 @@ impl SessionService {
         inner.persist(&session);
         inner.publish_state(&session);
         let transcription = active.transcription.take();
+        let analysis = active.analysis.take();
         drop(guard);
         tracing::info!(session = %id, "session stopping");
         match (Handle::try_current(), transcription) {
             (Ok(runtime), transcription) => {
-                runtime.spawn(Arc::clone(inner).drain(id, transcription));
+                runtime.spawn(Arc::clone(inner).drain(id, transcription, analysis));
             }
             (Err(_), transcription) => {
                 if let Some(transcription) = transcription {
                     transcription.abort(Some(GapReason::CancelledOnStop));
+                }
+                if let Some(analysis) = analysis {
+                    analysis.finish(DRAIN_DEADLINE);
                 }
                 inner.finish_drain(id);
             }
@@ -466,6 +478,9 @@ impl Inner {
             .then_some(GapReason::SourceLost);
             transcription.abort(gap);
         }
+        if let Some(analysis) = active.analysis.take() {
+            analysis.finish(DRAIN_DEADLINE);
+        }
         if active.session.fail(reason, self.deps.clock.now()).is_err() {
             return;
         }
@@ -546,6 +561,11 @@ impl Inner {
         let descriptor = transcriber.descriptor();
         let sources = pipeline.active_sources();
         active.pipeline = Some(pipeline);
+        active.analysis = self
+            .deps
+            .analysis
+            .as_ref()
+            .and_then(|analysis| analysis.attach(&active.session));
         active.transcription = Some(Transcription::spawn(
             TranscriptionDeps {
                 session_id: id,
@@ -557,6 +577,7 @@ impl Inner {
                 segments: Arc::clone(&self.deps.segments),
                 events: Arc::clone(&self.deps.events),
                 on_fatal: self.fatal_handler(id, cancel.clone()),
+                analysis: active.analysis.as_ref().map(SessionAnalysis::feed),
             },
             streams.chunks,
         ));
@@ -676,10 +697,19 @@ impl Inner {
         }
     }
 
-    /// Background part of `stop`.
-    async fn drain(self: Arc<Self>, id: SessionId, transcription: Option<Transcription>) {
+    /// Background part of `stop`. Analysis keeps receiving the finals of the drain, then
+    /// stops scheduling.
+    async fn drain(
+        self: Arc<Self>,
+        id: SessionId,
+        transcription: Option<Transcription>,
+        analysis: Option<SessionAnalysis>,
+    ) {
         if let Some(transcription) = transcription {
             transcription.drain(DRAIN_DEADLINE).await;
+        }
+        if let Some(analysis) = analysis {
+            analysis.finish(DRAIN_DEADLINE);
         }
         self.finish_drain(id);
     }

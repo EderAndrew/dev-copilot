@@ -17,6 +17,8 @@
 //!   session fails as `no_transcriber`.
 //! - A storage failure publishes `storage_error` and fails the session as `storage_error`;
 //!   what was already stored stays (US2.3).
+//! - Each persisted final is announced to the session's incremental analysis without waiting
+//!   (FR-028).
 //!
 //! Offsets are relative to the session start: chunks are shifted by the capture's offset base
 //! before the transcriber sees them, so its updates already carry session offsets.
@@ -33,6 +35,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+use crate::analysis_service::AnalysisFeed;
 use crate::events::{FinalSegment, SessionEvent};
 use crate::ports::{
     AudioChunk, AudioChunkStream, EventPublisher, ProviderError, SAMPLE_RATE_HZ, SegmentRepository,
@@ -78,6 +81,8 @@ pub struct TranscriptionDeps {
     pub events: Arc<dyn EventPublisher>,
     /// Fails the session.
     pub on_fatal: FatalHandler,
+    /// Incremental analysis of the session, when an analysis provider is usable.
+    pub analysis: Option<AnalysisFeed>,
 }
 
 fn chunk_duration(chunk: &AudioChunk) -> Duration {
@@ -111,6 +116,7 @@ struct Recorder {
     segments: Arc<dyn SegmentRepository>,
     events: Arc<dyn EventPublisher>,
     on_fatal: FatalHandler,
+    analysis: Option<AnalysisFeed>,
     progress: Mutex<Progress>,
 }
 
@@ -171,14 +177,19 @@ impl Recorder {
         progress.next_seq += 1;
         progress.finalized_end = progress.finalized_end.max(segment.end());
         let event = match segment.kind() {
-            SegmentKind::Final { text } => SessionEvent::FinalSegment(FinalSegment {
-                id: segment.id(),
-                seq: segment.seq(),
-                source: segment.source(),
-                start: segment.start(),
-                end: segment.end(),
-                text: text.clone(),
-            }),
+            SegmentKind::Final { text } => {
+                if let Some(analysis) = &self.analysis {
+                    analysis.final_persisted(segment.seq(), segment.duration());
+                }
+                SessionEvent::FinalSegment(FinalSegment {
+                    id: segment.id(),
+                    seq: segment.seq(),
+                    source: segment.source(),
+                    start: segment.start(),
+                    end: segment.end(),
+                    text: text.clone(),
+                })
+            }
             SegmentKind::Gap { reason } => SessionEvent::Gap {
                 reason: *reason,
                 start: segment.start(),
@@ -333,6 +344,7 @@ impl Transcription {
             segments: deps.segments,
             events: deps.events,
             on_fatal: deps.on_fatal,
+            analysis: deps.analysis,
             progress: Mutex::new(Progress {
                 next_seq: deps.first_seq,
                 captured_end: deps.offset_base,

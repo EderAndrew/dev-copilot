@@ -24,6 +24,7 @@ whisper-rs.workspace = true
 test-support = []
 
 [dev-dependencies]
+devcopilot-application = { workspace = true, features = ["test-support"] }
 devcopilot-intelligence = { path = ".", features = ["test-support"] }
 tempfile.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }

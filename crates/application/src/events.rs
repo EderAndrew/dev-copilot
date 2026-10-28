@@ -1,12 +1,13 @@
 //! Session events (contracts/ipc-events.md), expressed with domain types.
 //!
-//! The composition root assigns `seq` and maps these to the IPC JSON shape. `record_proposed`
-//! and `question_answered` are added with US3 (T095) and US5 (T116).
+//! The composition root assigns `seq` and maps these to the IPC JSON shape.
+//! `question_answered` is added with US5 (T116).
 
 use devcopilot_domain::Redacted;
 use devcopilot_domain::audio_source::AudioSourceKind;
 use devcopilot_domain::ids::{AnalysisRunId, ProviderId, SegmentId};
 use devcopilot_domain::provider::Locality;
+use devcopilot_domain::record::TechnicalRecord;
 use devcopilot_domain::session::{FailureReason, SessionState};
 use devcopilot_domain::text::SegmentText;
 use devcopilot_domain::time::Duration;
@@ -122,6 +123,8 @@ pub enum SessionEvent {
         /// Status.
         status: AnalysisStatus,
     },
+    /// Analysis created a proposed record.
+    RecordProposed(Box<TechnicalRecord>),
     /// Provider used for a stage (emitted at start and on every change).
     ProviderInUse {
         /// Stage.
