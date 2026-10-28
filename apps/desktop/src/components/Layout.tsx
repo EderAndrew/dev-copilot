@@ -4,9 +4,9 @@ import { useTranslation } from "react-i18next";
 import { LANGUAGES } from "../i18n";
 import type { UiLanguage } from "../ipc/types";
 
-export type Page = "sessions" | "providers" | "settings";
+export type Page = "sessions" | "history" | "providers" | "settings";
 
-const PAGES: readonly Page[] = ["sessions", "providers", "settings"];
+const PAGES: readonly Page[] = ["sessions", "history", "providers", "settings"];
 
 type LayoutProps = {
   page: Page;

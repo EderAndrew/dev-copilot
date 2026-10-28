@@ -11,9 +11,12 @@ use devcopilot_desktop_lib::commands::audio::{AudioSourceDto, PermissionHelpDto}
 use devcopilot_desktop_lib::commands::providers::{
     JobIdDto, LocalModelDownloadDto, ProviderDto, ProviderSetDefaultDto, ProviderUpsertDto,
 };
-use devcopilot_desktop_lib::commands::records::{RecordDto, RecordSetStatusDto};
+use devcopilot_desktop_lib::commands::records::{
+    PlanDto, RecordCreateDto, RecordDto, RecordEditDto, RecordSetStatusDto, RunIdDto,
+};
 use devcopilot_desktop_lib::commands::sessions::{
-    SessionCreateDto, SessionDto, SessionIdDto, SessionStartDto,
+    SessionCreateDto, SessionDetailDto, SessionDto, SessionIdDto, SessionListDto, SessionPageDto,
+    SessionRenameDto, SessionStartDto,
 };
 use devcopilot_desktop_lib::commands::settings::{SettingsDto, SettingsUpdateDto};
 use devcopilot_desktop_lib::events::IpcSessionEvent;
@@ -99,6 +102,18 @@ fn audio_sources() {
 fn records() {
     assert_round_trip::<RecordDto>("RecordDto");
     assert_round_trip::<RecordSetStatusDto>("RecordSetStatusDto");
+    assert_round_trip::<RecordEditDto>("RecordEditDto");
+    assert_round_trip::<RecordCreateDto>("RecordCreateDto");
+    assert_round_trip::<PlanDto>("PlanDto");
+    assert_round_trip::<RunIdDto>("RunIdDto");
+}
+
+#[test]
+fn session_history() {
+    assert_round_trip::<SessionListDto>("SessionListDto");
+    assert_round_trip::<SessionPageDto>("SessionPageDto");
+    assert_round_trip::<SessionRenameDto>("SessionRenameDto");
+    assert_round_trip::<SessionDetailDto>("SessionDetailDto");
 }
 
 #[test]
@@ -116,15 +131,23 @@ fn every_fixture_directory_is_covered() {
         "LocalModelDto",
         "ModelDownloadEvent",
         "PermissionHelpDto",
+        "PlanDto",
         "ProviderDto",
         "ProviderSetDefaultDto",
         "ProviderUpsertDto",
+        "RecordCreateDto",
         "RecordDto",
+        "RecordEditDto",
         "RecordSetStatusDto",
+        "RunIdDto",
         "SessionCreateDto",
+        "SessionDetailDto",
         "SessionDto",
         "SessionEvent",
         "SessionIdDto",
+        "SessionListDto",
+        "SessionPageDto",
+        "SessionRenameDto",
         "SessionStartDto",
         "SettingsDto",
         "SettingsUpdateDto",

@@ -254,22 +254,30 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 
 ### Tests for User Story 4 (REQUIRED) ⚠️
 
-- [ ] T098 [P] [US4] Plan derivation tests (grouping by kind, ordering by status/date, user-origin marking) in `crates/application/tests/plan_view.rs`
-- [ ] T099 [P] [US4] Tests for user edits/manual records with history and final analysis only on ended/failed sessions (FR-033) in `crates/application/tests/record_edits.rs`
-- [ ] T100 [P] [US4] Persistence round-trip test (create session with segments/records, reopen DB, compare) in `crates/persistence/tests/round_trip.rs`
-- [ ] T101 [P] [US4] Frontend tests for SessionHistory (list, open, failed badge) and PlanView editing via keyboard in `apps/desktop/src/features/sessions/SessionHistory.test.tsx` and `apps/desktop/src/features/records/PlanView.test.tsx`
+- [X] T098 [P] [US4] Plan derivation tests (grouping by kind, ordering by status/date, user-origin marking) in `crates/application/tests/plan_view.rs`
+- [X] T099 [P] [US4] Tests for user edits/manual records with history and final analysis only on ended/failed sessions (FR-033) in `crates/application/tests/record_edits.rs`
+- [X] T100 [P] [US4] Persistence round-trip test (create session with segments/records, reopen DB, compare) in `crates/persistence/tests/round_trip.rs`
+- [X] T101 [P] [US4] Frontend tests for SessionHistory (list, open, failed badge) and PlanView editing via keyboard in `apps/desktop/src/features/sessions/SessionHistory.test.tsx` and `apps/desktop/src/features/records/PlanView.test.tsx`
 
 ### Implementation for User Story 4
 
-- [ ] T102 [US4] Implement plan view assembly (DevelopmentPlan) in `crates/application/src/plan.rs`
-- [ ] T103 [US4] Extend `record_service` with edit text/rationale/criteria/alternatives and manual creation (origin user) in `crates/application/src/record_service.rs`
-- [ ] T104 [US4] Implement final analysis trigger in `crates/application/src/analysis_service.rs`
-- [ ] T105 [US4] Implement commands `plan_get`, `record_edit`, `record_create`, `analysis_run_final`, `session_list` (cursor pagination), `session_get`, `session_rename` in `apps/desktop/src-tauri/src/commands/records.rs` and `apps/desktop/src-tauri/src/commands/sessions.rs`
-- [ ] T106 [P] [US4] Implement PlanView (sections per kind, status filters, inline edit, add item) in `apps/desktop/src/features/records/PlanView.tsx`
-- [ ] T107 [P] [US4] Implement SessionHistory and SessionDetail pages (title, date, active duration, state, failure reason) in `apps/desktop/src/features/sessions/SessionHistory.tsx` and `apps/desktop/src/features/sessions/SessionDetail.tsx`
-- [ ] T108 [US4] Add US4 strings to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
+- [X] T102 [US4] Implement plan view assembly (DevelopmentPlan) in `crates/application/src/plan.rs`
+- [X] T103 [US4] Extend `record_service` with edit text/rationale/criteria/alternatives and manual creation (origin user) in `crates/application/src/record_service.rs`
+- [X] T104 [US4] Implement final analysis trigger in `crates/application/src/analysis_service.rs`
+- [X] T105 [US4] Implement commands `plan_get`, `record_edit`, `record_create`, `analysis_run_final`, `session_list` (cursor pagination), `session_get`, `session_rename` in `apps/desktop/src-tauri/src/commands/records.rs` and `apps/desktop/src-tauri/src/commands/sessions.rs`
+- [X] T106 [P] [US4] Implement PlanView (sections per kind, status filters, inline edit, add item) in `apps/desktop/src/features/records/PlanView.tsx`
+- [X] T107 [P] [US4] Implement SessionHistory and SessionDetail pages (title, date, active duration, state, failure reason) in `apps/desktop/src/features/sessions/SessionHistory.tsx` and `apps/desktop/src/features/sessions/SessionDetail.tsx`
+- [X] T108 [US4] Add US4 strings to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
 
 **Checkpoint**: Full P1 core loop: capture → transcript → proposals → plan review → history
+
+**Phase 6 notes** (2026-10-28):
+- Plan (T102): derived on demand by `DevelopmentPlan::assemble`; always six sections in the order task, requirement, decision, assumption, risk, open_question (empty ones included), items by status (`confirmed`, `pending`, `proposed`, `rejected`) then creation. Served by `RecordService::plan` / `plan_get`.
+- Edits (T103): `TechnicalRecord::edit` writes one `RecordChange` per field that actually changed (lists stored in the history one item per line); status is untouched; an empty edit is `invalid_input`. User records (`record_create`) are `origin = user`, `nature = suggested`, any initial status, no evidence. `RecordService` now also takes the `SessionRepository` (unknown session → `not_found`).
+- Final analysis (T104): `AnalysisService::run_final` — only `ended`/`failed`, one at a time per session (`invalid_state`), `provider_error` without a usable analysis provider; sends up to 400 most recent finals plus the record summary; counts against the hourly cap (a capped request is recorded and reported as `rate_limited`); the per-session token budget is not tracked across restarts, so it does not apply. Results arrive as session events; `SessionDetail` subscribes for ended/failed sessions.
+- History (T105): `session_list` pages in the service (`cursor` = last id of the previous page, default 50, max 100); `session_get` returns `{ session, transcript, records }` (questions join with US5); `session_rename` also renames the active session in memory. New contract fixtures for every new DTO.
+- The live session store now loads records through `session_get` after each (re)subscription, closing the Phase 5 gap where a reconnect lost earlier proposals.
+- A new "Histórico" navigation entry hosts `SessionHistory` → `SessionDetail` (rename, failure reason, transcript, plan, final analysis).
 
 ---
 

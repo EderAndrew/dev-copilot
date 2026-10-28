@@ -6,6 +6,7 @@
   "nav": {
     "label": "Navegação principal",
     "sessions": "Sessões",
+    "history": "Histórico",
     "providers": "Provedores",
     "settings": "Configurações"
   },
@@ -212,5 +213,43 @@
       "provider_error": "A análise falhou. Os registros existentes foram preservados; os trechos serão analisados de novo na próxima vez.",
       "rate_limited": "Limite de análises atingido. A captura continua; os trechos novos aguardam a próxima análise permitida."
     }
+  },
+  "history": {
+    "title": "Sessões salvas",
+    "empty": "Nenhuma sessão salva ainda.",
+    "duration": "Duração: {{duration}}",
+    "more": "Carregar mais"
+  },
+  "detail": {
+    "back": "Voltar ao histórico",
+    "rename": "Renomear",
+    "createdAt": "Criada em",
+    "activeDuration": "Duração ativa",
+    "active": "Esta sessão ainda está em andamento; acompanhe-a na página Sessões.",
+    "runFinal": "Executar análise final"
+  },
+  "plan": {
+    "title": "Plano de desenvolvimento",
+    "filter": "Mostrar status",
+    "section": {
+      "task": "Tarefas técnicas",
+      "requirement": "Requisitos",
+      "decision": "Decisões",
+      "assumption": "Premissas",
+      "risk": "Riscos",
+      "open_question": "Perguntas em aberto"
+    },
+    "sectionEmpty": "Nenhum item.",
+    "edit": "Editar",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "text": "Texto",
+    "rationale": "Justificativa",
+    "criteriaHint": "Critérios de aceitação (um por linha)",
+    "alternativesHint": "Alternativas (uma por linha)",
+    "addTitle": "Adicionar item ao plano",
+    "kind": "Tipo",
+    "initialStatus": "Status",
+    "add": "Adicionar"
   }
 }

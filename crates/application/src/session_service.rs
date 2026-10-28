@@ -23,7 +23,7 @@ use devcopilot_domain::ids::SessionId;
 use devcopilot_domain::language::SessionLanguage;
 use devcopilot_domain::session::{FailureReason, Session, SessionState};
 use devcopilot_domain::text::Title;
-use devcopilot_domain::transcript::GapReason;
+use devcopilot_domain::transcript::{GapReason, TranscriptSegment};
 use tokio::runtime::Handle;
 use tokio_util::sync::CancellationToken;
 
@@ -67,6 +67,18 @@ pub struct SessionDeps {
     pub events: Arc<dyn EventPublisher>,
     /// Incremental analysis; `None` runs capture without it.
     pub analysis: Option<AnalysisService>,
+}
+
+/// Largest page of [`SessionService::list_page`].
+pub const MAX_PAGE_SIZE: usize = 100;
+
+/// One page of sessions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionPage {
+    /// Sessions, newest first.
+    pub items: Vec<Session>,
+    /// Cursor of the next page, when there is one.
+    pub next_cursor: Option<SessionId>,
 }
 
 /// Input of [`SessionService::create`].
@@ -206,6 +218,76 @@ impl SessionService {
     /// [`ApplicationError::Storage`].
     pub fn list(&self) -> Result<Vec<Session>, ApplicationError> {
         Ok(self.inner.deps.sessions.list()?)
+    }
+
+    /// One page of sessions, newest first, starting after `cursor` (the last id of the
+    /// previous page).
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::InvalidInput`] when `limit` is outside `1..=`[`MAX_PAGE_SIZE`] or
+    /// `cursor` names no session; [`ApplicationError::Storage`].
+    pub fn list_page(
+        &self,
+        cursor: Option<SessionId>,
+        limit: usize,
+    ) -> Result<SessionPage, ApplicationError> {
+        if !(1..=MAX_PAGE_SIZE).contains(&limit) {
+            return Err(ApplicationError::InvalidInput {
+                field: "limit",
+                problem: "out_of_range",
+            });
+        }
+        let sessions = self.list()?;
+        let start = match cursor {
+            None => 0,
+            Some(cursor) => {
+                sessions
+                    .iter()
+                    .position(|session| session.id() == cursor)
+                    .ok_or(ApplicationError::InvalidInput {
+                        field: "cursor",
+                        problem: "unknown",
+                    })?
+                    + 1
+            }
+        };
+        let items: Vec<Session> = sessions.into_iter().skip(start).take(limit + 1).collect();
+        let more = items.len() > limit;
+        let items: Vec<Session> = items.into_iter().take(limit).collect();
+        let next_cursor = more.then(|| items.last().map(Session::id)).flatten();
+        Ok(SessionPage { items, next_cursor })
+    }
+
+    /// Renames a session, active or not.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::NotFound`]; [`ApplicationError::Storage`].
+    pub fn rename(&self, id: SessionId, title: Title) -> Result<Session, ApplicationError> {
+        let mut guard = self.inner.lock();
+        if let Some(active) = guard.as_mut().filter(|a| a.session.id() == id) {
+            let mut renamed = active.session.clone();
+            renamed.rename(title);
+            self.inner.deps.sessions.update(&renamed)?;
+            active.session = renamed.clone();
+            return Ok(renamed);
+        }
+        drop(guard);
+        let mut session = self.inner.deps.sessions.get(id)?;
+        session.rename(title);
+        self.inner.deps.sessions.update(&session)?;
+        Ok(session)
+    }
+
+    /// Persisted finals and gaps of a session, in `seq` order.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::NotFound`]; [`ApplicationError::Storage`].
+    pub fn transcript(&self, id: SessionId) -> Result<Vec<TranscriptSegment>, ApplicationError> {
+        self.get(id)?;
+        Ok(self.inner.deps.segments.list_by_session(id)?)
     }
 
     /// Starts capture by explicit user action (FR-002).

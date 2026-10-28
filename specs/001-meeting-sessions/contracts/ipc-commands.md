@@ -37,8 +37,8 @@ type IpcError = {
 | `session_pause` | `{ sessionId }` | `SessionDto` | `invalid_state` |
 | `session_resume` | `{ sessionId }` | `SessionDto` | `invalid_state`, `permission_denied`, `source_unavailable`, `no_transcriber` |
 | `session_stop` | `{ sessionId }` | `SessionDto` (estado `stopping`) — retorna sem aguardar drenagem | `invalid_state` |
-| `session_list` | `{ cursor?: string, limit?: 1..100 }` | `{ items: SessionSummaryDto[], nextCursor? }` | — |
-| `session_get` | `{ sessionId }` | `SessionDetailDto` (sessão + segmentos finais + registros + perguntas) | `not_found` |
+| `session_list` | `{ cursor?: string, limit?: 1..100 }` (padrão 50; `cursor` = último id da página anterior) | `{ items: SessionDto[], nextCursor? }`, mais recentes primeiro | `invalid_input` (limite fora da faixa, cursor desconhecido) |
+| `session_get` | `{ sessionId }` | `SessionDetailDto` = `{ session: SessionDto, transcript: TranscriptItemDto[], records: RecordDto[] }`; `TranscriptItemDto` = `{ type: "final", segment: SegmentDto }` \| `{ type: "gap", reason, startMs, durationMs }` em ordem de `seq`; perguntas entram com US5 | `not_found` |
 | `session_rename` | `{ sessionId, title }` | `SessionDto` | `invalid_input` |
 | `session_delete` | `{ sessionId, confirmed: true }` | `{}` | `invalid_state` (sessão ativa, FR-044) |
 | `session_subscribe` | `{ sessionId }` + argumento de topo `channel: Channel<SessionEvent>` (Tauri só aceita `Channel` como argumento de comando, não dentro de `request`) | `SessionDto` atual (para ressincronizar ao reconectar) | `not_found` |
@@ -58,13 +58,18 @@ analysisRunId?, evidence: string[] (ids de trechos), acceptanceCriteria: string[
 conflictsWith?, duplicateOf?, createdAt, updatedAt }`. Evidências são ids de trechos persistidos; o texto citado
 vem sempre do trecho original (FR-053b). Exemplos em `fixtures/RecordDto/`.
 
+`PlanDto`: `{ sessionId, sections: { kind, items: RecordDto[] }[] }` — uma seção por tipo, sempre na ordem
+`task`, `requirement`, `decision`, `assumption`, `risk`, `open_question` (vazias incluídas); itens por status
+(`confirmed`, `pending`, `proposed`, `rejected`) e data de criação. Registros do usuário são criados com
+`nature = suggested` e identificados por `origin = "user"`.
+
 | Comando | Entrada | Saída | Regras |
 |---------|---------|-------|--------|
 | `record_set_status` | `{ recordId, status }` | `RecordDto` | ator sempre `user`; transições do data-model |
-| `record_edit` | `{ recordId, text?, rationale?, acceptanceCriteria?, alternatives? }` | `RecordDto` | gera `RecordChange` |
+| `record_edit` | `{ recordId, text?, rationale?, acceptanceCriteria?, alternatives? }` | `RecordDto` | gera um `RecordChange` por campo alterado; status não muda; edição vazia → `invalid_input`; critérios só em `task`, alternativas só em `decision` |
 | `record_create` | `{ sessionId, kind, text, rationale?, status }` | `RecordDto` | `origin = user` |
 | `plan_get` | `{ sessionId }` | `PlanDto` | visão derivada |
-| `analysis_run_final` | `{ sessionId }` | `{ runId }` | só `ended`/`failed` (FR-033); `authorization_required` se provedor remoto sem autorização |
+| `analysis_run_final` | `{ sessionId }` | `{ runId }` — resultado por `analysis_status`/`record_proposed` | só `ended`/`failed` e uma por vez (`invalid_state`, FR-033); `provider_error` sem provedor de análise utilizável; `authorization_required` se provedor remoto sem autorização |
 
 ## Perguntas
 

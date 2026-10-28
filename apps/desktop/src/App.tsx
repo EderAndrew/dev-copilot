@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { Layout, type Page } from "./components/Layout";
 import { LocalModels } from "./features/providers/LocalModels";
 import { CaptureIndicator } from "./features/sessions/CaptureIndicator";
+import { SessionDetail } from "./features/sessions/SessionDetail";
+import { SessionHistory } from "./features/sessions/SessionHistory";
 import { SessionsPage } from "./features/sessions/SessionsPage";
 import { useSessionStore } from "./features/sessions/sessionStore";
 import { SettingsPage } from "./features/settings/SettingsPage";
@@ -16,6 +18,7 @@ function App() {
   const [page, setPage] = useState<Page>("sessions");
   const [language, setLanguage] = useState<UiLanguage>(DEFAULT_LANGUAGE);
   const [startupError, setStartupError] = useState<IpcError | null>(null);
+  const [openSession, setOpenSession] = useState<string | null>(null);
   // Lives above the pages so the indicator stays visible on every screen (SC-003).
   const sessionStore = useSessionStore(ipc);
 
@@ -39,7 +42,10 @@ function App() {
   return (
     <Layout
       page={page}
-      onNavigate={setPage}
+      onNavigate={(next) => {
+        setOpenSession(null);
+        setPage(next);
+      }}
       language={language}
       onLanguageChange={changeLanguage}
       captureIndicator={
@@ -50,6 +56,16 @@ function App() {
       {page === "sessions" && (
         <SessionsPage store={sessionStore} defaultLanguage={language} />
       )}
+      {page === "history" &&
+        (openSession ? (
+          <SessionDetail
+            sessionId={openSession}
+            client={ipc}
+            onBack={() => setOpenSession(null)}
+          />
+        ) : (
+          <SessionHistory client={ipc} onOpen={setOpenSession} />
+        ))}
       {page === "providers" && (
         <section aria-labelledby="providers-title">
           <h1 id="providers-title">{t("providers.title")}</h1>

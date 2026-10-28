@@ -54,6 +54,7 @@ export type SessionAction =
   | { type: "loaded"; session: SessionDto }
   | { type: "event"; event: SessionEvent }
   | { type: "recordUpdated"; record: RecordDto }
+  | { type: "recordsLoaded"; sessionId: string; records: RecordDto[] }
   | { type: "cleared" };
 
 export const INDICATOR_OFF: CaptureIndicatorState = {
@@ -143,6 +144,13 @@ export function sessionReducer(
     }
     case "event":
       return applyEvent(state, action.event);
+    case "recordsLoaded":
+      return action.sessionId === state.session?.id
+        ? {
+            ...state,
+            records: action.records.reduce(upsertRecord, state.records),
+          }
+        : state;
     case "recordUpdated":
       return action.record.sessionId === state.session?.id
         ? { ...state, records: upsertRecord(state.records, action.record) }
@@ -152,7 +160,7 @@ export function sessionReducer(
   }
 }
 
-type StoreClient = Pick<IpcClient, "sessionSubscribe">;
+type StoreClient = Pick<IpcClient, "sessionSubscribe" | "sessionGet">;
 
 /**
  * Holds the current session and keeps it subscribed to core events. `track` switches to a
@@ -171,6 +179,19 @@ export function useSessionStore(client: StoreClient) {
       });
       if (trackedId.current === sessionId)
         dispatch({ type: "loaded", session: current });
+      // Records proposed before this subscription (e.g. before a reconnect) are not replayed
+      // as events; load them from storage. Upserts make overlap with events harmless.
+      try {
+        const detail = await client.sessionGet(sessionId);
+        if (trackedId.current === sessionId)
+          dispatch({
+            type: "recordsLoaded",
+            sessionId,
+            records: detail.records,
+          });
+      } catch {
+        // Events still deliver new proposals.
+      }
     },
     [client],
   );

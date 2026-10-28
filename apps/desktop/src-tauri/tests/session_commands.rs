@@ -329,3 +329,139 @@ fn record_set_status_validates_ids() {
     let err = records::set_status(&h.core, &request(RecordId::new().to_string())).unwrap_err();
     assert_eq!(err.code, "not_found");
 }
+
+#[test]
+fn plan_and_history_commands_round_trip_through_storage() {
+    use devcopilot_desktop_lib::commands::records::{self, RecordCreateDto, RecordEditDto};
+    use devcopilot_desktop_lib::commands::sessions::{SessionListDto, SessionRenameDto};
+    use devcopilot_domain::record::{RecordKind, RecordStatus};
+
+    let h = harness();
+    let session = sessions::create(
+        &h.core,
+        SessionCreateDto {
+            title: "Planejamento".into(),
+            language: Code(SessionLanguage::PtBr),
+            sources: vec![Code(AudioSourceKind::Microphone)],
+        },
+    )
+    .unwrap();
+    let id = SessionIdDto {
+        session_id: session.id.clone(),
+    };
+    let created = records::create(
+        &h.core,
+        RecordCreateDto {
+            session_id: session.id.clone(),
+            kind: Code(RecordKind::Task),
+            text: "Criar endpoint".into(),
+            rationale: None,
+            status: Code(RecordStatus::Confirmed),
+        },
+    )
+    .unwrap();
+    assert_eq!(created.origin, records::OriginDto::User);
+    let edited = records::edit(
+        &h.core,
+        RecordEditDto {
+            record_id: created.id.clone(),
+            text: Some("Criar endpoint de export".into()),
+            rationale: None,
+            acceptance_criteria: Some(vec!["Pagina de 100 em 100".into()]),
+            alternatives: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(edited.status, Code(RecordStatus::Confirmed));
+    assert_eq!(edited.acceptance_criteria, ["Pagina de 100 em 100"]);
+
+    let plan = records::plan(&h.core, &id).unwrap();
+    assert_eq!(plan.sections[0].kind, Code(RecordKind::Task));
+    assert_eq!(plan.sections[0].items, vec![edited.clone()]);
+
+    let detail = sessions::detail(&h.core, &id).unwrap();
+    assert_eq!(detail.records, vec![edited]);
+    assert!(detail.transcript.is_empty());
+
+    let renamed = sessions::rename(
+        &h.core,
+        SessionRenameDto {
+            session_id: session.id.clone(),
+            title: "Export".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(renamed.title, "Export");
+    let page = sessions::list(&h.core, &SessionListDto::default()).unwrap();
+    assert_eq!(page.items, vec![renamed]);
+    assert_eq!(page.next_cursor, None);
+
+    // Final analysis only on ended or failed sessions (FR-033).
+    assert_eq!(
+        records::run_final(&h.core, &id).unwrap_err().code,
+        "invalid_state"
+    );
+}
+
+#[test]
+fn plan_and_history_commands_validate_input() {
+    use devcopilot_desktop_lib::commands::records::{self, RecordEditDto};
+    use devcopilot_desktop_lib::commands::sessions::{SessionListDto, SessionRenameDto};
+
+    let h = harness();
+    for limit in [0, 101] {
+        let err = sessions::list(
+            &h.core,
+            &SessionListDto {
+                cursor: None,
+                limit: Some(limit),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "invalid_input");
+    }
+    let err = sessions::list(
+        &h.core,
+        &SessionListDto {
+            cursor: Some("nope".into()),
+            limit: None,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "invalid_input");
+    let missing = SessionIdDto {
+        session_id: SessionId::new().to_string(),
+    };
+    assert_eq!(
+        sessions::detail(&h.core, &missing).unwrap_err().code,
+        "not_found"
+    );
+    assert_eq!(
+        records::plan(&h.core, &missing).unwrap_err().code,
+        "not_found"
+    );
+    let err = sessions::rename(
+        &h.core,
+        SessionRenameDto {
+            session_id: missing.session_id.clone(),
+            title: "x".repeat(201),
+        },
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "invalid_input");
+    let err = records::edit(
+        &h.core,
+        RecordEditDto {
+            record_id: devcopilot_domain::ids::RecordId::new().to_string(),
+            text: None,
+            rationale: None,
+            acceptance_criteria: None,
+            alternatives: None,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "invalid_input");
+    assert!(
+        serde_json::from_str::<RecordEditDto>(r#"{"recordId":"x","status":"confirmed"}"#).is_err()
+    );
+}

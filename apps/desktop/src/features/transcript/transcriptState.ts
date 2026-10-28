@@ -6,6 +6,7 @@ import type {
   GapReason,
   SegmentDto,
   SessionEvent,
+  TranscriptItemDto,
 } from "../../ipc/types";
 
 export type TranscriptEntry =
@@ -119,6 +120,28 @@ export function applyTranscriptEvent(
     default:
       return state;
   }
+}
+
+/** Transcript of a saved session, from `session_get` (no partials, no lag). */
+export function transcriptFromItems(
+  items: TranscriptItemDto[],
+): TranscriptState {
+  const entries = items.reduce<TranscriptEntry[]>(
+    (acc, item) =>
+      insert(
+        acc,
+        item.type === "final"
+          ? { kind: "final", segment: item.segment }
+          : {
+              kind: "gap",
+              reason: item.reason,
+              startMs: item.startMs,
+              durationMs: item.durationMs,
+            },
+      ),
+    [],
+  );
+  return { ...emptyTranscript, entries };
 }
 
 /** `m:ss`, or `h:mm:ss` from one hour on. */

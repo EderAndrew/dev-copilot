@@ -42,6 +42,8 @@ pub struct Core {
     pub sessions: SessionService,
     /// Record review use cases.
     pub records: Arc<RecordService>,
+    /// Incremental and final analysis.
+    pub analysis: AnalysisService,
 }
 
 /// Platform adapters that do not depend on storage.
@@ -145,7 +147,11 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
         events: Arc::clone(&platform.events),
         tick: DEFAULT_TICK,
     });
-    let records = Arc::new(RecordService::new(record_repo, Arc::clone(&platform.clock)));
+    let records = Arc::new(RecordService::new(
+        record_repo,
+        session_repo.clone(),
+        Arc::clone(&platform.clock),
+    ));
     let sessions = SessionService::new(SessionDeps {
         sessions: session_repo,
         segments: segment_repo,
@@ -156,7 +162,7 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
         sources: platform.sources,
         clock: platform.clock,
         events: platform.events,
-        analysis: Some(analysis),
+        analysis: Some(analysis.clone()),
     });
     sessions.recover_on_startup()?;
     Ok(Core {
@@ -164,6 +170,7 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
         providers,
         sessions,
         records,
+        analysis,
     })
 }
 

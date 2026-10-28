@@ -64,3 +64,18 @@ const TRANSITIONS: Record<RecordStatus, RecordStatus[]> = {
 export function nextStatuses(status: RecordStatus): RecordStatus[] {
   return TRANSITIONS[status];
 }
+
+/** One list item per non-blank line (acceptance criteria, alternatives). */
+export function linesToItems(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+export const ALL_STATUSES: readonly RecordStatus[] = [
+  "confirmed",
+  "pending",
+  "proposed",
+  "rejected",
+];

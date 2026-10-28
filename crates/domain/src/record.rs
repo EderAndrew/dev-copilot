@@ -223,6 +223,43 @@ pub fn dedup_key(kind: RecordKind, text: &str) -> String {
     format!("{}:{}", kind.code(), words.join(" "))
 }
 
+/// A record written by the user (FR-032).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserRecord {
+    /// Kind.
+    pub kind: RecordKind,
+    /// Text.
+    pub text: Redacted<RecordText>,
+    /// Justification.
+    pub rationale: Redacted<Rationale>,
+    /// Initial status (the user may create records already confirmed).
+    pub status: RecordStatus,
+}
+
+/// A user edit; `None` keeps the current value.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RecordEdit {
+    /// New text.
+    pub text: Option<Redacted<RecordText>>,
+    /// New rationale.
+    pub rationale: Option<Redacted<Rationale>>,
+    /// New acceptance criteria (tasks only).
+    pub acceptance_criteria: Option<Vec<Redacted<ListItem>>>,
+    /// New alternatives (decisions only).
+    pub alternatives: Option<Vec<Redacted<ListItem>>>,
+}
+
+impl RecordEdit {
+    /// Whether the edit names no field.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.text.is_none()
+            && self.rationale.is_none()
+            && self.acceptance_criteria.is_none()
+            && self.alternatives.is_none()
+    }
+}
+
 /// Fields of a record before validation, also used to restore stored rows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordSpec {
@@ -353,6 +390,120 @@ impl TechnicalRecord {
             new_value: Some(Redacted::new(self.spec.status.code().to_owned())),
             at: self.spec.created_at,
         })
+    }
+
+    /// A record created by the user (FR-032): any status, no evidence, nature `suggested`.
+    /// The origin `user` is what identifies it as the user's.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::new`].
+    pub fn create_by_user(
+        id: RecordId,
+        session_id: SessionId,
+        draft: UserRecord,
+        now: Timestamp,
+    ) -> Result<Self, DomainError> {
+        Self::new(RecordSpec {
+            id,
+            session_id,
+            kind: draft.kind,
+            text: draft.text,
+            nature: Nature::Suggested,
+            status: draft.status,
+            rationale: draft.rationale,
+            origin: Origin::User,
+            evidence: Vec::new(),
+            acceptance_criteria: Vec::new(),
+            alternatives: Vec::new(),
+            flags: RecordFlags::default(),
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    /// Applies a user edit and returns one history entry per field that actually changed
+    /// (FR-026, FR-032); an edit that changes nothing returns no entries.
+    ///
+    /// # Errors
+    ///
+    /// [`DomainError::InvariantViolation`] when `actor` is the AI (FR-025);
+    /// [`DomainError::InvalidInput`] when lists exceed their bounds or belong to another kind.
+    pub fn edit(
+        &mut self,
+        actor: Actor,
+        edit: RecordEdit,
+        now: Timestamp,
+    ) -> Result<Vec<RecordChange>, DomainError> {
+        if actor == Actor::Ai {
+            return Err(DomainError::InvariantViolation(
+                "the AI cannot change existing records",
+            ));
+        }
+        if let Some(items) = &edit.acceptance_criteria {
+            check_list(
+                "acceptance_criteria",
+                items,
+                self.spec.kind == RecordKind::Task,
+            )?;
+        }
+        if let Some(items) = &edit.alternatives {
+            check_list(
+                "alternatives",
+                items,
+                self.spec.kind == RecordKind::Decision,
+            )?;
+        }
+        let mut changes = Vec::new();
+        let mut change = |field: ChangeField, old: String, new: String| {
+            if old != new {
+                changes.push(RecordChange::restore(RecordChangeSpec {
+                    id: ChangeId::new(),
+                    record_id: self.spec.id,
+                    actor: ChangeActor::User,
+                    field,
+                    old_value: Some(Redacted::new(old)),
+                    new_value: Some(Redacted::new(new)),
+                    at: now,
+                }));
+            }
+        };
+        if let Some(text) = edit.text {
+            change(
+                ChangeField::Text,
+                self.spec.text.expose().as_str().to_owned(),
+                text.expose().as_str().to_owned(),
+            );
+            self.spec.text = text;
+        }
+        if let Some(rationale) = edit.rationale {
+            change(
+                ChangeField::Rationale,
+                self.spec.rationale.expose().as_str().to_owned(),
+                rationale.expose().as_str().to_owned(),
+            );
+            self.spec.rationale = rationale;
+        }
+        if let Some(items) = edit.acceptance_criteria {
+            change(
+                ChangeField::AcceptanceCriteria,
+                joined(&self.spec.acceptance_criteria),
+                joined(&items),
+            );
+            self.spec.acceptance_criteria = items;
+        }
+        if let Some(items) = edit.alternatives {
+            change(
+                ChangeField::Alternatives,
+                joined(&self.spec.alternatives),
+                joined(&items),
+            );
+            self.spec.alternatives = items;
+        }
+        if !changes.is_empty() {
+            self.spec.updated_at = now.max(self.spec.updated_at);
+        }
+        Ok(changes)
     }
 
     /// Changes the status by `actor` and returns the history entry (FR-024–FR-026).
@@ -488,6 +639,15 @@ impl TechnicalRecord {
     pub const fn updated_at(&self) -> Timestamp {
         self.spec.updated_at
     }
+}
+
+/// List items one per line, as stored in the history.
+fn joined(items: &[Redacted<ListItem>]) -> String {
+    items
+        .iter()
+        .map(|item| item.expose().as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn check_list(
@@ -766,6 +926,83 @@ mod tests {
             TechnicalRecord::new(decision),
             Err(DomainError::invalid("alternatives", InputProblem::TooLong))
         );
+    }
+
+    #[test]
+    fn user_edits_produce_one_change_per_changed_field() {
+        let mut record = record(RecordStatus::Confirmed);
+        let changes = record
+            .edit(
+                Actor::User,
+                RecordEdit {
+                    text: Some(Redacted::new(
+                        RecordText::parse("Suportar CSV e XLSX").unwrap(),
+                    )),
+                    // Same value: no history entry.
+                    rationale: Some(Redacted::new(Rationale::default())),
+                    ..RecordEdit::default()
+                },
+                at(7_000),
+            )
+            .unwrap();
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].field(), ChangeField::Text);
+        assert_eq!(changes[0].actor(), ChangeActor::User);
+        assert_eq!(
+            changes[0].old_value().map(|v| v.expose().as_str()),
+            Some("Suportar CSV")
+        );
+        assert_eq!(record.text().expose().as_str(), "Suportar CSV e XLSX");
+        assert_eq!(record.status(), RecordStatus::Confirmed);
+        assert_eq!(record.updated_at(), at(7_000));
+        assert!(
+            record
+                .edit(Actor::User, RecordEdit::default(), at(8_000))
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(record.updated_at(), at(7_000));
+    }
+
+    #[test]
+    fn edits_keep_lists_on_their_kinds_and_refuse_the_ai() {
+        let mut record = record(RecordStatus::Proposed);
+        let lists = RecordEdit {
+            acceptance_criteria: Some(vec![item("x")]),
+            ..RecordEdit::default()
+        };
+        assert_eq!(
+            record.edit(Actor::User, lists.clone(), at(2_000)),
+            Err(DomainError::invalid(
+                "acceptance_criteria",
+                InputProblem::Inconsistent
+            ))
+        );
+        assert!(matches!(
+            record.edit(Actor::Ai, lists, at(2_000)),
+            Err(DomainError::InvariantViolation(_))
+        ));
+    }
+
+    #[test]
+    fn user_records_may_start_in_any_status() {
+        for status in ALL_STATUSES {
+            let record = TechnicalRecord::create_by_user(
+                RecordId::new(),
+                SessionId::new(),
+                UserRecord {
+                    kind: RecordKind::Assumption,
+                    text: Redacted::new(RecordText::parse("Equipe de 3 pessoas").unwrap()),
+                    rationale: Redacted::new(Rationale::default()),
+                    status,
+                },
+                at(1_000),
+            )
+            .unwrap();
+            assert_eq!(record.origin(), Origin::User);
+            assert_eq!(record.status(), status);
+            assert_eq!(record.creation().actor(), ChangeActor::User);
+        }
     }
 
     #[test]

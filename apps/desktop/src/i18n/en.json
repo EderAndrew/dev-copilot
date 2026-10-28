@@ -6,6 +6,7 @@
   "nav": {
     "label": "Main navigation",
     "sessions": "Sessions",
+    "history": "History",
     "providers": "Providers",
     "settings": "Settings"
   },
@@ -212,5 +213,43 @@
       "provider_error": "The analysis failed. Existing records were kept; the segments will be analysed again next time.",
       "rate_limited": "Analysis limit reached. Capture continues; new segments wait for the next allowed analysis."
     }
+  },
+  "history": {
+    "title": "Saved sessions",
+    "empty": "No saved sessions yet.",
+    "duration": "Duration: {{duration}}",
+    "more": "Load more"
+  },
+  "detail": {
+    "back": "Back to history",
+    "rename": "Rename",
+    "createdAt": "Created",
+    "activeDuration": "Active duration",
+    "active": "This session is still in progress; follow it on the Sessions page.",
+    "runFinal": "Run final analysis"
+  },
+  "plan": {
+    "title": "Development plan",
+    "filter": "Show statuses",
+    "section": {
+      "task": "Technical tasks",
+      "requirement": "Requirements",
+      "decision": "Decisions",
+      "assumption": "Assumptions",
+      "risk": "Risks",
+      "open_question": "Open questions"
+    },
+    "sectionEmpty": "No items.",
+    "edit": "Edit",
+    "save": "Save",
+    "cancel": "Cancel",
+    "text": "Text",
+    "rationale": "Rationale",
+    "criteriaHint": "Acceptance criteria (one per line)",
+    "alternativesHint": "Alternatives (one per line)",
+    "addTitle": "Add item to the plan",
+    "kind": "Kind",
+    "initialStatus": "Status",
+    "add": "Add"
   }
 }

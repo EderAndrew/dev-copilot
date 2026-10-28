@@ -72,6 +72,9 @@ function setup(overrides: Partial<SettingsDto> = {}) {
     sessionStop: vi.fn(() =>
       Promise.resolve({ ...idle, state: "stopping" as const }),
     ),
+    sessionGet: vi.fn(() =>
+      Promise.resolve({ session: idle, transcript: [], records: [] }),
+    ),
     sessionSubscribe: vi.fn(
       (_id: string, onEvent: (event: SessionEvent) => void) => {
         emit = onEvent;

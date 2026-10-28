@@ -1,5 +1,6 @@
-//! `session_create`, `session_start`, `session_cancel_start`, `session_stop` and
-//! `session_subscribe` (contracts/ipc-commands.md "Sessões").
+//! `session_create`, `session_start`, `session_cancel_start`, `session_stop`,
+//! `session_subscribe`, `session_list`, `session_get` and `session_rename`
+//! (contracts/ipc-commands.md "Sessões").
 //!
 //! Each Tauri command is a thin wrapper over a plain function taking the [`Core`], so the
 //! validation path is testable without a running app.
@@ -10,14 +11,19 @@ use devcopilot_domain::ids::SessionId;
 use devcopilot_domain::language::SessionLanguage;
 use devcopilot_domain::session::{FailureReason, Session, SessionState};
 use devcopilot_domain::text::Title;
+use devcopilot_domain::transcript::{GapReason, SegmentKind, TranscriptSegment};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tauri::ipc::Channel;
 
 use super::IpcError;
+use super::records::RecordDto;
 use crate::composition::{AppState, Core};
 use crate::dto::Code;
-use crate::events::{ChannelEventPublisher, EventSink, IpcSessionEvent};
+use crate::events::{ChannelEventPublisher, EventSink, IpcSessionEvent, SegmentDto};
+
+/// Page size of `session_list` when `limit` is absent.
+pub const DEFAULT_PAGE_SIZE: usize = 50;
 
 /// Session as returned by every session command.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,9 +97,98 @@ pub struct SessionIdDto {
 }
 
 impl SessionIdDto {
-    fn id(&self) -> Result<SessionId, IpcError> {
+    /// The parsed session id.
+    ///
+    /// # Errors
+    ///
+    /// `invalid_input` when not a UUID.
+    pub fn id(&self) -> Result<SessionId, IpcError> {
         Ok(SessionId::parse(&self.session_id)?)
     }
+}
+
+/// `session_list` input.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[allow(missing_docs)]
+pub struct SessionListDto {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<usize>,
+}
+
+/// `session_list` output.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[allow(missing_docs)]
+pub struct SessionPageDto {
+    pub items: Vec<SessionDto>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+/// `session_rename` input.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[allow(missing_docs)]
+pub struct SessionRenameDto {
+    pub session_id: String,
+    pub title: String,
+}
+
+/// A persisted transcript item: a final segment or a gap.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "type",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+#[allow(missing_docs)]
+pub enum TranscriptItemDto {
+    Final {
+        segment: SegmentDto,
+    },
+    Gap {
+        reason: Code<GapReason>,
+        start_ms: u64,
+        duration_ms: u64,
+    },
+}
+
+impl From<&TranscriptSegment> for TranscriptItemDto {
+    fn from(segment: &TranscriptSegment) -> Self {
+        match segment.kind() {
+            SegmentKind::Final { text } => Self::Final {
+                segment: SegmentDto {
+                    id: segment.id().to_string(),
+                    seq: segment.seq(),
+                    source: segment.source().map(Code),
+                    start_ms: segment.start().as_millis(),
+                    end_ms: segment.end().as_millis(),
+                    text: text.expose().as_str().to_owned(),
+                },
+            },
+            SegmentKind::Gap { reason } => Self::Gap {
+                reason: Code(*reason),
+                start_ms: segment.start().as_millis(),
+                duration_ms: segment.duration().as_millis(),
+            },
+        }
+    }
+}
+
+/// `session_get` output: everything persisted for a session. Questions join with US5.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[allow(missing_docs)]
+pub struct SessionDetailDto {
+    pub session: SessionDto,
+    /// Finals and gaps in `seq` order.
+    pub transcript: Vec<TranscriptItemDto>,
+    /// Records in creation order.
+    pub records: Vec<RecordDto>,
 }
 
 /// Validates and creates an idle session.
@@ -156,6 +251,98 @@ pub fn subscribe(
     let session = core.sessions.get(request.id()?)?;
     events.subscribe(session.id(), sink);
     Ok(session.into())
+}
+
+/// One page of the session history, newest first.
+///
+/// # Errors
+///
+/// `invalid_input` (cursor, limit outside 1..=100), storage errors.
+pub fn list(core: &Core, request: &SessionListDto) -> Result<SessionPageDto, IpcError> {
+    let cursor = request
+        .cursor
+        .as_deref()
+        .map(SessionId::parse)
+        .transpose()?;
+    let page = core
+        .sessions
+        .list_page(cursor, request.limit.unwrap_or(DEFAULT_PAGE_SIZE))?;
+    Ok(SessionPageDto {
+        items: page.items.iter().map(SessionDto::from).collect(),
+        next_cursor: page.next_cursor.map(|id| id.to_string()),
+    })
+}
+
+/// A session with its transcript and records.
+///
+/// # Errors
+///
+/// `invalid_input`, `not_found`, storage errors.
+pub fn detail(core: &Core, request: &SessionIdDto) -> Result<SessionDetailDto, IpcError> {
+    let id = request.id()?;
+    let session = core.sessions.get(id)?;
+    Ok(SessionDetailDto {
+        session: SessionDto::from(&session),
+        transcript: core
+            .sessions
+            .transcript(id)?
+            .iter()
+            .map(TranscriptItemDto::from)
+            .collect(),
+        records: core.records.list(id)?.iter().map(RecordDto::from).collect(),
+    })
+}
+
+/// Renames a session.
+///
+/// # Errors
+///
+/// `invalid_input` (id, title bounds), `not_found`, storage errors.
+pub fn rename(core: &Core, request: SessionRenameDto) -> Result<SessionDto, IpcError> {
+    let id = SessionId::parse(&request.session_id)?;
+    Ok(core
+        .sessions
+        .rename(id, Title::parse(request.title)?)?
+        .into())
+}
+
+/// Lists saved sessions (US4.3).
+///
+/// # Errors
+///
+/// See [`list`].
+#[tauri::command]
+pub async fn session_list(
+    state: State<'_, AppState>,
+    request: SessionListDto,
+) -> Result<SessionPageDto, IpcError> {
+    list(state.core()?, &request)
+}
+
+/// Opens a saved session (US4.3, US4.4).
+///
+/// # Errors
+///
+/// See [`detail`].
+#[tauri::command]
+pub async fn session_get(
+    state: State<'_, AppState>,
+    request: SessionIdDto,
+) -> Result<SessionDetailDto, IpcError> {
+    detail(state.core()?, &request)
+}
+
+/// Renames a session.
+///
+/// # Errors
+///
+/// See [`rename`].
+#[tauri::command]
+pub async fn session_rename(
+    state: State<'_, AppState>,
+    request: SessionRenameDto,
+) -> Result<SessionDto, IpcError> {
+    rename(state.core()?, request)
 }
 
 /// Creates an idle session (FR-001).

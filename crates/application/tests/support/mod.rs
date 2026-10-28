@@ -11,6 +11,7 @@ use devcopilot_application::analysis_service::{AnalysisDeps, AnalysisService};
 use devcopilot_application::events::SessionEvent;
 use devcopilot_application::ports::{AudioSource, SessionRepository};
 use devcopilot_application::provider_service::ProviderService;
+use devcopilot_application::record_service::RecordService;
 use devcopilot_application::session_service::{NewSession, SessionDeps, SessionService};
 use devcopilot_application::settings_service::{AnalysisLimits, SettingsService, SettingsUpdate};
 use devcopilot_application::testing::{
@@ -43,6 +44,8 @@ pub struct Fixture {
     pub analyzers: Arc<ScriptedAnalysisProviderFactory>,
     pub records: Arc<InMemoryRecordRepository>,
     pub runs: Arc<InMemoryAnalysisRunRepository>,
+    pub analysis: AnalysisService,
+    pub record_service: RecordService,
 }
 
 /// Microphone and system sources granted, a local transcriber configured, consent reminder
@@ -98,8 +101,9 @@ pub fn fixture_without_transcriber() -> Fixture {
         ],
         clock: clock.clone(),
         events: events.clone(),
-        analysis: Some(analysis),
+        analysis: Some(analysis.clone()),
     });
+    let record_service = RecordService::new(records.clone(), sessions.clone(), clock.clone());
     Fixture {
         service,
         sessions,
@@ -117,6 +121,8 @@ pub fn fixture_without_transcriber() -> Fixture {
         analyzers,
         records,
         runs,
+        analysis,
+        record_service,
     }
 }
 

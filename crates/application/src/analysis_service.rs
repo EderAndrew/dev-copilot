@@ -17,6 +17,9 @@
 //! - Failures (invalid output, provider error) leave records untouched and keep the segments
 //!   pending, so the next run retries them. Nothing here touches capture: the transcription
 //!   only hands notices over without waiting (FR-028, SC-006).
+//! - A **final** analysis of an ended or failed session runs only on explicit request
+//!   ([`AnalysisService::run_final`], FR-033), under the same rules: it only creates proposals,
+//!   counts against the hourly cap, and at most one runs per session.
 
 use std::collections::{HashSet, VecDeque};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -47,8 +50,10 @@ use crate::settings_service::{AnalysisLimits, SettingsService};
 
 /// How often the scheduler re-evaluates time-based triggers.
 pub const DEFAULT_TICK: std::time::Duration = std::time::Duration::from_secs(1);
-/// Most final segments sent in one run (the most recent ones win).
+/// Most final segments sent in one incremental run (the most recent ones win).
 pub const MAX_SEGMENTS_PER_RUN: usize = 60;
+/// Most final segments sent in a final analysis (the most recent ones win).
+pub const MAX_SEGMENTS_FINAL: usize = 400;
 /// Longest record text, in characters, in the summary sent to the provider.
 pub const SUMMARY_CHARS: usize = 200;
 
@@ -83,6 +88,8 @@ struct Inner {
     deps: AnalysisDeps,
     /// Start of every call in the last hour, across sessions.
     calls: Mutex<VecDeque<Timestamp>>,
+    /// Sessions with a final analysis in flight.
+    finals: Mutex<HashSet<SessionId>>,
 }
 
 /// Counts a call starting at `now` against the hourly cap; `false` when the cap is reached.
@@ -115,8 +122,107 @@ impl AnalysisService {
             inner: Arc::new(Inner {
                 deps,
                 calls: Mutex::new(VecDeque::new()),
+                finals: Mutex::new(HashSet::new()),
             }),
         }
+    }
+
+    /// Runs a final analysis of an ended or failed session by explicit user request (FR-033)
+    /// and returns the run id; results arrive as `analysis_status` and `record_proposed`
+    /// events. Must be called within a Tokio runtime.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::InvalidState`] unless the session ended or failed, or while another
+    /// final analysis of it runs; [`ApplicationError::Provider`] when no analysis provider is
+    /// usable; [`ApplicationError::Storage`].
+    pub fn run_final(&self, session: &Session) -> Result<AnalysisRunId, ApplicationError> {
+        let deps = &self.inner.deps;
+        let id = session.id();
+        if !session.state().is_terminal() {
+            return Err(ApplicationError::InvalidState(
+                "final analysis needs an ended or failed session".into(),
+            ));
+        }
+        let runtime = Handle::try_current()
+            .map_err(|_| ApplicationError::Internal("no async runtime".into()))?;
+        let provider = deps
+            .providers
+            .resolve_analyzer()?
+            .ok_or(ApplicationError::Provider(ProviderError::Unavailable))?;
+        let analyzer = deps.analyzers.create(&provider)?;
+        let next_seq = deps.segments.next_seq(id)?;
+        let range = (0, next_seq.saturating_sub(1));
+        let context = Arc::new(RunContext {
+            inner: Arc::clone(&self.inner),
+            session_id: id,
+            session_state: session.state(),
+            trigger: AnalysisTrigger::Final,
+            language: session.language(),
+            provider_id: provider.id(),
+            max_segments: MAX_SEGMENTS_FINAL,
+            analyzer,
+        });
+        {
+            let mut finals = self
+                .inner
+                .finals
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            if !finals.insert(id) {
+                return Err(ApplicationError::InvalidState(
+                    "final analysis already running".into(),
+                ));
+            }
+        }
+        let release = || {
+            self.inner
+                .finals
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(&id);
+        };
+        let now = deps.clock.now();
+        let run = match context.create_run(range, now) {
+            Ok(run) => run,
+            Err(err) => {
+                release();
+                return Err(err);
+            }
+        };
+        let run_id = run.id();
+        deps.events.publish(
+            id,
+            SessionEvent::ProviderInUse {
+                stage: ProviderStage::Analysis,
+                locality: provider.locality(),
+                provider_id: provider.id(),
+            },
+        );
+        let max_per_hour = deps
+            .settings
+            .get()
+            .map(|settings| settings.analysis_limits.max_calls_per_hour)
+            .unwrap_or(AnalysisLimits::default().max_calls_per_hour);
+        if !reserve_call(&self.inner.calls, now, max_per_hour) {
+            tracing::warn!(session = %id, "final analysis rate limited");
+            context.finish_run(run, AnalysisOutcome::RateLimited);
+            release();
+            return Ok(run_id);
+        }
+        let inner = Arc::clone(&self.inner);
+        runtime.spawn(async move {
+            context
+                .execute_run(run, range, CancellationToken::new())
+                .await;
+            inner
+                .finals
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(&id);
+        });
+        tracing::info!(session = %id, run = %run_id, "final analysis started");
+        Ok(run_id)
     }
 
     /// Starts incremental analysis of `session`, which has just started capturing, and
@@ -159,8 +265,13 @@ impl AnalysisService {
             run: Arc::new(RunContext {
                 inner: Arc::clone(&self.inner),
                 session_id: id,
+                // Incremental runs only start while the session captures; the scheduler
+                // stops with capture.
+                session_state: SessionState::Capturing,
+                trigger: AnalysisTrigger::Incremental,
                 language: session.language(),
                 provider_id: provider.id(),
+                max_segments: MAX_SEGMENTS_PER_RUN,
                 analyzer,
             }),
             pending: Pending::default(),
@@ -275,8 +386,13 @@ struct RunResult {
 struct RunContext {
     inner: Arc<Inner>,
     session_id: SessionId,
+    /// Session state the runs are started in.
+    session_state: SessionState,
+    trigger: AnalysisTrigger,
     language: SessionLanguage,
     provider_id: ProviderId,
+    /// Most final segments per request (the most recent ones win).
+    max_segments: usize,
     analyzer: Arc<dyn AnalysisProvider>,
 }
 
@@ -390,20 +506,27 @@ impl RunContext {
         self.publish(SessionEvent::AnalysisStatus { run_id, status });
     }
 
-    fn start_run(&self, range: (u64, u64), now: Timestamp) -> Option<AnalysisRun> {
-        // Runs only start while the session captures; the scheduler stops with capture.
+    fn create_run(
+        &self,
+        range: (u64, u64),
+        now: Timestamp,
+    ) -> Result<AnalysisRun, ApplicationError> {
         let run = AnalysisRun::start(
             AnalysisRunId::new(),
             self.session_id,
-            SessionState::Capturing,
+            self.session_state,
             self.provider_id,
-            AnalysisTrigger::Incremental,
+            self.trigger,
             range,
             now,
-        )
-        .ok()?;
-        match self.inner.deps.runs.insert(&run) {
-            Ok(()) => Some(run),
+        )?;
+        self.inner.deps.runs.insert(&run)?;
+        Ok(run)
+    }
+
+    fn start_run(&self, range: (u64, u64), now: Timestamp) -> Option<AnalysisRun> {
+        match self.create_run(range, now) {
+            Ok(run) => Some(run),
             Err(err) => {
                 tracing::error!(session = %self.session_id, error = %err, "analysis run not stored");
                 None
@@ -437,13 +560,26 @@ impl RunContext {
     }
 
     async fn execute(self: Arc<Self>, range: (u64, u64), cancel: CancellationToken) -> RunResult {
+        let Some(run) = self.start_run(range, self.inner.deps.clock.now()) else {
+            return RunResult {
+                range,
+                succeeded: false,
+                tokens: 0,
+            };
+        };
+        self.execute_run(run, range, cancel).await
+    }
+
+    async fn execute_run(
+        &self,
+        run: AnalysisRun,
+        range: (u64, u64),
+        cancel: CancellationToken,
+    ) -> RunResult {
         let failed = RunResult {
             range,
             succeeded: false,
             tokens: 0,
-        };
-        let Some(run) = self.start_run(range, self.inner.deps.clock.now()) else {
-            return failed;
         };
         self.publish_status(run.id(), AnalysisStatus::Running);
         let (request, finals) = match self.request(range) {
@@ -508,7 +644,7 @@ impl RunContext {
                 })
             })
             .collect();
-        let excess = segments.len().saturating_sub(MAX_SEGMENTS_PER_RUN);
+        let excess = segments.len().saturating_sub(self.max_segments);
         segments.drain(..excess);
         let records = deps
             .records

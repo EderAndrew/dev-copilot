@@ -1,4 +1,5 @@
-//! User actions on technical records (FR-024–FR-026, FR-032).
+//! User actions on technical records and the development plan (FR-024–FR-026, FR-031,
+//! FR-032).
 //!
 //! Every change here is made by the user and stored together with its history entry. The AI
 //! never reaches these use cases: analysis only creates proposals (`analysis_service`).
@@ -6,15 +7,17 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use devcopilot_domain::ids::{RecordId, SessionId};
-use devcopilot_domain::record::{Actor, RecordStatus, TechnicalRecord};
+use devcopilot_domain::record::{Actor, RecordEdit, RecordStatus, TechnicalRecord, UserRecord};
 use devcopilot_domain::record_change::RecordChange;
 
 use crate::error::ApplicationError;
-use crate::ports::{Clock, RecordRepository};
+use crate::plan::DevelopmentPlan;
+use crate::ports::{Clock, RecordRepository, SessionRepository};
 
 /// Record review use cases.
 pub struct RecordService {
     records: Arc<dyn RecordRepository>,
+    sessions: Arc<dyn SessionRepository>,
     clock: Arc<dyn Clock>,
     /// Serializes read-modify-write of records.
     writes: Mutex<()>,
@@ -23,9 +26,14 @@ pub struct RecordService {
 impl RecordService {
     /// Creates the service.
     #[must_use]
-    pub fn new(records: Arc<dyn RecordRepository>, clock: Arc<dyn Clock>) -> Self {
+    pub fn new(
+        records: Arc<dyn RecordRepository>,
+        sessions: Arc<dyn SessionRepository>,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
         Self {
             records,
+            sessions,
             clock,
             writes: Mutex::new(()),
         }
@@ -48,6 +56,65 @@ impl RecordService {
         self.records.update(&record, &[change])?;
         tracing::info!(record = %id, status = status.code(), "record status changed");
         Ok(record)
+    }
+
+    /// Edits a record by explicit user action; every changed field is recorded in the history
+    /// (FR-026, FR-032). Status is unaffected: a confirmed record stays confirmed.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::InvalidInput`] for an edit naming no field or with invalid lists;
+    /// [`ApplicationError::NotFound`]; [`ApplicationError::Storage`].
+    pub fn edit(
+        &self,
+        id: RecordId,
+        edit: RecordEdit,
+    ) -> Result<TechnicalRecord, ApplicationError> {
+        if edit.is_empty() {
+            return Err(ApplicationError::InvalidInput {
+                field: "edit",
+                problem: "empty",
+            });
+        }
+        let _guard = self.writes.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut record = self.records.get(id)?;
+        let changes = record.edit(Actor::User, edit, self.clock.now())?;
+        if !changes.is_empty() {
+            self.records.update(&record, &changes)?;
+            tracing::info!(record = %id, fields = changes.len(), "record edited");
+        }
+        Ok(record)
+    }
+
+    /// Adds a record written by the user to `session`'s plan (FR-032).
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::NotFound`] for unknown sessions; [`ApplicationError::Storage`].
+    pub fn create(
+        &self,
+        session: SessionId,
+        draft: UserRecord,
+    ) -> Result<TechnicalRecord, ApplicationError> {
+        self.sessions.get(session)?;
+        let record =
+            TechnicalRecord::create_by_user(RecordId::new(), session, draft, self.clock.now())?;
+        self.records.insert(&record, &record.creation())?;
+        tracing::info!(session = %session, record = %record.id(), "record created by user");
+        Ok(record)
+    }
+
+    /// Development plan of `session` (FR-031).
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::NotFound`] for unknown sessions; [`ApplicationError::Storage`].
+    pub fn plan(&self, session: SessionId) -> Result<DevelopmentPlan, ApplicationError> {
+        self.sessions.get(session)?;
+        Ok(DevelopmentPlan::assemble(
+            session,
+            self.records.list_by_session(session)?,
+        ))
     }
 
     /// Every record of `session`, oldest first.
@@ -110,7 +177,15 @@ mod tests {
     fn fixture() -> (RecordService, Arc<InMemoryRecordRepository>, Arc<FakeClock>) {
         let repo = Arc::new(InMemoryRecordRepository::default());
         let clock = Arc::new(FakeClock::at(1_000));
-        (RecordService::new(repo.clone(), clock.clone()), repo, clock)
+        (
+            RecordService::new(
+                repo.clone(),
+                Arc::new(crate::testing::InMemorySessionRepository::default()),
+                clock.clone(),
+            ),
+            repo,
+            clock,
+        )
     }
 
     #[test]

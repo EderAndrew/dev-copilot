@@ -206,6 +206,30 @@ const analysisLimits = object({
   },
 });
 
+const sessionShape: Shape = {
+  required: {
+    id: str,
+    title: str,
+    language: sessionLanguage,
+    state: sessionState,
+    sources: arrayOf(source),
+    createdAt: epochMs,
+    activeDurationMs: nonNegativeInt,
+  },
+  optional: { failure, startedAt: epochMs, endedAt: epochMs },
+};
+
+const segmentShape: Shape = {
+  required: {
+    id: str,
+    seq: nonNegativeInt,
+    startMs: nonNegativeInt,
+    endMs: nonNegativeInt,
+    text: str,
+  },
+  optional: { source },
+};
+
 const event = (type: SessionEvent["type"], shape: Shape): Shape => ({
   required: { type: literal(type), seq: nonNegativeInt, ...shape.required },
   optional: shape.optional,
@@ -224,18 +248,7 @@ const eventShapes: Record<SessionEvent["type"], Shape> = {
     optional: { source },
   }),
   final_segment: event("final_segment", {
-    required: {
-      segment: object({
-        required: {
-          id: str,
-          seq: nonNegativeInt,
-          startMs: nonNegativeInt,
-          endMs: nonNegativeInt,
-          text: str,
-        },
-        optional: { source },
-      }),
-    },
+    required: { segment: object(segmentShape) },
   }),
   gap: event("gap", {
     required: {
@@ -344,19 +357,7 @@ const dtoShapes: Record<string, (value: unknown) => string[]> = {
     }),
   ProviderSetDefaultDto: (v) =>
     problems(v, { required: { role, providerId: str } }),
-  SessionDto: (v) =>
-    problems(v, {
-      required: {
-        id: str,
-        title: str,
-        language: sessionLanguage,
-        state: sessionState,
-        sources: arrayOf(source),
-        createdAt: epochMs,
-        activeDurationMs: nonNegativeInt,
-      },
-      optional: { failure, startedAt: epochMs, endedAt: epochMs },
-    }),
+  SessionDto: (v) => problems(v, sessionShape),
   SessionCreateDto: (v) =>
     problems(v, {
       required: {
@@ -368,6 +369,75 @@ const dtoShapes: Record<string, (value: unknown) => string[]> = {
   SessionStartDto: (v) =>
     problems(v, { required: { sessionId: str, consentAcknowledged: bool } }),
   SessionIdDto: (v) => problems(v, { required: { sessionId: str } }),
+  SessionListDto: (v) =>
+    problems(v, {
+      required: {},
+      optional: { cursor: str, limit: nonNegativeInt },
+    }),
+  SessionPageDto: (v) =>
+    problems(v, {
+      required: { items: arrayOf(object(sessionShape)) },
+      optional: { nextCursor: str },
+    }),
+  SessionRenameDto: (v) =>
+    problems(v, { required: { sessionId: str, title: str } }),
+  SessionDetailDto: (v) =>
+    problems(v, {
+      required: {
+        session: object(sessionShape),
+        transcript: arrayOf((item) => {
+          const type = (item as { type?: unknown } | null)?.type;
+          return type === "final"
+            ? object({
+                required: {
+                  type: literal("final"),
+                  segment: object(segmentShape),
+                },
+              })(item)
+            : object({
+                required: {
+                  type: literal("gap"),
+                  reason: gapReason,
+                  startMs: nonNegativeInt,
+                  durationMs: nonNegativeInt,
+                },
+              })(item);
+        }),
+        records: arrayOf(object(recordShape)),
+      },
+    }),
+  RecordEditDto: (v) =>
+    problems(v, {
+      required: { recordId: str },
+      optional: {
+        text: str,
+        rationale: str,
+        acceptanceCriteria: arrayOf(str),
+        alternatives: arrayOf(str),
+      },
+    }),
+  RecordCreateDto: (v) =>
+    problems(v, {
+      required: {
+        sessionId: str,
+        kind: recordKind,
+        text: str,
+        status: recordStatus,
+      },
+      optional: { rationale: str },
+    }),
+  PlanDto: (v) =>
+    problems(v, {
+      required: {
+        sessionId: str,
+        sections: arrayOf(
+          object({
+            required: { kind: recordKind, items: arrayOf(object(recordShape)) },
+          }),
+        ),
+      },
+    }),
+  RunIdDto: (v) => problems(v, { required: { runId: str } }),
   RecordDto: (v) => problems(v, recordShape),
   RecordSetStatusDto: (v) =>
     problems(v, { required: { recordId: str, status: recordStatus } }),

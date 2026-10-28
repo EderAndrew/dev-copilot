@@ -184,6 +184,30 @@ export type RecordDto = {
 
 export type RecordSetStatusDto = { recordId: string; status: RecordStatus };
 
+export type RecordEditDto = {
+  recordId: string;
+  text?: string;
+  rationale?: string;
+  acceptanceCriteria?: string[];
+  alternatives?: string[];
+};
+
+export type RecordCreateDto = {
+  sessionId: string;
+  kind: RecordKind;
+  text: string;
+  rationale?: string;
+  status: RecordStatus;
+};
+
+/** Derived development plan: one section per kind, in plan order (FR-031). */
+export type PlanDto = {
+  sessionId: string;
+  sections: { kind: RecordKind; items: RecordDto[] }[];
+};
+
+export type RunIdDto = { runId: string };
+
 export type AnalysisStatus =
   "running" | "ok" | "invalid_output" | "provider_error" | "rate_limited";
 
@@ -269,6 +293,23 @@ export type SessionStartDto = {
 };
 
 export type SessionIdDto = { sessionId: string };
+
+export type SessionListDto = { cursor?: string; limit?: number };
+
+export type SessionPageDto = { items: SessionDto[]; nextCursor?: string };
+
+export type SessionRenameDto = { sessionId: string; title: string };
+
+export type TranscriptItemDto =
+  | { type: "final"; segment: SegmentDto }
+  | { type: "gap"; reason: GapReason; startMs: number; durationMs: number };
+
+/** Everything persisted for a session (questions join with US5). */
+export type SessionDetailDto = {
+  session: SessionDto;
+  transcript: TranscriptItemDto[];
+  records: RecordDto[];
+};
 
 // Audio sources and permissions ----------------------------------------------------------------
 

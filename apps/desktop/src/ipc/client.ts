@@ -12,14 +12,21 @@ import type {
   ModelDownloadEvent,
   PermissionHelpDto,
   PermissionState,
+  PlanDto,
   ProviderDto,
+  RecordCreateDto,
   RecordDto,
+  RecordEditDto,
   RecordSetStatusDto,
+  RunIdDto,
   ProviderSetDefaultDto,
   ProviderUpsertDto,
   SessionCreateDto,
+  SessionDetailDto,
   SessionDto,
   SessionEvent,
+  SessionListDto,
+  SessionPageDto,
   SessionStartDto,
   SettingsDto,
   SettingsUpdateDto,
@@ -111,6 +118,21 @@ export const ipc = {
   /** Changes a record's status by explicit user action (FR-024). */
   recordSetStatus: (request: RecordSetStatusDto) =>
     call<RecordDto>("record_set_status", { request }),
+  recordEdit: (request: RecordEditDto) =>
+    call<RecordDto>("record_edit", { request }),
+  recordCreate: (request: RecordCreateDto) =>
+    call<RecordDto>("record_create", { request }),
+  planGet: (sessionId: string) =>
+    call<PlanDto>("plan_get", { request: { sessionId } }),
+  /** Final analysis of an ended or failed session (FR-033); results arrive as events. */
+  analysisRunFinal: (sessionId: string) =>
+    call<RunIdDto>("analysis_run_final", { request: { sessionId } }),
+  sessionList: (request: SessionListDto = {}) =>
+    call<SessionPageDto>("session_list", { request }),
+  sessionGet: (sessionId: string) =>
+    call<SessionDetailDto>("session_get", { request: { sessionId } }),
+  sessionRename: (sessionId: string, title: string) =>
+    call<SessionDto>("session_rename", { request: { sessionId, title } }),
   audioSourcesList: () => call<AudioSourceDto[]>("audio_sources_list"),
   audioPermissionRequest: (kind: AudioSourceKind) =>
     call<PermissionState>("audio_permission_request", { request: { kind } }),

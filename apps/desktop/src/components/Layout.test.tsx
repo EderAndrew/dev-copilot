@@ -26,9 +26,8 @@ describe("Layout", () => {
         .getByRole("button", { name: "Sessões" })
         .getAttribute("aria-current"),
     ).toBe("page");
-    await user.tab();
-    await user.tab();
-    await user.tab();
+    // Language selector, then Sessões, Histórico, Provedores.
+    for (let i = 0; i < 4; i += 1) await user.tab();
     expect(document.activeElement).toBe(
       screen.getByRole("button", { name: "Provedores" }),
     );
