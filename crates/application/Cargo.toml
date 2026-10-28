@@ -7,9 +7,16 @@ publish.workspace = true
 [dependencies]
 devcopilot-domain.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["sync", "time", "rt"] }
+tokio = { workspace = true, features = ["sync", "time", "rt", "macros"] }
 tokio-util.workspace = true
 tracing.workspace = true
+
+[features]
+# In-memory fakes of every port for use-case and integration tests (`testing` module).
+test-support = []
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "test-util"] }
 
 [lints]
 workspace = true

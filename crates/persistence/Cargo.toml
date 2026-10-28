@@ -4,17 +4,24 @@ edition.workspace = true
 version.workspace = true
 publish.workspace = true
 
-# `rusqlite` (SQLCipher) and `keyring` are added by spike S3 (T011), which decides how the
-# SQLCipher crypto backend is built on each OS.
+# SQLCipher crypto backend per OS: see docs/adr/ADR-004.md (spike S3, T011).
 [dependencies]
 devcopilot-application.workspace = true
 devcopilot-domain.workspace = true
+getrandom.workspace = true
+keyring.workspace = true
+rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
+# Windows has no system crypto library SQLCipher can use; OpenSSL is vendored (ADR-004).
+[target.'cfg(windows)'.dependencies]
+rusqlite = { workspace = true, features = ["bundled-sqlcipher-vendored-openssl"] }
+
 [dev-dependencies]
+devcopilot-application = { workspace = true, features = ["test-support"] }
 tempfile.workspace = true
 
 [lints]

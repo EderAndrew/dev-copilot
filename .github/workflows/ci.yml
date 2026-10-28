@@ -81,7 +81,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libasound2-dev libpulse-dev libssl-dev \
-            libxdo-dev libayatana-appindicator3-dev librsvg2-dev
+            libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
+            gnome-keyring dbus
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -94,6 +95,20 @@ jobs:
 
       - name: cargo test
         run: cargo test --workspace
+
+      # Spike S3 (ADR-004): DB key round trip through the real OS credential store.
+      - name: Credential store round trip (macOS, Windows)
+        if: runner.os != 'Linux'
+        env:
+          DEVCOPILOT_KEYRING_SPIKE: "1"
+        run: cargo test -p devcopilot-persistence --test spike_sqlcipher --test keyring_store
+
+      - name: Credential store round trip (Linux Secret Service)
+        if: runner.os == 'Linux'
+        env:
+          DEVCOPILOT_KEYRING_SPIKE: "1"
+        run: |
+          dbus-run-session -- sh -c 'printf "ci" | gnome-keyring-daemon --unlock --components=secrets --daemonize >/dev/null && cargo test -p devcopilot-persistence --test spike_sqlcipher --test keyring_store'
 
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4

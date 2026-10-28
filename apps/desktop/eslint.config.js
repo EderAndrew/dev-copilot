@@ -14,6 +14,12 @@ export default [
       parser: tseslint.parser,
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
+    plugins: { "@typescript-eslint": tseslint.plugin },
+    rules: {
+      // The core rule flags parameter names inside TS function types; use the TS-aware one.
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": "warn",
+    },
   },
   {
     ignores: ["dist/**", "src-tauri/**", "coverage/**"],

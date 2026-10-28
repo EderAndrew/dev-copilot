@@ -199,7 +199,8 @@ licença e advisories (Art. VII.6, `cargo deny`).
 
 - **Decisão**: além das dependências centrais, o workspace usa: `time` (timestamps e durações no domínio, sem
   dependência de SO), `sha2` (verificação SHA-256 do download de modelos, R4), `tracing-appender` (arquivo de
-  log rotativo no diretório de logs do app, R13) e `tempfile` (somente dev: bancos e diretórios temporários em
+  log rotativo no diretório de logs do app, R13), `getrandom` (CSPRNG do SO para a chave de 256 bits do banco,
+  R8) e `tempfile` (somente dev: bancos e diretórios temporários em
   testes).
 - **Justificativa**: cada uma tem um propósito único e é amplamente mantida (Art. VII.6); `tempfile` não entra
   no binário distribuído.

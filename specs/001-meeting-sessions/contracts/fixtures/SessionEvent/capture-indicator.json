@@ -1,0 +1,1 @@
+{ "type": "capture_indicator", "seq": 2, "active": true, "paused": false, "sources": ["microphone"] }

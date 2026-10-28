@@ -1,0 +1,10 @@
+//! Thin IPC commands: deserialize, validate, delegate to a use case, map the result
+//! (Constitution Art. VII.4, contracts/ipc-commands.md).
+//!
+//! Commands with input take a single `request` argument whose shape is the contract payload.
+
+pub mod error;
+pub mod providers;
+pub mod settings;
+
+pub use error::IpcError;

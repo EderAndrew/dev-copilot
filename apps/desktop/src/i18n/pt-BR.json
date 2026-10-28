@@ -1,0 +1,55 @@
+{
+  "app": {
+    "title": "Dev Copilot",
+    "loading": "Carregando…"
+  },
+  "nav": {
+    "label": "Navegação principal",
+    "sessions": "Sessões",
+    "providers": "Provedores",
+    "settings": "Configurações"
+  },
+  "language": {
+    "label": "Idioma da interface",
+    "pt-BR": "Português (Brasil)",
+    "en": "English"
+  },
+  "capture": {
+    "regionLabel": "Estado da captura"
+  },
+  "sessions": {
+    "title": "Sessões",
+    "empty": "Nenhuma sessão ainda."
+  },
+  "providers": {
+    "title": "Provedores",
+    "empty": "Nenhum provedor configurado."
+  },
+  "settings": {
+    "title": "Configurações",
+    "general": "Geral",
+    "analysisLimits": "Limites da análise",
+    "analysisLimitsHelp": "Controlam a frequência e o custo da análise incremental.",
+    "triggerFinals": "Analisar a cada N trechos finais",
+    "triggerSpeechSecs": "Ou a cada N segundos de fala",
+    "minIntervalSecs": "Intervalo mínimo entre análises (segundos)",
+    "maxCallsPerHour": "Máximo de chamadas por hora",
+    "maxTokensPerSession": "Máximo de tokens por sessão",
+    "save": "Salvar",
+    "saved": "Configurações salvas.",
+    "invalidNumber": "Informe um número inteiro."
+  },
+  "errors": {
+    "invalidInput": "Valor inválido. Revise os campos e tente novamente.",
+    "notFound": "Item não encontrado.",
+    "invalidState": "Esta ação não é permitida no estado atual.",
+    "permissionDenied": "Permissão de captura negada pelo sistema operacional.",
+    "sourceUnavailable": "Fonte de áudio indisponível.",
+    "noTranscriber": "Nenhum provedor de transcrição utilizável está configurado.",
+    "secretStoreUnavailable": "O cofre de credenciais do sistema não está disponível. Nada será gravado até que ele esteja acessível.",
+    "authorizationRequired": "Este provedor remoto precisa da sua autorização antes de receber dados.",
+    "providerError": "O provedor falhou. Tente novamente mais tarde.",
+    "storageError": "Não foi possível gravar os dados localmente.",
+    "internal": "Ocorreu um erro inesperado."
+  }
+}

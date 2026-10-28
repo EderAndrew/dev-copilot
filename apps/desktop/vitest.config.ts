@@ -6,7 +6,6 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],
-    // Feature tests arrive from Phase 2 onwards; an empty suite must not fail CI.
-    passWithNoTests: true,
+    setupFiles: ["src/test/setup.ts"],
   },
 });

@@ -23,6 +23,14 @@ serde.workspace = true
 serde_json.workspace = true
 devcopilot-application.workspace = true
 devcopilot-domain.workspace = true
+devcopilot-persistence.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+devcopilot-application = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
 
 [lints]
 workspace = true

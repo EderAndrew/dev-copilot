@@ -1,0 +1,55 @@
+{
+  "app": {
+    "title": "Dev Copilot",
+    "loading": "Loading…"
+  },
+  "nav": {
+    "label": "Main navigation",
+    "sessions": "Sessions",
+    "providers": "Providers",
+    "settings": "Settings"
+  },
+  "language": {
+    "label": "Interface language",
+    "pt-BR": "Português (Brasil)",
+    "en": "English"
+  },
+  "capture": {
+    "regionLabel": "Capture status"
+  },
+  "sessions": {
+    "title": "Sessions",
+    "empty": "No sessions yet."
+  },
+  "providers": {
+    "title": "Providers",
+    "empty": "No providers configured."
+  },
+  "settings": {
+    "title": "Settings",
+    "general": "General",
+    "analysisLimits": "Analysis limits",
+    "analysisLimitsHelp": "They control how often incremental analysis runs and what it costs.",
+    "triggerFinals": "Analyze every N final segments",
+    "triggerSpeechSecs": "Or every N seconds of speech",
+    "minIntervalSecs": "Minimum interval between analyses (seconds)",
+    "maxCallsPerHour": "Maximum calls per hour",
+    "maxTokensPerSession": "Maximum tokens per session",
+    "save": "Save",
+    "saved": "Settings saved.",
+    "invalidNumber": "Enter a whole number."
+  },
+  "errors": {
+    "invalidInput": "Invalid value. Check the fields and try again.",
+    "notFound": "Item not found.",
+    "invalidState": "This action is not allowed in the current state.",
+    "permissionDenied": "The operating system denied capture permission.",
+    "sourceUnavailable": "Audio source unavailable.",
+    "noTranscriber": "No usable transcription provider is configured.",
+    "secretStoreUnavailable": "The system credential store is unavailable. Nothing will be saved until it can be accessed.",
+    "authorizationRequired": "This remote provider needs your authorization before it receives data.",
+    "providerError": "The provider failed. Try again later.",
+    "storageError": "Data could not be saved locally.",
+    "internal": "An unexpected error occurred."
+  }
+}

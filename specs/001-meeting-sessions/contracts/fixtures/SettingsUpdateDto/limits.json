@@ -1,0 +1,1 @@
+{ "consentReminderDismissed": true, "analysisLimits": { "triggerFinals": 8, "triggerSpeechSecs": 120, "minIntervalSecs": 45, "maxCallsPerHour": 20, "maxTokensPerSession": 100000 } }

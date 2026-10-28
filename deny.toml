@@ -27,7 +27,11 @@ allow = [
     "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.9
-exceptions = []
+exceptions = [
+    # Bundled SQLCipher sources (ADR-004): SQLite is public domain ("blessing") and the embedded
+    # libtomcrypt is WTFPL. Both are permissive; allowed for this crate only.
+    { crate = "sqlcipher-src", allow = ["blessing", "WTFPL"] },
+]
 
 # Workspace crates are `publish = false`; they carry no license field.
 [licenses.private]

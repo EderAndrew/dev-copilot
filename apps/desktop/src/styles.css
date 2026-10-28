@@ -1,0 +1,89 @@
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #fafafa;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #ececec;
+    background: #1b1b1d;
+  }
+}
+
+body {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+}
+
+.layout-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #8884;
+}
+
+.layout-title {
+  font-weight: 600;
+}
+
+.layout-capture {
+  flex: 1;
+}
+
+.layout-language {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.layout-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 1rem 0.5rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.layout-nav button {
+  width: 100%;
+  text-align: start;
+  padding: 0.4rem 0.6rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.layout-nav button[aria-current="page"] {
+  border-color: currentColor;
+  font-weight: 600;
+}
+
+.layout-main {
+  padding: 1rem 1.5rem;
+}
+
+fieldset {
+  margin-bottom: 1rem;
+}
+
+fieldset label {
+  display: block;
+}

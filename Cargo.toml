@@ -58,6 +58,8 @@ sha2 = "0.11.1"
 # Encrypted persistence and OS credential store (R8, R9)
 rusqlite = { version = "0.41.0", features = ["bundled-sqlcipher"] }
 keyring = "4.2.0"
+# OS CSPRNG for the 256-bit database key (R8, R19)
+getrandom = "0.4.3"
 
 # Desktop shell
 tauri = "2.12.5"

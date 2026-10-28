@@ -46,7 +46,8 @@ pub trait SegmentRepository { /* append_final, append_gap, list_by_session */ }
 pub trait RecordRepository  { /* insert_proposed, apply_user_change (com RecordChange), list_by_session */ }
 pub trait QuestionRepository { /* insert, set_answer, list_by_session */ }
 pub trait ProviderRepository { /* providers + authorizations */ }
-pub trait SecretStore { /* get/set/delete por CredentialRef; erro distinto para cofre indisponível */ }
+pub trait SettingsRepository { /* get/set chave-valor não sensível */ }
+pub trait SecretStore { /* check_available, get/set/delete por CredentialRef; erro distinto para cofre indisponível */ }
 pub trait Clock { fn now(&self) -> Timestamp; }
 pub trait EventPublisher { fn publish(&self, session: SessionId, event: SessionEvent); }
 ```

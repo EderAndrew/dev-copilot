@@ -54,55 +54,60 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 
 ### Spike S3 (blocking) and ADR
 
-- [ ] T011 Spike S3: build a throwaway test in `crates/persistence/tests/spike_sqlcipher.rs` opening an SQLCipher DB with a key stored via `keyring` on macOS, Windows and Linux CI runners; record results and the decision in `docs/adr/ADR-004.md` (armazenamento local cifrado: context, options, decision, tradeoffs, review triggers, deletion limitations)
+- [X] T011 Spike S3: build a throwaway test in `crates/persistence/tests/spike_sqlcipher.rs` opening an SQLCipher DB with a key stored via `keyring` on macOS, Windows and Linux CI runners; record results and the decision in `docs/adr/ADR-004.md` (armazenamento local cifrado: context, options, decision, tradeoffs, review triggers, deletion limitations)
 
 ### Domain primitives
 
-- [ ] T012 [P] Implement id newtypes (SessionId, SegmentId, RecordId, ChangeId, QuestionId, AnalysisRunId, ProviderId, ExportId) over UUID v7 in `crates/domain/src/ids.rs`
-- [ ] T013 [P] Implement `Timestamp` and `Duration` value types and `Clock` trait-free helpers in `crates/domain/src/time.rs`
-- [ ] T014 [P] Implement `Redacted<T>` with `Debug`/`Display` printing `[redacted]` plus unit tests in `crates/domain/src/redacted.rs`
-- [ ] T015 [P] Implement `DomainError` (InvalidTransition, InvalidInput{field}, InvariantViolation) in `crates/domain/src/error.rs`
-- [ ] T016 [P] Implement bounded text value types (Title 1–200, RecordText 1–2000, SegmentText 1–10000, QuestionText 1–2000) rejecting control characters, with unit tests, in `crates/domain/src/text.rs`
-- [ ] T017 [P] Implement `SessionLanguage` (pt-BR, en) and `UiLanguage` in `crates/domain/src/language.rs`
-- [ ] T018 [P] Implement Provider entity (role, locality, adapter kind, endpoint with https-required-for-remote validation, model, credential_ref, data_categories) with unit tests in `crates/domain/src/provider.rs`
+- [X] T012 [P] Implement id newtypes (SessionId, SegmentId, RecordId, ChangeId, QuestionId, AnalysisRunId, ProviderId, ExportId) over UUID v7 in `crates/domain/src/ids.rs`
+- [X] T013 [P] Implement `Timestamp` and `Duration` value types and `Clock` trait-free helpers in `crates/domain/src/time.rs`
+- [X] T014 [P] Implement `Redacted<T>` with `Debug`/`Display` printing `[redacted]` plus unit tests in `crates/domain/src/redacted.rs`
+- [X] T015 [P] Implement `DomainError` (InvalidTransition, InvalidInput{field}, InvariantViolation) in `crates/domain/src/error.rs`
+- [X] T016 [P] Implement bounded text value types (Title 1–200, RecordText 1–2000, SegmentText 1–10000, QuestionText 1–2000) rejecting control characters, with unit tests, in `crates/domain/src/text.rs`
+- [X] T017 [P] Implement `SessionLanguage` (pt-BR, en) and `UiLanguage` in `crates/domain/src/language.rs`
+- [X] T018 [P] Implement Provider entity (role, locality, adapter kind, endpoint with https-required-for-remote validation, model, credential_ref, data_categories) with unit tests in `crates/domain/src/provider.rs`
 
 ### Application ports and test support
 
-- [ ] T019 Define all ports from `specs/001-meeting-sessions/contracts/provider-ports.md` (AudioSource, Transcriber, AnalysisProvider, RemoteGate, SessionRepository, SegmentRepository, RecordRepository, QuestionRepository, ProviderRepository, SecretStore, Clock, EventPublisher) in `crates/application/src/ports.rs`
-- [ ] T020 [P] Define `SessionEvent` and related DTO-neutral event types matching `contracts/ipc-events.md` in `crates/application/src/events.rs`
-- [ ] T021 [P] Define `ApplicationError` mapping domain/port errors to stable codes (invalid_input, not_found, invalid_state, permission_denied, source_unavailable, no_transcriber, secret_store_unavailable, authorization_required, provider_error, storage_error, internal) in `crates/application/src/error.rs`
-- [ ] T022 Implement in-memory fakes for every port (fake clock, scripted audio source, scripted transcriber, scripted analysis provider, in-memory repos, recording event publisher, toggleable secret store) behind feature `test-support` in `crates/application/src/testing.rs`
+- [X] T019 Define all ports from `specs/001-meeting-sessions/contracts/provider-ports.md` (AudioSource, Transcriber, AnalysisProvider, RemoteGate, SessionRepository, SegmentRepository, RecordRepository, QuestionRepository, ProviderRepository, SecretStore, Clock, EventPublisher) in `crates/application/src/ports.rs`
+- [X] T020 [P] Define `SessionEvent` and related DTO-neutral event types matching `contracts/ipc-events.md` in `crates/application/src/events.rs`
+- [X] T021 [P] Define `ApplicationError` mapping domain/port errors to stable codes (invalid_input, not_found, invalid_state, permission_denied, source_unavailable, no_transcriber, secret_store_unavailable, authorization_required, provider_error, storage_error, internal) in `crates/application/src/error.rs`
+- [X] T022 Implement in-memory fakes for every port (fake clock, scripted audio source, scripted transcriber, scripted analysis provider, in-memory repos, recording event publisher, toggleable secret store) behind feature `test-support` in `crates/application/src/testing.rs`
 
 ### Encrypted persistence
 
-- [ ] T023 Implement `SecretStore` over `keyring` (db key and provider credentials, distinct error for unavailable store) in `crates/persistence/src/secret_store.rs`
-- [ ] T024 Implement DB open/create with 256-bit random key from SecretStore, `PRAGMA key`, `secure_delete=ON`, `journal_mode=WAL`, `foreign_keys=ON`, user-only file permissions in app data dir, in `crates/persistence/src/db.rs`
-- [ ] T025 Implement migration runner via `PRAGMA user_version` and migration v1 creating all tables from data-model.md (sessions, session_sources, segments, records, record_evidence, record_changes, analysis_runs, questions, question_evidence, providers, provider_authorizations, exports, settings) with `ON DELETE CASCADE` in `crates/persistence/src/migrations/mod.rs` and `crates/persistence/src/migrations/v1.sql`
-- [ ] T026 [P] Integration test: DB refuses to open/write when SecretStore is unavailable (FR-039a) in `crates/persistence/tests/secret_store_unavailable.rs`
-- [ ] T027 [P] Integration test: migrations apply idempotently on a fresh and an existing DB in `crates/persistence/tests/migrations.rs`
-- [ ] T028 [P] Implement ProviderRepository (providers only; authorizations added in US7) and settings repository in `crates/persistence/src/repos/provider_repo.rs` and `crates/persistence/src/repos/settings_repo.rs`
+- [X] T023 Implement `SecretStore` over `keyring` (db key and provider credentials, distinct error for unavailable store) in `crates/persistence/src/secret_store.rs`
+- [X] T024 Implement DB open/create with 256-bit random key from SecretStore, `PRAGMA key`, `secure_delete=ON`, `journal_mode=WAL`, `foreign_keys=ON`, user-only file permissions in app data dir, in `crates/persistence/src/db.rs`
+- [X] T025 Implement migration runner via `PRAGMA user_version` and migration v1 creating all tables from data-model.md (sessions, session_sources, segments, records, record_evidence, record_changes, analysis_runs, questions, question_evidence, providers, provider_authorizations, exports, settings) with `ON DELETE CASCADE` in `crates/persistence/src/migrations/mod.rs` and `crates/persistence/src/migrations/v1.sql`
+- [X] T026 [P] Integration test: DB refuses to open/write when SecretStore is unavailable (FR-039a) in `crates/persistence/tests/secret_store_unavailable.rs`
+- [X] T027 [P] Integration test: migrations apply idempotently on a fresh and an existing DB in `crates/persistence/tests/migrations.rs`
+- [X] T028 [P] Implement ProviderRepository (providers only; authorizations added in US7) and settings repository in `crates/persistence/src/repos/provider_repo.rs` and `crates/persistence/src/repos/settings_repo.rs`
 
 ### Provider and settings services (local only)
 
-- [ ] T029 Implement `provider_service` basics (list, upsert local providers, set default per role, resolve usable transcriber/analyzer) in `crates/application/src/provider_service.rs` with tests using fakes
-- [ ] T030 [P] Implement `settings_service` (ui_language, consent_reminder_dismissed, analysis_limits defaults per research R7: trigger 6 finals / 90 s, min interval 30 s, 40 calls per hour, per-session token cap per provider) in `crates/application/src/settings_service.rs` with tests
+- [X] T029 Implement `provider_service` basics (list, upsert local providers, set default per role, resolve usable transcriber/analyzer) in `crates/application/src/provider_service.rs` with tests using fakes
+- [X] T030 [P] Implement `settings_service` (ui_language, consent_reminder_dismissed, analysis_limits defaults per research R7: trigger 6 finals / 90 s, min interval 30 s, 40 calls per hour, per-session token cap per provider) in `crates/application/src/settings_service.rs` with tests
 
 ### Tauri plumbing
 
-- [ ] T031 Implement composition root wiring repositories, secret store, services and tracing (file appender in app log dir, no content fields) in `apps/desktop/src-tauri/src/composition.rs` and `apps/desktop/src-tauri/src/lib.rs`
-- [ ] T032 [P] Implement `IpcError` (code, messageKey, details) and `From<ApplicationError>` in `apps/desktop/src-tauri/src/commands/error.rs`
-- [ ] T033 [P] Implement `EventPublisher` bridge to per-session `tauri::ipc::Channel<SessionEvent>` with seq numbering in `apps/desktop/src-tauri/src/events.rs`
-- [ ] T034 Implement settings and provider listing commands (`settings_get`, `settings_update`, `provider_list`, `provider_upsert` for local, `provider_set_default`) with input validation in `apps/desktop/src-tauri/src/commands/settings.rs` and `apps/desktop/src-tauri/src/commands/providers.rs`
-- [ ] T035 [P] Create shared contract fixtures directory with sample DTO/event JSON in `specs/001-meeting-sessions/contracts/fixtures/` and a Rust test deserializing all fixtures in `apps/desktop/src-tauri/tests/contract_fixtures.rs`
+- [X] T031 Implement composition root wiring repositories, secret store, services and tracing (file appender in app log dir, no content fields) in `apps/desktop/src-tauri/src/composition.rs` and `apps/desktop/src-tauri/src/lib.rs`
+- [X] T032 [P] Implement `IpcError` (code, messageKey, details) and `From<ApplicationError>` in `apps/desktop/src-tauri/src/commands/error.rs`
+- [X] T033 [P] Implement `EventPublisher` bridge to per-session `tauri::ipc::Channel<SessionEvent>` with seq numbering in `apps/desktop/src-tauri/src/events.rs`
+- [X] T034 Implement settings and provider listing commands (`settings_get`, `settings_update`, `provider_list`, `provider_upsert` for local, `provider_set_default`) with input validation in `apps/desktop/src-tauri/src/commands/settings.rs` and `apps/desktop/src-tauri/src/commands/providers.rs`
+- [X] T035 [P] Create shared contract fixtures directory with sample DTO/event JSON in `specs/001-meeting-sessions/contracts/fixtures/` and a Rust test deserializing all fixtures in `apps/desktop/src-tauri/tests/contract_fixtures.rs`
 
 ### Frontend shell
 
-- [ ] T036 [P] Create IPC types matching contracts and `invoke` wrappers returning typed `IpcError` in `apps/desktop/src/ipc/types.ts` and `apps/desktop/src/ipc/client.ts`, plus a Vitest contract test reading `specs/001-meeting-sessions/contracts/fixtures/` in `apps/desktop/src/ipc/contract.test.ts`
-- [ ] T037 [P] Set up i18next with `apps/desktop/src/i18n/index.ts`, `apps/desktop/src/i18n/pt-BR.json`, `apps/desktop/src/i18n/en.json` and a completeness test asserting identical key sets (SC-019) in `apps/desktop/src/i18n/i18n.test.ts`
-- [ ] T038 Create app shell with persistent header slot for the capture indicator, navigation (Sessões, Provedores, Configurações) and language switcher in `apps/desktop/src/App.tsx` and `apps/desktop/src/components/Layout.tsx`
-- [ ] T039 [P] Implement settings screen (UI language, analysis limits) in `apps/desktop/src/features/settings/SettingsPage.tsx`
+- [X] T036 [P] Create IPC types matching contracts and `invoke` wrappers returning typed `IpcError` in `apps/desktop/src/ipc/types.ts` and `apps/desktop/src/ipc/client.ts`, plus a Vitest contract test reading `specs/001-meeting-sessions/contracts/fixtures/` in `apps/desktop/src/ipc/contract.test.ts`
+- [X] T037 [P] Set up i18next with `apps/desktop/src/i18n/index.ts`, `apps/desktop/src/i18n/pt-BR.json`, `apps/desktop/src/i18n/en.json` and a completeness test asserting identical key sets (SC-019) in `apps/desktop/src/i18n/i18n.test.ts`
+- [X] T038 Create app shell with persistent header slot for the capture indicator, navigation (Sessões, Provedores, Configurações) and language switcher in `apps/desktop/src/App.tsx` and `apps/desktop/src/components/Layout.tsx`
+- [X] T039 [P] Implement settings screen (UI language, analysis limits) in `apps/desktop/src/features/settings/SettingsPage.tsx`
 
 **Checkpoint**: Encrypted DB, ports, fakes, IPC and UI shell ready
+
+**Phase 2 notes** (2026-10-28):
+- Contract vocabulary pulled forward so ports/events compile: `SessionState`/`FailureReason` in `crates/domain/src/session.rs` (T046 adds the `Session` entity and transitions) and `GapReason` in `crates/domain/src/transcript.rs` (T068 adds `TranscriptSegment`).
+- Ports for story entities grow with their stories: `SessionRepository` (T048), `SegmentRepository` (T069), `RecordRepository` (T088), `QuestionRepository` (T113), `AnalysisProvider::analyze/answer` (T089–T091, T114); a `SettingsRepository` port was added for T028/T030.
+- T011: ADR-004 stays *Proposto* until the Windows and Linux CI rows of spike S3 pass (macOS verified locally).
 
 ---
 
@@ -124,7 +129,7 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 ### Implementation for User Story 1
 
 - [ ] T046 [P] [US1] Implement Session entity, SessionState, FailureReason and transition functions in `crates/domain/src/session.rs`
-- [ ] T047 [P] [US1] Implement AudioSourceKind, Availability, UnavailableReason, PermissionState in `crates/domain/src/audio_source.rs`
+- [X] T047 [P] [US1] Implement AudioSourceKind, Availability, UnavailableReason, PermissionState in `crates/domain/src/audio_source.rs` (pulled into Phase 2: the T019 `AudioSource` port needs it)
 - [ ] T048 [US1] Implement SessionRepository (create, get, update_state, list, mark_interrupted_on_startup — appending `gap(interrupted)` once T069 lands) in `crates/persistence/src/repos/session_repo.rs`
 - [ ] T049 [US1] Implement `capture_pipeline` skeleton: open sources into bounded sink, per-session CancellationToken, source-loss handling, indicator events, in `crates/application/src/capture_pipeline.rs`
 - [ ] T050 [US1] Implement `session_service` (create, start with checks FR-009/FR-012/FR-039a/FR-045a, stop returning immediately, recovery on startup) in `crates/application/src/session_service.rs`

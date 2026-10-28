@@ -6,6 +6,8 @@ independente do estado do frontend (Art. IV.11).
 
 Convenções:
 - Nomes em `snake_case`; payloads JSON em `camelCase`.
+- A entrada de cada comando é passada como um único argumento `request` (`invoke(cmd, { request })`);
+  comandos sem entrada não recebem argumentos. Campos desconhecidos → `invalid_input`.
 - Ids são strings UUID; ids desconhecidos → `not_found`.
 - Strings são limitadas conforme [data-model.md](../data-model.md); excesso → `invalid_input`.
 - Erros seguem `IpcError` e nunca contêm conteúdo de sessão, caminhos internos ou segredos.
