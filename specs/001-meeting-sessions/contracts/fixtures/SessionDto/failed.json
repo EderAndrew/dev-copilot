@@ -1,0 +1,12 @@
+{
+  "id": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a7c",
+  "title": "Architecture review",
+  "language": "en",
+  "state": "failed",
+  "failure": "source_unavailable",
+  "sources": ["microphone", "system"],
+  "createdAt": 1793059200000,
+  "startedAt": 1793059210000,
+  "endedAt": 1793059800000,
+  "activeDurationMs": 590000
+}

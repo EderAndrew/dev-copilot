@@ -4,6 +4,10 @@ Comandos Tauri expostos à janela `main`. Todos são **adaptadores finos** (Art.
 validam, chamam um caso de uso de `application` e mapeiam o resultado. A autorização é verificada no núcleo,
 independente do estado do frontend (Art. IV.11).
 
+`SessionDto`: `{ id, title, language, state, failure?, sources, createdAt, startedAt?, endedAt?,
+activeDurationMs }` (instantes em ms desde a época Unix). `AudioSourceDto`: `{ kind, availability:
+"available" | "unavailable", unavailableReason?, permission }`. Exemplos em `fixtures/`.
+
 Convenções:
 - Nomes em `snake_case`; payloads JSON em `camelCase`.
 - A entrada de cada comando é passada como um único argumento `request` (`invoke(cmd, { request })`);
@@ -37,7 +41,7 @@ type IpcError = {
 | `session_get` | `{ sessionId }` | `SessionDetailDto` (sessão + segmentos finais + registros + perguntas) | `not_found` |
 | `session_rename` | `{ sessionId, title }` | `SessionDto` | `invalid_input` |
 | `session_delete` | `{ sessionId, confirmed: true }` | `{}` | `invalid_state` (sessão ativa, FR-044) |
-| `session_subscribe` | `{ sessionId, channel: Channel<SessionEvent> }` | `{}` | `not_found` |
+| `session_subscribe` | `{ sessionId }` + argumento de topo `channel: Channel<SessionEvent>` (Tauri só aceita `Channel` como argumento de comando, não dentro de `request`) | `SessionDto` atual (para ressincronizar ao reconectar) | `not_found` |
 
 ## Fontes e permissões
 

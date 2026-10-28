@@ -119,32 +119,41 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 
 ### Tests for User Story 1 (REQUIRED) ⚠️
 
-- [ ] T040 [P] [US1] Exhaustive state-machine tests (all valid/invalid transitions incl. paused, failure reasons, terminal states) in `crates/domain/src/session.rs` test module
-- [ ] T041 [P] [US1] Use-case tests: start blocked without permission/transcriber/secret store, consent reminder required, single active session (FR-006), stop emits indicator off and cancels sources (SC-002 with fake clock), cancel during `starting` → `idle` with sources closed (FR-003), sole source loss → failed with content kept, permission revoked mid-capture stops that source and emits `source_status: permission_revoked` (FR-010), default-device change never switches to another device (FR-011, Art. V.4), OS suspend/lock handled as source loss without auto-resume, in `crates/application/tests/session_service.rs`
-- [ ] T042 [P] [US1] Startup recovery test: non-terminal sessions become `failed(interrupted)` and get a trailing `gap(interrupted)` after the last persisted final (FR-007, US2.3) in `crates/application/tests/recovery.rs`
-- [ ] T043 [P] [US1] Repository tests for sessions and sources in `crates/persistence/tests/session_repo.rs`
-- [ ] T044 [P] [US1] IPC command validation tests (bad ids, title bounds, unknown source kind, start without consent, `session_cancel_start` outside `starting`) in `apps/desktop/src-tauri/tests/session_commands.rs`
-- [ ] T045 [P] [US1] Frontend tests: CaptureIndicator shows text+icon, `aria-live`, axe clean; controls keyboard-operable, in `apps/desktop/src/features/sessions/CaptureIndicator.test.tsx` and `apps/desktop/src/features/sessions/SessionControls.test.tsx`
+- [X] T040 [P] [US1] Exhaustive state-machine tests (all valid/invalid transitions incl. paused, failure reasons, terminal states) in `crates/domain/src/session.rs` test module
+- [X] T041 [P] [US1] Use-case tests: start blocked without permission/transcriber/secret store, consent reminder required, single active session (FR-006), stop emits indicator off and cancels sources (SC-002 with fake clock), cancel during `starting` → `idle` with sources closed (FR-003), sole source loss → failed with content kept, permission revoked mid-capture stops that source and emits `source_status: permission_revoked` (FR-010), default-device change never switches to another device (FR-011, Art. V.4), OS suspend/lock handled as source loss without auto-resume, in `crates/application/tests/session_service.rs`
+- [X] T042 [P] [US1] Startup recovery test: non-terminal sessions become `failed(interrupted)` and get a trailing `gap(interrupted)` after the last persisted final (FR-007, US2.3) in `crates/application/tests/recovery.rs`
+- [X] T043 [P] [US1] Repository tests for sessions and sources in `crates/persistence/tests/session_repo.rs`
+- [X] T044 [P] [US1] IPC command validation tests (bad ids, title bounds, unknown source kind, start without consent, `session_cancel_start` outside `starting`) in `apps/desktop/src-tauri/tests/session_commands.rs`
+- [X] T045 [P] [US1] Frontend tests: CaptureIndicator shows text+icon, `aria-live`, axe clean; controls keyboard-operable, in `apps/desktop/src/features/sessions/CaptureIndicator.test.tsx` and `apps/desktop/src/features/sessions/SessionControls.test.tsx`
 
 ### Implementation for User Story 1
 
-- [ ] T046 [P] [US1] Implement Session entity, SessionState, FailureReason and transition functions in `crates/domain/src/session.rs`
+- [X] T046 [P] [US1] Implement Session entity, SessionState, FailureReason and transition functions in `crates/domain/src/session.rs`
 - [X] T047 [P] [US1] Implement AudioSourceKind, Availability, UnavailableReason, PermissionState in `crates/domain/src/audio_source.rs` (pulled into Phase 2: the T019 `AudioSource` port needs it)
-- [ ] T048 [US1] Implement SessionRepository (create, get, update_state, list, mark_interrupted_on_startup — appending `gap(interrupted)` once T069 lands) in `crates/persistence/src/repos/session_repo.rs`
-- [ ] T049 [US1] Implement `capture_pipeline` skeleton: open sources into bounded sink, per-session CancellationToken, source-loss handling, indicator events, in `crates/application/src/capture_pipeline.rs`
-- [ ] T050 [US1] Implement `session_service` (create, start with checks FR-009/FR-012/FR-039a/FR-045a, stop returning immediately, recovery on startup) in `crates/application/src/session_service.rs`
-- [ ] T051 [P] [US1] Implement cpal microphone adapter (device enumeration, permission query/request, callback writing only to `rtrb` producer, no silent device switch FR-011) in `crates/audio/src/cpal_mic.rs`
-- [ ] T052 [P] [US1] Implement resampler/downmixer to 16 kHz mono f32 outside the callback in `crates/audio/src/resample.rs` with unit tests on synthetic signals
-- [ ] T053 [P] [US1] Add ignored-by-default device integration test for mic capture in `crates/audio/tests/mic_device.rs`
-- [ ] T054 [US1] Implement commands `session_create`, `session_start`, `session_cancel_start`, `session_stop`, `session_subscribe`, `audio_sources_list`, `audio_permission_request`, `audio_permission_help` in `apps/desktop/src-tauri/src/commands/sessions.rs` and `apps/desktop/src-tauri/src/commands/audio.rs`
-- [ ] T055 [P] [US1] Implement session event store/reducer (applies events by seq, resubscribe on reconnect) in `apps/desktop/src/features/sessions/sessionStore.ts`
-- [ ] T056 [P] [US1] Implement NewSessionForm (title, language, source selection with availability reasons) in `apps/desktop/src/features/sessions/NewSessionForm.tsx`
-- [ ] T057 [P] [US1] Implement ConsentReminderDialog (FR-012, "não mostrar novamente") in `apps/desktop/src/features/sessions/ConsentReminderDialog.tsx`
-- [ ] T058 [US1] Implement SessionControls (start/stop, states, failure messages) and CaptureIndicator in header in `apps/desktop/src/features/sessions/SessionControls.tsx` and `apps/desktop/src/features/sessions/CaptureIndicator.tsx`
-- [ ] T059 [P] [US1] Implement PermissionHelp per OS (FR-010) in `apps/desktop/src/features/sessions/PermissionHelp.tsx`
-- [ ] T060 [US1] Add US1 strings to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
+- [X] T048 [US1] Implement SessionRepository (create, get, update_state, list, mark_interrupted_on_startup — appending `gap(interrupted)` once T069 lands) in `crates/persistence/src/repos/session_repo.rs`
+- [X] T049 [US1] Implement `capture_pipeline` skeleton: open sources into bounded sink, per-session CancellationToken, source-loss handling, indicator events, in `crates/application/src/capture_pipeline.rs`
+- [X] T050 [US1] Implement `session_service` (create, start with checks FR-009/FR-012/FR-039a/FR-045a, stop returning immediately, recovery on startup) in `crates/application/src/session_service.rs`
+- [X] T051 [P] [US1] Implement cpal microphone adapter (device enumeration, permission query/request, callback writing only to `rtrb` producer, no silent device switch FR-011) in `crates/audio/src/cpal_mic.rs`
+- [X] T052 [P] [US1] Implement resampler/downmixer to 16 kHz mono f32 outside the callback in `crates/audio/src/resample.rs` with unit tests on synthetic signals
+- [X] T053 [P] [US1] Add ignored-by-default device integration test for mic capture in `crates/audio/tests/mic_device.rs`
+- [X] T054 [US1] Implement commands `session_create`, `session_start`, `session_cancel_start`, `session_stop`, `session_subscribe`, `audio_sources_list`, `audio_permission_request`, `audio_permission_help` in `apps/desktop/src-tauri/src/commands/sessions.rs` and `apps/desktop/src-tauri/src/commands/audio.rs`
+- [X] T055 [P] [US1] Implement session event store/reducer (applies events by seq, resubscribe on reconnect) in `apps/desktop/src/features/sessions/sessionStore.ts`
+- [X] T056 [P] [US1] Implement NewSessionForm (title, language, source selection with availability reasons) in `apps/desktop/src/features/sessions/NewSessionForm.tsx`
+- [X] T057 [P] [US1] Implement ConsentReminderDialog (FR-012, "não mostrar novamente") in `apps/desktop/src/features/sessions/ConsentReminderDialog.tsx`
+- [X] T058 [US1] Implement SessionControls (start/stop, states, failure messages) and CaptureIndicator in header in `apps/desktop/src/features/sessions/SessionControls.tsx` and `apps/desktop/src/features/sessions/CaptureIndicator.tsx`
+- [X] T059 [P] [US1] Implement PermissionHelp per OS (FR-010) in `apps/desktop/src/features/sessions/PermissionHelp.tsx`
+- [X] T060 [US1] Add US1 strings to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
 
 **Checkpoint**: Sessions start/stop with mic capture under test fakes; full manual flow requires a transcriber from US2 (FR-045a)
+
+**Phase 3 notes** (2026-10-28):
+- `AudioSource::start` gained a `SourceFaultNotifier` argument: adapters report `SourceFault::{Lost, PermissionRevoked}` and stop; the pipeline closes that source and never reopens or switches device (FR-010, FR-011). Default-device changes and OS suspend/lock surface as `Lost`.
+- `SessionRepository` is `create/get/update/list/list_active/save_interrupted`; `save_interrupted` writes the trailing `gap(interrupted)` directly into `segments` until T069 adds `SegmentRepository`.
+- Synchronous start checks (another active session, consent, secret store, transcriber, unavailable source, already denied/revoked permission) return an error and keep the session `idle`; a prompt denied during `starting` or a source failing to open ends in `failed(permission_denied | source_unavailable)`.
+- Until T073 the capture pipeline drains and discards the audio queue (`capture_pipeline::discard_audio`); nothing is persisted.
+- `session_subscribe` takes `channel` as a top-level command argument (Tauri cannot deserialize a `Channel` inside `request`) and returns the current `SessionDto`; contract updated.
+- `cpal` has no permission API: `CpalMicrophone` tracks the last observed state and `request_permission` opens a short probe stream (triggers the macOS prompt). On macOS an undetermined permission may yield silence rather than an error; verify in the acceptance matrix (T162).
+- System audio is registered as `UnavailableSource(not_validated_on_platform)` until spike S1 (US8).
 
 ---
 

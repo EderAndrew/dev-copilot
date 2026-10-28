@@ -87,3 +87,46 @@ fieldset {
 fieldset label {
   display: block;
 }
+
+.capture-indicator {
+  margin: 0;
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+}
+
+.capture-indicator--on {
+  font-weight: 600;
+}
+
+.capture-indicator--on .capture-indicator-icon {
+  color: #c62828;
+}
+
+.dialog {
+  position: fixed;
+  inset: 20% auto auto 50%;
+  transform: translateX(-50%);
+  max-width: 32rem;
+  padding: 1rem 1.5rem;
+  background: Canvas;
+  color: CanvasText;
+  border: 1px solid #8888;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px #0004;
+}
+
+.dialog-actions,
+.session-controls-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.source-reason {
+  font-size: 0.9em;
+  opacity: 0.8;
+}

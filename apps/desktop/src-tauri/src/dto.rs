@@ -6,7 +6,7 @@
 use std::fmt;
 
 use devcopilot_domain::DomainError;
-use devcopilot_domain::audio_source::AudioSourceKind;
+use devcopilot_domain::audio_source::{AudioSourceKind, PermissionState, UnavailableReason};
 use devcopilot_domain::language::{SessionLanguage, UiLanguage};
 use devcopilot_domain::provider::{DataCategory, Locality, ProviderAdapterKind, ProviderRole};
 use devcopilot_domain::session::{FailureReason, SessionState};
@@ -46,11 +46,13 @@ code_enum!(
     FailureReason,
     GapReason,
     Locality,
+    PermissionState,
     ProviderAdapterKind,
     ProviderRole,
     SessionLanguage,
     SessionState,
     UiLanguage,
+    UnavailableReason,
 );
 
 /// A domain enum (de)serialized as its code.

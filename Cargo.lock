@@ -1049,6 +1049,7 @@ dependencies = [
 name = "devcopilot-application"
 version = "0.1.0"
 dependencies = [
+ "devcopilot-application",
  "devcopilot-domain",
  "thiserror 2.0.21",
  "tokio",
@@ -1066,6 +1067,8 @@ dependencies = [
  "rtrb",
  "rubato",
  "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
  "tracing",
 ]
 
@@ -1074,6 +1077,7 @@ name = "devcopilot-desktop"
 version = "0.1.0"
 dependencies = [
  "devcopilot-application",
+ "devcopilot-audio",
  "devcopilot-domain",
  "devcopilot-persistence",
  "serde",
@@ -1082,6 +1086,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tempfile",
+ "tokio",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",

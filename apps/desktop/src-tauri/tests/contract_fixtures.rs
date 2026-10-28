@@ -7,8 +7,12 @@
 use std::path::{Path, PathBuf};
 
 use devcopilot_desktop_lib::commands::IpcError;
+use devcopilot_desktop_lib::commands::audio::{AudioSourceDto, PermissionHelpDto};
 use devcopilot_desktop_lib::commands::providers::{
     ProviderDto, ProviderSetDefaultDto, ProviderUpsertDto,
+};
+use devcopilot_desktop_lib::commands::sessions::{
+    SessionCreateDto, SessionDto, SessionIdDto, SessionStartDto,
 };
 use devcopilot_desktop_lib::commands::settings::{SettingsDto, SettingsUpdateDto};
 use devcopilot_desktop_lib::events::IpcSessionEvent;
@@ -68,6 +72,20 @@ fn providers() {
 }
 
 #[test]
+fn sessions() {
+    assert_round_trip::<SessionDto>("SessionDto");
+    assert_round_trip::<SessionCreateDto>("SessionCreateDto");
+    assert_round_trip::<SessionStartDto>("SessionStartDto");
+    assert_round_trip::<SessionIdDto>("SessionIdDto");
+}
+
+#[test]
+fn audio_sources() {
+    assert_round_trip::<AudioSourceDto>("AudioSourceDto");
+    assert_round_trip::<PermissionHelpDto>("PermissionHelpDto");
+}
+
+#[test]
 fn session_events() {
     assert_round_trip::<IpcSessionEvent>("SessionEvent");
 }
@@ -75,11 +93,17 @@ fn session_events() {
 #[test]
 fn every_fixture_directory_is_covered() {
     let covered = [
+        "AudioSourceDto",
         "IpcError",
+        "PermissionHelpDto",
         "ProviderDto",
         "ProviderSetDefaultDto",
         "ProviderUpsertDto",
+        "SessionCreateDto",
+        "SessionDto",
         "SessionEvent",
+        "SessionIdDto",
+        "SessionStartDto",
         "SettingsDto",
         "SettingsUpdateDto",
     ];

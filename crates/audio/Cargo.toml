@@ -11,7 +11,12 @@ cpal.workspace = true
 rtrb.workspace = true
 rubato.workspace = true
 thiserror.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+tokio-util.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["sync", "time", "macros", "rt-multi-thread"] }
 
 [lints]
 workspace = true

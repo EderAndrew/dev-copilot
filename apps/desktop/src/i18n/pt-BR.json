@@ -15,11 +15,78 @@
     "en": "English"
   },
   "capture": {
-    "regionLabel": "Estado da captura"
+    "regionLabel": "Estado da captura",
+    "on": "Capturando: {{sources}}",
+    "paused": "Captura pausada: {{sources}}",
+    "off": "Sem captura"
   },
   "sessions": {
     "title": "Sessões",
-    "empty": "Nenhuma sessão ainda."
+    "empty": "Nenhuma sessão ainda.",
+    "new": "Nova sessão",
+    "titleLabel": "Título",
+    "titleRequired": "Informe um título.",
+    "languageLabel": "Idioma da conversa",
+    "sourcesLabel": "Fontes de áudio",
+    "sourceRequired": "Selecione ao menos uma fonte disponível.",
+    "create": "Criar sessão",
+    "stateLabel": "Estado:",
+    "start": "Iniciar captura",
+    "cancelStart": "Cancelar início",
+    "stop": "Parar captura",
+    "stopping": "Parando…",
+    "newAnother": "Criar outra sessão",
+    "state": {
+      "idle": "ociosa",
+      "starting": "iniciando",
+      "capturing": "capturando",
+      "paused": "pausada",
+      "stopping": "parando",
+      "ended": "encerrada",
+      "failed": "falhou"
+    },
+    "failure": {
+      "permission_denied": "A captura parou porque a permissão de áudio foi negada ou revogada.",
+      "source_unavailable": "A captura parou porque a fonte de áudio ficou indisponível. O conteúdo já finalizado foi mantido.",
+      "no_transcriber": "Nenhum provedor de transcrição utilizável estava disponível.",
+      "storage_error": "Não foi possível gravar a sessão localmente.",
+      "secret_store_unavailable": "O cofre de credenciais do sistema ficou indisponível.",
+      "interrupted": "O aplicativo foi encerrado durante a captura. O conteúdo já finalizado foi mantido.",
+      "internal": "A captura parou por um erro inesperado."
+    }
+  },
+  "sources": {
+    "microphone": "Microfone",
+    "system": "Áudio do sistema",
+    "unavailable": {
+      "platform_unsupported": "Indisponível nesta plataforma.",
+      "not_validated_on_platform": "Ainda não validado nesta plataforma.",
+      "no_device": "Nenhum dispositivo encontrado.",
+      "os_version": "Requer uma versão mais recente do sistema operacional."
+    }
+  },
+  "consent": {
+    "title": "Antes de capturar",
+    "body": "Você é responsável por cumprir as políticas da sua organização e por informar os participantes e obter o consentimento deles quando aplicável. A captura só começa depois que você confirmar.",
+    "dontShowAgain": "Não mostrar novamente",
+    "confirm": "Entendi, iniciar captura",
+    "cancel": "Cancelar"
+  },
+  "permissionHelp": {
+    "title": "Como conceder a permissão",
+    "generic": "Abra as configurações de privacidade do sistema e permita que o Dev Copilot use o microfone. Depois, inicie a captura novamente.",
+    "macos": {
+      "microphone": "Abra Ajustes do Sistema › Privacidade e Segurança › Microfone e ative o Dev Copilot. Depois, inicie a captura novamente.",
+      "system": "Abra Ajustes do Sistema › Privacidade e Segurança e permita a gravação de áudio do sistema para o Dev Copilot."
+    },
+    "windows": {
+      "microphone": "Abra Configurações › Privacidade e segurança › Microfone, ative o acesso ao microfone e permita aplicativos da área de trabalho. Depois, inicie a captura novamente.",
+      "system": "A captura de áudio do sistema no Windows não exige permissão separada; verifique se o dispositivo de saída está ativo."
+    },
+    "linux": {
+      "microphone": "Verifique nas configurações de som (PipeWire/PulseAudio) se o microfone não está silenciado e se o aplicativo tem acesso a ele. Em ambientes sandbox (Flatpak/Snap), conceda a permissão de microfone. Depois, inicie a captura novamente.",
+      "system": "Verifique nas configurações de som (PipeWire/PulseAudio) se a fonte de monitoramento está disponível."
+    }
   },
   "providers": {
     "title": "Provedores",

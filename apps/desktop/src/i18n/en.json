@@ -15,11 +15,78 @@
     "en": "English"
   },
   "capture": {
-    "regionLabel": "Capture status"
+    "regionLabel": "Capture status",
+    "on": "Capturing: {{sources}}",
+    "paused": "Capture paused: {{sources}}",
+    "off": "Not capturing"
   },
   "sessions": {
     "title": "Sessions",
-    "empty": "No sessions yet."
+    "empty": "No sessions yet.",
+    "new": "New session",
+    "titleLabel": "Title",
+    "titleRequired": "Enter a title.",
+    "languageLabel": "Conversation language",
+    "sourcesLabel": "Audio sources",
+    "sourceRequired": "Select at least one available source.",
+    "create": "Create session",
+    "stateLabel": "State:",
+    "start": "Start capture",
+    "cancelStart": "Cancel start",
+    "stop": "Stop capture",
+    "stopping": "Stopping…",
+    "newAnother": "Create another session",
+    "state": {
+      "idle": "idle",
+      "starting": "starting",
+      "capturing": "capturing",
+      "paused": "paused",
+      "stopping": "stopping",
+      "ended": "ended",
+      "failed": "failed"
+    },
+    "failure": {
+      "permission_denied": "Capture stopped because audio permission was denied or revoked.",
+      "source_unavailable": "Capture stopped because the audio source became unavailable. Finalized content was kept.",
+      "no_transcriber": "No usable transcription provider was available.",
+      "storage_error": "The session could not be saved locally.",
+      "secret_store_unavailable": "The system credential store became unavailable.",
+      "interrupted": "The app closed during capture. Finalized content was kept.",
+      "internal": "Capture stopped because of an unexpected error."
+    }
+  },
+  "sources": {
+    "microphone": "Microphone",
+    "system": "System audio",
+    "unavailable": {
+      "platform_unsupported": "Not available on this platform.",
+      "not_validated_on_platform": "Not yet validated on this platform.",
+      "no_device": "No device found.",
+      "os_version": "Requires a newer operating system version."
+    }
+  },
+  "consent": {
+    "title": "Before capturing",
+    "body": "You are responsible for following your organization's policies and for informing participants and obtaining their consent where applicable. Capture only starts after you confirm.",
+    "dontShowAgain": "Don't show again",
+    "confirm": "I understand, start capture",
+    "cancel": "Cancel"
+  },
+  "permissionHelp": {
+    "title": "How to grant the permission",
+    "generic": "Open the system privacy settings and allow Dev Copilot to use the microphone. Then start the capture again.",
+    "macos": {
+      "microphone": "Open System Settings › Privacy & Security › Microphone and turn on Dev Copilot. Then start the capture again.",
+      "system": "Open System Settings › Privacy & Security and allow system audio recording for Dev Copilot."
+    },
+    "windows": {
+      "microphone": "Open Settings › Privacy & security › Microphone, turn on microphone access and allow desktop apps. Then start the capture again.",
+      "system": "System audio capture on Windows needs no separate permission; check that the output device is active."
+    },
+    "linux": {
+      "microphone": "Check your sound settings (PipeWire/PulseAudio) that the microphone is not muted and the app can access it. In sandboxed installs (Flatpak/Snap), grant the microphone permission. Then start the capture again.",
+      "system": "Check your sound settings (PipeWire/PulseAudio) that a monitor source is available."
+    }
   },
   "providers": {
     "title": "Providers",

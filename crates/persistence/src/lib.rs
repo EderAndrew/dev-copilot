@@ -10,5 +10,6 @@ pub mod secret_store;
 
 pub use db::Database;
 pub use repos::provider_repo::SqliteProviderRepository;
+pub use repos::session_repo::SqliteSessionRepository;
 pub use repos::settings_repo::SqliteSettingsRepository;
 pub use secret_store::KeyringSecretStore;

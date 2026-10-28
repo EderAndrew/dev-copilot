@@ -4,21 +4,23 @@
 //! points return [`BoxFuture`] so they stay object-safe and can be composed as `Arc<dyn _>`.
 //!
 //! Repository ports for entities introduced by user stories grow with those stories:
-//! `SessionRepository` (T048), `SegmentRepository` (T069), `RecordRepository` (T088),
+//! `SegmentRepository` (T069), `RecordRepository` (T088),
 //! `QuestionRepository` (T113); `AnalysisProvider::analyze`/`answer` arrive with T089–T091 and
 //! T114; authorizations on `ProviderRepository` with T135.
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use devcopilot_domain::Redacted;
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
 use devcopilot_domain::ids::{ProviderId, SessionId};
 use devcopilot_domain::provider::{CredentialRef, DataCategory, Locality, Provider};
+use devcopilot_domain::session::Session;
 use devcopilot_domain::text::SegmentText;
 use devcopilot_domain::time::{Duration, Timestamp};
 use thiserror::Error;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 use crate::events::SessionEvent;
@@ -120,6 +122,53 @@ pub enum AudioError {
     Backend(String),
 }
 
+/// Why a running capture ended on its own. Capture never resumes or switches device after a
+/// fault (FR-011); the user starts again explicitly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceFault {
+    /// The device disappeared, the default device changed, or the OS suspended or locked the
+    /// session.
+    Lost,
+    /// The OS permission was withdrawn while capturing (FR-010).
+    PermissionRevoked,
+}
+
+/// One-shot fault report from a running capture to the pipeline.
+///
+/// Cloneable and callable from any thread (e.g. a platform error callback); only the first
+/// report is delivered.
+#[derive(Debug, Clone)]
+pub struct SourceFaultNotifier {
+    tx: Arc<Mutex<Option<oneshot::Sender<SourceFault>>>>,
+}
+
+impl SourceFaultNotifier {
+    /// Creates a notifier and the receiving end.
+    #[must_use]
+    pub fn channel() -> (Self, oneshot::Receiver<SourceFault>) {
+        let (tx, rx) = oneshot::channel();
+        (
+            Self {
+                tx: Arc::new(Mutex::new(Some(tx))),
+            },
+            rx,
+        )
+    }
+
+    /// Reports `fault`; later reports are ignored.
+    pub fn notify(&self, fault: SourceFault) {
+        let sender = self
+            .tx
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(sender) = sender {
+            // The pipeline may already be gone; nothing to report to then.
+            let _ = sender.send(fault);
+        }
+    }
+}
+
 /// An OS audio source (microphone or system audio).
 pub trait AudioSource: Send + Sync {
     /// Kind of source.
@@ -137,7 +186,8 @@ pub trait AudioSource: Send + Sync {
     /// Starts writing 16 kHz mono chunks into `sink`.
     ///
     /// Guarantees: fails without capturing when permission is not granted; stops capturing as
-    /// soon as `cancel` fires; never switches device silently (FR-011).
+    /// soon as `cancel` fires; never switches device silently (FR-011); reports device loss
+    /// and permission revocation through `faults` and stops capturing.
     ///
     /// # Errors
     ///
@@ -146,6 +196,7 @@ pub trait AudioSource: Send + Sync {
         &self,
         sink: BoundedAudioSink,
         cancel: CancellationToken,
+        faults: SourceFaultNotifier,
     ) -> Result<Box<dyn CaptureHandle>, AudioError>;
 }
 
@@ -278,6 +329,53 @@ pub enum RepositoryError {
     /// Database or file-system error.
     #[error("storage error: {0}")]
     Storage(String),
+}
+
+/// Sessions and their selected sources (data-model.md "Session").
+pub trait SessionRepository: Send + Sync {
+    /// Inserts a new session.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn create(&self, session: &Session) -> Result<(), RepositoryError>;
+
+    /// One session.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent.
+    fn get(&self, id: SessionId) -> Result<Session, RepositoryError>;
+
+    /// Stores the session's title, state, failure, timestamps and active duration.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent.
+    fn update(&self, session: &Session) -> Result<(), RepositoryError>;
+
+    /// Every session, newest first (cursor pagination arrives with US4, T105).
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn list(&self) -> Result<Vec<Session>, RepositoryError>;
+
+    /// Sessions stored in `starting`, `capturing`, `paused` or `stopping`.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn list_active(&self) -> Result<Vec<Session>, RepositoryError>;
+
+    /// Stores a session failed as `interrupted` on startup and, if it ever captured, appends a
+    /// trailing `gap(interrupted)` after its last persisted segment, in one transaction
+    /// (FR-007, US2.3).
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent.
+    fn save_interrupted(&self, session: &Session) -> Result<(), RepositoryError>;
 }
 
 /// Configured providers (authorizations are added with US7, T135).

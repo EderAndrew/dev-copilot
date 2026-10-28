@@ -16,6 +16,7 @@ tracing.workspace = true
 test-support = []
 
 [dev-dependencies]
+devcopilot-application = { path = ".", features = ["test-support"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "test-util"] }
 
 [lints]

@@ -3,8 +3,10 @@
 //!
 //! Commands with input take a single `request` argument whose shape is the contract payload.
 
+pub mod audio;
 pub mod error;
 pub mod providers;
+pub mod sessions;
 pub mod settings;
 
 pub use error::IpcError;

@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Layout, type Page } from "./components/Layout";
+import { CaptureIndicator } from "./features/sessions/CaptureIndicator";
+import { SessionsPage } from "./features/sessions/SessionsPage";
+import { useSessionStore } from "./features/sessions/sessionStore";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { applyLanguage, DEFAULT_LANGUAGE } from "./i18n";
 import { ipc, toIpcError } from "./ipc/client";
@@ -12,6 +15,8 @@ function App() {
   const [page, setPage] = useState<Page>("sessions");
   const [language, setLanguage] = useState<UiLanguage>(DEFAULT_LANGUAGE);
   const [startupError, setStartupError] = useState<IpcError | null>(null);
+  // Lives above the pages so the indicator stays visible on every screen (SC-003).
+  const sessionStore = useSessionStore(ipc);
 
   useEffect(() => {
     ipc.settingsGet().then(
@@ -36,13 +41,13 @@ function App() {
       onNavigate={setPage}
       language={language}
       onLanguageChange={changeLanguage}
+      captureIndicator={
+        <CaptureIndicator indicator={sessionStore.state.indicator} />
+      }
     >
       {startupError && <p role="alert">{t(startupError.messageKey)}</p>}
       {page === "sessions" && (
-        <section aria-labelledby="sessions-title">
-          <h1 id="sessions-title">{t("sessions.title")}</h1>
-          <p>{t("sessions.empty")}</p>
-        </section>
+        <SessionsPage store={sessionStore} defaultLanguage={language} />
       )}
       {page === "providers" && (
         <section aria-labelledby="providers-title">

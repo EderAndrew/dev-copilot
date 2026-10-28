@@ -10,7 +10,9 @@ use devcopilot_domain::Redacted;
 use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
 use devcopilot_domain::ids::{ProviderId, SessionId};
 use devcopilot_domain::provider::{CredentialRef, DataCategory, Locality, Provider};
+use devcopilot_domain::session::Session;
 use devcopilot_domain::time::{Duration, Timestamp};
+use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 
 use crate::events::SessionEvent;
@@ -18,7 +20,8 @@ use crate::ports::{
     AnalysisProvider, AudioChunk, AudioChunkStream, AudioError, AudioSource, AuthorizationError,
     BoundedAudioSink, BoxFuture, CaptureHandle, Clock, EventPublisher, ProviderDescriptor,
     ProviderError, ProviderRepository, RemoteGate, RepositoryError, SecretStore, SecretStoreError,
-    SettingsRepository, Transcriber, TranscriptSink, TranscriptUpdate,
+    SessionRepository, SettingsRepository, SourceFault, SourceFaultNotifier, Transcriber,
+    TranscriptSink, TranscriptUpdate,
 };
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -81,6 +84,7 @@ struct CaptureState {
     starts: usize,
     stopped: Arc<AtomicBool>,
     cancel: Option<CancellationToken>,
+    faults: Option<SourceFaultNotifier>,
 }
 
 /// Audio source whose permission, availability and captured chunks are scripted.
@@ -93,6 +97,8 @@ pub struct ScriptedAudioSource {
     start_error: Mutex<Option<AudioError>>,
     chunks: Mutex<Vec<AudioChunk>>,
     capture: Mutex<CaptureState>,
+    permission_gate: Mutex<Option<Arc<Notify>>>,
+    permission_requests: Mutex<usize>,
 }
 
 impl ScriptedAudioSource {
@@ -107,6 +113,39 @@ impl ScriptedAudioSource {
             start_error: Mutex::new(None),
             chunks: Mutex::new(Vec::new()),
             capture: Mutex::new(CaptureState::default()),
+            permission_gate: Mutex::new(None),
+            permission_requests: Mutex::new(0),
+        }
+    }
+
+    /// Makes `request_permission` wait, as if the OS prompt were open, until
+    /// [`Self::answer_permission_prompt`].
+    pub fn hold_permission_prompt(&self) {
+        *lock(&self.permission_gate) = Some(Arc::new(Notify::new()));
+    }
+
+    /// Lets a held `request_permission` return.
+    pub fn answer_permission_prompt(&self) {
+        if let Some(gate) = lock(&self.permission_gate).take() {
+            gate.notify_one();
+        }
+    }
+
+    /// How many times the OS prompt was requested.
+    #[must_use]
+    pub fn permission_request_count(&self) -> usize {
+        *lock(&self.permission_requests)
+    }
+
+    /// Simulates a fault of the running capture (device lost, default-device change, OS
+    /// suspend/lock, permission revoked). Like a real backend, the stream stops delivering.
+    pub fn trigger_fault(&self, fault: SourceFault) {
+        let capture = lock(&self.capture);
+        if let Some(faults) = &capture.faults {
+            faults.notify(fault);
+        }
+        if fault == SourceFault::PermissionRevoked {
+            *lock(&self.permission) = PermissionState::Revoked;
         }
     }
 
@@ -180,15 +219,23 @@ impl AudioSource for ScriptedAudioSource {
     }
 
     fn request_permission(&self) -> BoxFuture<'_, PermissionState> {
-        let next = *lock(&self.permission_after_request);
-        *lock(&self.permission) = next;
-        Box::pin(async move { next })
+        *lock(&self.permission_requests) += 1;
+        let gate = lock(&self.permission_gate).clone();
+        Box::pin(async move {
+            if let Some(gate) = gate {
+                gate.notified().await;
+            }
+            let next = *lock(&self.permission_after_request);
+            *lock(&self.permission) = next;
+            next
+        })
     }
 
     fn start(
         &self,
         sink: BoundedAudioSink,
         cancel: CancellationToken,
+        faults: SourceFaultNotifier,
     ) -> Result<Box<dyn CaptureHandle>, AudioError> {
         let availability = self.availability();
         if !availability.is_available() {
@@ -207,6 +254,7 @@ impl AudioSource for ScriptedAudioSource {
             capture.starts += 1;
             capture.stopped = Arc::clone(&stopped);
             capture.cancel = Some(cancel);
+            capture.faults = Some(faults);
         }
         for chunk in lock(&self.chunks).iter().cloned() {
             // Overload policy belongs to the pipeline; the fake just stops at capacity.
@@ -385,6 +433,86 @@ impl RemoteGate for FakeRemoteGate {
 // ---------------------------------------------------------------------------------------------
 // Storage
 // ---------------------------------------------------------------------------------------------
+
+/// In-memory session repository.
+#[derive(Debug, Default)]
+pub struct InMemorySessionRepository {
+    sessions: Mutex<Vec<Session>>,
+    interrupted_gaps: Mutex<Vec<SessionId>>,
+    fail_updates: Mutex<Option<RepositoryError>>,
+}
+
+impl InMemorySessionRepository {
+    /// Stores `session` as is (e.g. a session left active by a crash).
+    pub fn seed(&self, session: Session) {
+        lock(&self.sessions).push(session);
+    }
+
+    /// Makes `update` and `save_interrupted` fail with `error` (`None` restores them).
+    pub fn fail_updates_with(&self, error: Option<RepositoryError>) {
+        *lock(&self.fail_updates) = error;
+    }
+
+    /// Sessions that received a trailing `gap(interrupted)`, in order.
+    #[must_use]
+    pub fn interrupted_gaps(&self) -> Vec<SessionId> {
+        lock(&self.interrupted_gaps).clone()
+    }
+
+    fn replace(&self, session: &Session) -> Result<(), RepositoryError> {
+        if let Some(error) = lock(&self.fail_updates).clone() {
+            return Err(error);
+        }
+        let mut sessions = lock(&self.sessions);
+        let stored = sessions
+            .iter_mut()
+            .find(|s| s.id() == session.id())
+            .ok_or(RepositoryError::NotFound)?;
+        *stored = session.clone();
+        Ok(())
+    }
+}
+
+impl SessionRepository for InMemorySessionRepository {
+    fn create(&self, session: &Session) -> Result<(), RepositoryError> {
+        lock(&self.sessions).push(session.clone());
+        Ok(())
+    }
+
+    fn get(&self, id: SessionId) -> Result<Session, RepositoryError> {
+        lock(&self.sessions)
+            .iter()
+            .find(|s| s.id() == id)
+            .cloned()
+            .ok_or(RepositoryError::NotFound)
+    }
+
+    fn update(&self, session: &Session) -> Result<(), RepositoryError> {
+        self.replace(session)
+    }
+
+    fn list(&self) -> Result<Vec<Session>, RepositoryError> {
+        let mut sessions = lock(&self.sessions).clone();
+        sessions.sort_by_key(|s| std::cmp::Reverse((s.created_at(), s.id())));
+        Ok(sessions)
+    }
+
+    fn list_active(&self) -> Result<Vec<Session>, RepositoryError> {
+        Ok(lock(&self.sessions)
+            .iter()
+            .filter(|s| s.state().is_active())
+            .cloned()
+            .collect())
+    }
+
+    fn save_interrupted(&self, session: &Session) -> Result<(), RepositoryError> {
+        self.replace(session)?;
+        if session.started_at().is_some() {
+            lock(&self.interrupted_gaps).push(session.id());
+        }
+        Ok(())
+    }
+}
 
 /// In-memory provider repository.
 #[derive(Debug, Default)]
@@ -589,8 +717,11 @@ mod tests {
         let source = ScriptedAudioSource::granted(AudioSourceKind::Microphone);
         source.set_permission(PermissionState::Denied, PermissionState::Denied);
         let (sink, _rx) = BoundedAudioSink::channel(4);
+        let (faults, _fault_rx) = SourceFaultNotifier::channel();
         assert_eq!(
-            source.start(sink.clone(), CancellationToken::new()).err(),
+            source
+                .start(sink.clone(), CancellationToken::new(), faults.clone())
+                .err(),
             Some(AudioError::PermissionNotGranted(PermissionState::Denied))
         );
         assert_eq!(source.start_count(), 0);
@@ -598,7 +729,7 @@ mod tests {
         source.set_permission(PermissionState::Granted, PermissionState::Granted);
         source.script_chunks(vec![chunk(0), chunk(10)]);
         let cancel = CancellationToken::new();
-        let handle = source.start(sink, cancel.clone()).unwrap();
+        let handle = source.start(sink, cancel.clone(), faults).unwrap();
         assert!(source.is_capturing());
         cancel.cancel();
         assert!(!source.is_capturing());
@@ -610,10 +741,27 @@ mod tests {
         let source = ScriptedAudioSource::granted(AudioSourceKind::Microphone);
         source.script_chunks(vec![chunk(0), chunk(10), chunk(20)]);
         let (sink, mut rx) = BoundedAudioSink::channel(2);
-        let _handle = source.start(sink, CancellationToken::new()).unwrap();
+        let (faults, _fault_rx) = SourceFaultNotifier::channel();
+        let _handle = source
+            .start(sink, CancellationToken::new(), faults)
+            .unwrap();
         assert_eq!(rx.recv().await.map(|c| c.start.as_millis()), Some(0));
         assert_eq!(rx.recv().await.map(|c| c.start.as_millis()), Some(10));
         assert!(rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn audio_source_reports_scripted_faults_once() {
+        let source = ScriptedAudioSource::granted(AudioSourceKind::Microphone);
+        let (sink, _rx) = BoundedAudioSink::channel(2);
+        let (faults, fault_rx) = SourceFaultNotifier::channel();
+        let _handle = source
+            .start(sink, CancellationToken::new(), faults)
+            .unwrap();
+        source.trigger_fault(SourceFault::PermissionRevoked);
+        source.trigger_fault(SourceFault::Lost);
+        assert_eq!(fault_rx.await, Ok(SourceFault::PermissionRevoked));
+        assert_eq!(source.permission(), PermissionState::Revoked);
     }
 
     #[tokio::test]

@@ -30,6 +30,14 @@ pub fn run() -> tauri::Result<()> {
             commands::providers::provider_list,
             commands::providers::provider_upsert,
             commands::providers::provider_set_default,
+            commands::sessions::session_create,
+            commands::sessions::session_start,
+            commands::sessions::session_cancel_start,
+            commands::sessions::session_stop,
+            commands::sessions::session_subscribe,
+            commands::audio::audio_sources_list,
+            commands::audio::audio_permission_request,
+            commands::audio::audio_permission_help,
         ])
         .run(tauri::generate_context!())
 }

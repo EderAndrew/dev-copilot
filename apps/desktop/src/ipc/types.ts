@@ -101,6 +101,15 @@ export type FailureReason =
 
 export type AudioSourceKind = "microphone" | "system";
 
+export type UnavailableReason =
+  | "platform_unsupported"
+  | "not_validated_on_platform"
+  | "no_device"
+  | "os_version";
+
+export type PermissionState =
+  "not_requested" | "granted" | "denied" | "revoked";
+
 export type GapReason =
   | "paused"
   | "overload"
@@ -171,3 +180,43 @@ export type SessionEvent =
     }
   | { type: "transcription_lag"; seq: number; lagMs: number }
   | { type: "storage_error"; seq: number; messageKey: string };
+
+// Sessions (contracts/ipc-commands.md "Sessões") ----------------------------------------------
+
+export type SessionDto = {
+  id: string;
+  title: string;
+  language: SessionLanguage;
+  state: SessionState;
+  failure?: FailureReason;
+  sources: AudioSourceKind[];
+  /** Unix epoch milliseconds. */
+  createdAt: number;
+  startedAt?: number;
+  endedAt?: number;
+  activeDurationMs: number;
+};
+
+export type SessionCreateDto = {
+  title: string;
+  language: SessionLanguage;
+  sources: AudioSourceKind[];
+};
+
+export type SessionStartDto = {
+  sessionId: string;
+  consentAcknowledged: boolean;
+};
+
+export type SessionIdDto = { sessionId: string };
+
+// Audio sources and permissions ----------------------------------------------------------------
+
+export type AudioSourceDto = {
+  kind: AudioSourceKind;
+  availability: "available" | "unavailable";
+  unavailableReason?: UnavailableReason;
+  permission: PermissionState;
+};
+
+export type PermissionHelpDto = { messageKey: string };

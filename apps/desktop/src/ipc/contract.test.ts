@@ -11,11 +11,14 @@ import type {
   FailureReason,
   GapReason,
   Locality,
+  PermissionState,
   ProviderAdapterKind,
   ProviderRole,
   SessionEvent,
+  SessionLanguage,
   SessionState,
   UiLanguage,
+  UnavailableReason,
 } from "./types";
 
 const fixtures = import.meta.glob<unknown>(
@@ -131,6 +134,21 @@ const gapReason = keys<GapReason>({
   source_lost: true,
   interrupted: true,
 });
+
+const sessionLanguage = keys<SessionLanguage>({ "pt-BR": true, en: true });
+const unavailableReason = keys<UnavailableReason>({
+  platform_unsupported: true,
+  not_validated_on_platform: true,
+  no_device: true,
+  os_version: true,
+});
+const permission = keys<PermissionState>({
+  not_requested: true,
+  granted: true,
+  denied: true,
+  revoked: true,
+});
+const epochMs = nonNegativeInt;
 
 const analysisLimits = object({
   required: {
@@ -262,6 +280,43 @@ const dtoShapes: Record<string, (value: unknown) => string[]> = {
     }),
   ProviderSetDefaultDto: (v) =>
     problems(v, { required: { role, providerId: str } }),
+  SessionDto: (v) =>
+    problems(v, {
+      required: {
+        id: str,
+        title: str,
+        language: sessionLanguage,
+        state: sessionState,
+        sources: arrayOf(source),
+        createdAt: epochMs,
+        activeDurationMs: nonNegativeInt,
+      },
+      optional: { failure, startedAt: epochMs, endedAt: epochMs },
+    }),
+  SessionCreateDto: (v) =>
+    problems(v, {
+      required: {
+        title: str,
+        language: sessionLanguage,
+        sources: arrayOf(source),
+      },
+    }),
+  SessionStartDto: (v) =>
+    problems(v, { required: { sessionId: str, consentAcknowledged: bool } }),
+  SessionIdDto: (v) => problems(v, { required: { sessionId: str } }),
+  AudioSourceDto: (v) =>
+    problems(v, {
+      required: {
+        kind: source,
+        availability: keys<"available" | "unavailable">({
+          available: true,
+          unavailable: true,
+        }),
+        permission,
+      },
+      optional: { unavailableReason },
+    }),
+  PermissionHelpDto: (v) => problems(v, { required: { messageKey: str } }),
   SessionEvent: (v) => {
     const type = (v as { type?: unknown } | null)?.type;
     const shape =

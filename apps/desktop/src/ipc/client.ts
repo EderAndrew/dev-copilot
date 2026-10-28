@@ -1,13 +1,21 @@
 // Typed wrappers over Tauri `invoke`. Every rejection is normalized to an `IpcError`, so UI code
 // only ever handles contract error codes.
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 
 import type {
+  AudioSourceDto,
+  AudioSourceKind,
   ErrorCode,
   IpcError,
+  PermissionHelpDto,
+  PermissionState,
   ProviderDto,
   ProviderSetDefaultDto,
   ProviderUpsertDto,
+  SessionCreateDto,
+  SessionDto,
+  SessionEvent,
+  SessionStartDto,
   SettingsDto,
   SettingsUpdateDto,
 } from "./types";
@@ -62,6 +70,31 @@ export const ipc = {
     call<ProviderDto>("provider_upsert", { request }),
   providerSetDefault: (request: ProviderSetDefaultDto) =>
     call<void>("provider_set_default", { request }),
+  sessionCreate: (request: SessionCreateDto) =>
+    call<SessionDto>("session_create", { request }),
+  sessionStart: (request: SessionStartDto) =>
+    call<SessionDto>("session_start", { request }),
+  sessionCancelStart: (sessionId: string) =>
+    call<SessionDto>("session_cancel_start", { request: { sessionId } }),
+  sessionStop: (sessionId: string) =>
+    call<SessionDto>("session_stop", { request: { sessionId } }),
+  /** Routes the session's events to `onEvent`; resolves with the current session. */
+  sessionSubscribe: (
+    sessionId: string,
+    onEvent: (event: SessionEvent) => void,
+  ) => {
+    const channel = new Channel<SessionEvent>();
+    channel.onmessage = onEvent;
+    return call<SessionDto>("session_subscribe", {
+      request: { sessionId },
+      channel,
+    });
+  },
+  audioSourcesList: () => call<AudioSourceDto[]>("audio_sources_list"),
+  audioPermissionRequest: (kind: AudioSourceKind) =>
+    call<PermissionState>("audio_permission_request", { request: { kind } }),
+  audioPermissionHelp: (kind: AudioSourceKind) =>
+    call<PermissionHelpDto>("audio_permission_help", { request: { kind } }),
 };
 
 export type IpcClient = typeof ipc;
