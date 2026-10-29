@@ -1174,6 +1174,7 @@ version = "0.1.0"
 dependencies = [
  "devcopilot-application",
  "devcopilot-domain",
+ "devcopilot-intelligence",
  "getrandom 0.4.3",
  "keyring",
  "rusqlite",
@@ -1181,8 +1182,11 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "wiremock",
 ]
 
 [[package]]
