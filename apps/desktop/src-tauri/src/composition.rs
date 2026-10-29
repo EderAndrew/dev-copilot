@@ -19,8 +19,7 @@ use devcopilot_application::question_service::{QuestionDeps, QuestionService};
 use devcopilot_application::record_service::RecordService;
 use devcopilot_application::session_service::{SessionDeps, SessionService};
 use devcopilot_application::settings_service::SettingsService;
-use devcopilot_audio::{CpalMicrophone, UnavailableSource};
-use devcopilot_domain::audio_source::{AudioSourceKind, UnavailableReason};
+use devcopilot_audio::{CpalMicrophone, system_source};
 use devcopilot_domain::ids::ProviderId;
 use devcopilot_domain::provider::DataCategory;
 use devcopilot_domain::time::Timestamp;
@@ -117,16 +116,11 @@ impl Clock for SystemClock {
     }
 }
 
-/// Microphone via `cpal`; system audio listed as not validated until spike S1 (US8).
+/// Microphone via `cpal`; system audio as registered by the audio crate for this platform,
+/// which lists it as not validated until spike S1 approves an adapter (US8, ADR-002).
 #[must_use]
 pub fn platform_sources() -> Vec<Arc<dyn AudioSource>> {
-    vec![
-        Arc::new(CpalMicrophone::new()),
-        Arc::new(UnavailableSource::new(
-            AudioSourceKind::System,
-            UnavailableReason::NotValidatedOnPlatform,
-        )),
-    ]
+    vec![Arc::new(CpalMicrophone::new()), system_source()]
 }
 
 /// Where downloaded transcription models live: `<app data>/models`. Model files are not

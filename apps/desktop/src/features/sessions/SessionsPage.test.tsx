@@ -382,6 +382,57 @@ describe("SessionsPage", () => {
     ).toBeTruthy();
   });
 
+  it("warns when one source drops and the other keeps capturing (US8.3)", async () => {
+    const user = userEvent.setup();
+    sources[1] = {
+      kind: "system",
+      availability: "available",
+      permission: "granted",
+    };
+    try {
+      const { client, emit } = setup({ consentReminderDismissed: true });
+      client.sessionCreate.mockResolvedValueOnce({
+        ...idle,
+        sources: ["microphone", "system"],
+      });
+      await user.type(await screen.findByLabelText("Título"), "Daily");
+      await user.click(screen.getByRole("checkbox", { name: "Áudio do sistema" }));
+      expect(screen.getByText(/cada trecho da transcrição indica/)).toBeTruthy();
+      await user.click(screen.getByRole("button", { name: "Criar sessão" }));
+      await user.click(
+        await screen.findByRole("button", { name: "Iniciar captura" }),
+      );
+      emit({ type: "state_changed", seq: 1, state: "capturing" });
+      emit({
+        type: "source_status",
+        seq: 2,
+        source: "system",
+        status: "lost",
+      });
+      emit({
+        type: "capture_indicator",
+        seq: 3,
+        active: true,
+        paused: false,
+        sources: ["microphone"],
+      });
+      expect(
+        screen.getByText(/Áudio do sistema parou de capturar/).closest(
+          "[role='alert']",
+        ),
+      ).toBeTruthy();
+      expect(captureStatus().textContent).toContain("Capturando: Microfone");
+      expect(screen.getByText("capturando")).toBeTruthy();
+    } finally {
+      sources[1] = {
+        kind: "system",
+        availability: "unavailable",
+        unavailableReason: "not_validated_on_platform",
+        permission: "not_requested",
+      };
+    }
+  });
+
   it("requires a title before creating", async () => {
     const user = userEvent.setup();
     const { client, container } = setup();

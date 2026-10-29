@@ -423,8 +423,8 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 
 ### Tests for User Story 8 (REQUIRED) ⚠️
 
-- [ ] T148 [P] [US8] Pipeline tests with two scripted sources: per-source tagging, one source failing keeps the other (scenario 3), in `crates/application/tests/dual_source.rs`
-- [ ] T149 [P] [US8] Availability tests: unvalidated platforms report `not_validated_on_platform` in `crates/audio/tests/availability.rs`
+- [X] T148 [P] [US8] Pipeline tests with two scripted sources: per-source tagging, one source failing keeps the other (scenario 3), in `crates/application/tests/dual_source.rs`
+- [X] T149 [P] [US8] Availability tests: unvalidated platforms report `not_validated_on_platform` in `crates/audio/tests/availability.rs`
 
 ### Implementation for User Story 8
 
@@ -432,9 +432,16 @@ Global rules for every task: no `unwrap`/`expect` on recoverable paths; session 
 - [ ] T151 [P] [US8] Implement Windows loopback adapter (cfg windows) in `crates/audio/src/system/windows.rs` if S1 approves
 - [ ] T152 [P] [US8] Implement Linux monitor-source adapter (cfg linux) in `crates/audio/src/system/linux.rs` if S1 approves
 - [ ] T153 [P] [US8] Implement macOS system audio adapter (cfg macos) with isolated `unsafe` FFI, `// SAFETY:` comments and focused tests in `crates/audio/src/system/macos.rs` if S1 approves
-- [ ] T154 [US8] Implement per-source transcription streams and source tagging in `crates/application/src/capture_pipeline.rs`
-- [ ] T155 [US8] Register system sources with availability per platform in `apps/desktop/src-tauri/src/composition.rs` and update `apps/desktop/src-tauri/Info.plist`/entitlements only as required by the S1 decision
-- [ ] T156 [US8] Show system source availability/reasons and dual selection in `apps/desktop/src/features/sessions/NewSessionForm.tsx` with strings in `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
+- [X] T154 [US8] Implement per-source transcription streams and source tagging in `crates/application/src/capture_pipeline.rs`
+- [X] T155 [US8] Register system sources with availability per platform in `apps/desktop/src-tauri/src/composition.rs` and update `apps/desktop/src-tauri/Info.plist`/entitlements only as required by the S1 decision
+- [X] T156 [US8] Show system source availability/reasons and dual selection in `apps/desktop/src/features/sessions/NewSessionForm.tsx` with strings in `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
+
+
+**Phase 11 notes** (2026-10-28):
+- **Blocked: T150–T153.** Spike S1 needs real hardware on macOS, Windows and Linux. It has not run, so no platform is validated and no system audio adapter exists. `docs/adr/ADR-002.md` is *Proposto* with the options, the spike protocol and the approval criteria. Until it is approved, the system source stays unavailable with `not_validated_on_platform` everywhere (FR-014, US8.2).
+- T149/T155: `crates/audio/src/system/mod.rs` owns the per-platform registration (`system_source()`, `VALIDATED_ON_THIS_PLATFORM`), and the composition root uses it instead of building `UnavailableSource` itself. No `Info.plist`/entitlements change: that depends on the macOS option chosen in S1.
+- T154: per-source streams were already in place. Chunks carry their source, both transcribers keep one chunker per source, and finals are tagged when the session has two sources. The new behavior is that `CapturePipeline::open` no longer fails all-or-nothing: a source that fails to open while another opens is returned in `PipelineStreams::failed`, reported as `source_status` (`permission_revoked` for permission errors, `lost` otherwise), and the session captures with the rest. It fails only when no source opens. The old `second_source_failing_to_open_closes_the_first` test was replaced accordingly (US8.3 supersedes it). Runtime faults already kept the other source (T049).
+- T156: the form already showed the unavailability reason and allowed both sources. It now adds a hint when two are selected. `source_status` was stored but never shown; the sessions page now shows an alert per dropped source, with OS permission help for `permission_revoked`, and the warning clears when a later `capture_indicator` lists the source as capturing again.
 
 ---
 

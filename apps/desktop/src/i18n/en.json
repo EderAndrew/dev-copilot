@@ -67,6 +67,11 @@
       "not_validated_on_platform": "Not yet validated on this platform.",
       "no_device": "No device found.",
       "os_version": "Requires a newer operating system version."
+    },
+    "dualHint": "With two sources, each transcript passage shows which source it came from. If one source fails, the other keeps capturing.",
+    "dropped": {
+      "lost": "{{source}} stopped capturing (device lost or unavailable). The other sources continue; it is not reopened automatically.",
+      "permission_revoked": "{{source}} stopped capturing because its permission was denied or revoked. The other sources continue."
     }
   },
   "consent": {

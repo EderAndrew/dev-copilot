@@ -5,7 +5,9 @@
 
 pub mod cpal_mic;
 pub mod resample;
+pub mod system;
 pub mod unavailable;
 
 pub use cpal_mic::CpalMicrophone;
+pub use system::system_source;
 pub use unavailable::UnavailableSource;

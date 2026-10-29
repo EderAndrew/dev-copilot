@@ -49,13 +49,16 @@ pub struct CapturePipeline {
 
 /// Receiving ends handed to the session's background tasks.
 pub struct PipelineStreams {
-    /// Audio from every open source.
+    /// Audio from every open source, each chunk tagged with its source.
     pub chunks: AudioChunkStream,
     /// Faults reported by the open sources.
     pub faults: FaultStream,
+    /// Sources that failed to open while others did; the session captures without them and
+    /// reports them (US8.3).
+    pub failed: Vec<OpenError>,
 }
 
-/// A source failed to open; every source opened before it was closed again.
+/// A source failed to open.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenError {
     /// Source that failed.
@@ -65,12 +68,12 @@ pub struct OpenError {
 }
 
 impl CapturePipeline {
-    /// Opens `sources` in order, each under a child of `cancel`.
+    /// Opens `sources` in order, each under a child of `cancel`. A source that fails does not
+    /// stop the others (US8.3); it is listed in [`PipelineStreams::failed`].
     ///
     /// # Errors
     ///
-    /// [`OpenError`] for the first source that fails; sources already opened are closed
-    /// before returning (FR-003).
+    /// The first [`OpenError`] when no source opens.
     pub fn open(
         sources: &[Arc<dyn AudioSource>],
         cancel: CancellationToken,
@@ -81,6 +84,7 @@ impl CapturePipeline {
             open: Vec::with_capacity(sources.len()),
         };
         let mut faults = Vec::with_capacity(sources.len());
+        let mut failed = Vec::new();
         for source in sources {
             let kind = source.kind();
             let (notifier, fault_rx) = SourceFaultNotifier::channel();
@@ -94,20 +98,24 @@ impl CapturePipeline {
                     });
                     faults.push((kind, fault_rx));
                 }
-                Err(error) => {
-                    pipeline.close_all();
-                    return Err(OpenError {
-                        source: kind,
-                        error,
-                    });
-                }
+                Err(error) => failed.push(OpenError {
+                    source: kind,
+                    error,
+                }),
             }
+        }
+        if pipeline.open.is_empty() {
+            return Err(failed.into_iter().next().unwrap_or(OpenError {
+                source: AudioSourceKind::Microphone,
+                error: AudioError::Backend("no source selected".into()),
+            }));
         }
         Ok((
             pipeline,
             PipelineStreams {
                 chunks,
                 faults: FaultStream { pending: faults },
+                failed,
             },
         ))
     }
@@ -303,17 +311,33 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn failed_open_closes_sources_already_opened() {
+    async fn one_failed_source_keeps_the_others() {
         let mic = Arc::new(ScriptedAudioSource::granted(AudioSourceKind::Microphone));
         let system = Arc::new(ScriptedAudioSource::granted(AudioSourceKind::System));
         system.set_availability(Availability::Unavailable(UnavailableReason::NoDevice));
-        let result = CapturePipeline::open(
+        let (pipeline, streams) = CapturePipeline::open(
             &sources(&[mic.clone(), system.clone()]),
             CancellationToken::new(),
+        )
+        .unwrap();
+        assert_eq!(pipeline.active_sources(), [AudioSourceKind::Microphone]);
+        assert!(mic.is_capturing());
+        assert_eq!(streams.failed.len(), 1);
+        assert_eq!(streams.failed[0].source, AudioSourceKind::System);
+    }
+
+    #[tokio::test]
+    async fn fails_when_no_source_opens() {
+        let mic = Arc::new(ScriptedAudioSource::granted(AudioSourceKind::Microphone));
+        mic.set_availability(Availability::Unavailable(UnavailableReason::NoDevice));
+        let result = CapturePipeline::open(
+            &sources(std::slice::from_ref(&mic)),
+            CancellationToken::new(),
         );
-        let err = result.err().unwrap();
-        assert_eq!(err.source, AudioSourceKind::System);
-        assert_eq!(mic.start_count(), 1);
+        assert_eq!(
+            result.err().map(|e| e.source),
+            Some(AudioSourceKind::Microphone)
+        );
         assert!(!mic.is_capturing());
     }
 

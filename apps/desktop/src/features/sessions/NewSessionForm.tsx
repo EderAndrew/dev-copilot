@@ -121,6 +121,7 @@ export function NewSessionForm({
             </div>
           );
         })}
+        {selected.length > 1 && <p>{t("sources.dualHint")}</p>}
         {showErrors && noSource && (
           <span id={`${ids}-sources-error`}>
             {t("sessions.sourceRequired")}

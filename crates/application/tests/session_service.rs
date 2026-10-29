@@ -245,9 +245,31 @@ async fn permission_denied_at_prompt_fails_without_capture() {
 }
 
 #[tokio::test]
-async fn second_source_failing_to_open_closes_the_first() {
+async fn second_source_failing_to_open_keeps_the_first() {
+    // US8.3: a failing source is reported and the other keeps capturing.
     let f = fixture();
     let session = f.create(&[MIC, SYSTEM]);
+    f.system.fail_start_with(Some(AudioError::DeviceLost));
+    f.start_capturing(session.id()).await;
+    assert!(f.mic.is_capturing());
+    assert!(f.events(session.id()).iter().any(|e| matches!(
+        e,
+        SessionEvent::SourceStatus {
+            source: SYSTEM,
+            status: SourceStatus::Lost
+        }
+    )));
+    assert_eq!(
+        indicators(&f.events(session.id())).last(),
+        Some(&(true, vec![MIC]))
+    );
+}
+
+#[tokio::test]
+async fn no_source_opening_fails_the_start() {
+    let f = fixture();
+    let session = f.create(&[MIC, SYSTEM]);
+    f.mic.fail_start_with(Some(AudioError::DeviceLost));
     f.system.fail_start_with(Some(AudioError::DeviceLost));
     f.service.start(session.id(), true).unwrap();
     f.wait_for_state(session.id(), SessionState::Failed).await;
@@ -255,8 +277,7 @@ async fn second_source_failing_to_open_closes_the_first() {
         f.stored(session.id()).failure(),
         Some(FailureReason::SourceUnavailable)
     );
-    assert_eq!(f.mic.start_count(), 1);
-    assert!(!f.mic.is_capturing());
+    assert!(!f.mic.is_capturing() && !f.system.is_capturing());
 }
 
 #[tokio::test]

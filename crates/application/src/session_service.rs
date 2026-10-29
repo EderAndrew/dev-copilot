@@ -998,6 +998,19 @@ impl Inner {
                 return None;
             }
         };
+        for OpenError { source, error } in &streams.failed {
+            tracing::warn!(session = %id, source = source.code(), error = %error, "source failed to open; capturing without it");
+            self.publish(
+                id,
+                SessionEvent::SourceStatus {
+                    source: *source,
+                    status: match error {
+                        AudioError::PermissionNotGranted(_) => SourceStatus::PermissionRevoked,
+                        _ => SourceStatus::Lost,
+                    },
+                },
+            );
+        }
         let mut first_seq = first_seq;
         if let Some(gap_start) = pause_gap {
             offset_base = offset_base.max(gap_start);

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ipc, toIpcError, type IpcClient } from "../../ipc/client";
 import type {
   AudioSourceDto,
+  AudioSourceKind,
   IpcError,
   SessionCreateDto,
   SessionDto,
@@ -129,6 +130,10 @@ export function SessionsPage({
   const permissionProblem =
     error?.code === "permission_denied" ||
     (session?.state === "failed" && session.failure === "permission_denied");
+  // Sources that stopped while the session goes on with the others (US8.3, FR-010).
+  const droppedSources = (
+    Object.keys(store.state.sourceHealth) as AudioSourceKind[]
+  ).filter((kind) => store.state.sourceHealth[kind] !== "ok");
 
   return (
     <section aria-labelledby="sessions-title">
@@ -167,6 +172,18 @@ export function SessionsPage({
             onStop={() => void run(() => client.sessionStop(session.id))}
           />
           <ProviderBadge providers={store.state.providers} />
+          {droppedSources.map((kind) => (
+            <div key={kind} role="alert">
+              <p>
+                {t(`sources.dropped.${store.state.sourceHealth[kind]}`, {
+                  source: t(`sources.${kind}`),
+                })}
+              </p>
+              {store.state.sourceHealth[kind] === "permission_revoked" && (
+                <PermissionHelp kind={kind} client={client} />
+              )}
+            </div>
+          ))}
           {store.state.fallbacks.map((stage) => (
             <p key={stage} role="status">
               {t("providerInUse.fallback", {

@@ -120,6 +120,16 @@ function applyEvent(
           paused: event.paused,
           sources: event.sources,
         },
+        // A source listed as capturing again (e.g. after resuming) is healthy.
+        sourceHealth:
+          event.active && !event.paused
+            ? {
+                ...next.sourceHealth,
+                ...Object.fromEntries(
+                  event.sources.map((kind) => [kind, "ok" as const]),
+                ),
+              }
+            : next.sourceHealth,
       };
     case "source_status":
       return {
