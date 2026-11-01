@@ -132,6 +132,12 @@ antes de construir em cima delas. Se uma verificação falhar, a decisão é rev
   e não aceita HTTP. A configuração do plugin rejeita endpoints não-HTTPS em build de release. Se o plugin
   puxar `native-tls`/OpenSSL no Linux, avaliar a feature `rustls-tls` para manter a pilha uniforme com o
   `reqwest` da 001 e passar no `cargo deny`.
+- **Resultado da verificação de TLS (T002, 2026-11-01)**: `tauri-plugin-updater` 2.14.1 tem como features
+  padrão `rustls-tls`, `system-proxy` e `zip`. Ele reutiliza o mesmo `reqwest` 0.13.5 e o mesmo `rustls` 0.23 da
+  001, sem uma segunda versão. Não puxa `native-tls`. O único `openssl-sys` da árvore continua sendo o do
+  SQLCipher no Linux (ADR-004). Crates novos no lockfile: `minisign-verify`, `zip`, `tar`, `filetime`, `xattr`,
+  `osakit` e dependências de plataforma. `cargo deny check` passa (advisories, bans, licenses, sources).
+  Nenhuma feature extra é necessária.
 - **Rollback de uma atualização publicada**: o updater não aceita downgrade. Suspender uma versão significa
   republicar o `latest.json` apontando para a versão anterior (os apps que ainda não atualizaram deixam de vê-la)
   e corrigir para a frente com uma versão N+1. Rotação da chave de atualização: uma versão assinada com a chave

@@ -39,22 +39,25 @@ US8 manual cases) runs on that same signed candidate. Priority labels are kept i
 
 **Purpose**: dependencies, workspace members, lint rules and the release documentation skeleton.
 
-- [ ] T001 Create `docs/release/README.md`. It indexes the permanent release docs (checklist, rollback,
+- [X] T001 Create `docs/release/README.md`. It indexes the permanent release docs (checklist, rollback,
   signing-and-distribution, verify-downloads) and the per-release folder `docs/release/v0.1.0/` (with
   `evidence/.gitkeep`). It also defines the GitHub issue labels `release-0.1.0`, `severity:critical|high|medium|low`,
   `platform:macos|windows|linux-wayland|linux-x11` and `release-blocker`, using the severity scale from
   spec.md Assumptions.
-- [ ] T002 [P] Add `tauri-plugin-updater` 2.x to the workspace `Cargo.toml` and to
+- [X] T002 [P] Add `tauri-plugin-updater` 2.x to the workspace `Cargo.toml` and to
   `apps/desktop/src-tauri/Cargo.toml`. Run `cargo tree -p devcopilot-desktop -i openssl-sys` and
   `cargo deny check` to confirm the plugin uses verified TLS and that its TLS stack is consistent with the
   existing `reqwest` (rustls). Enable the plugin's `rustls-tls` feature if needed. Record the finding under
   "Verificar" in `specs/002-desktop-release-readiness/research.md` R5.
-- [ ] T003 [P] Create the binary crate `tooling/perf-sampler/Cargo.toml` (`publish = false`, dependencies
+- [X] T003 [P] Create the binary crate `tooling/perf-sampler/Cargo.toml` (`publish = false`, dependencies
   `sysinfo`, `clap`, `csv`, `anyhow`) with an empty `src/main.rs`, and add it to `[workspace].members` in the
   root `Cargo.toml`. It must not be a dependency of any app crate.
-- [ ] T004 [P] Add the rules `react/forbid-dom-props` (forbid `style`) and `react/no-danger` to
+- [X] T004 [P] Add the rules `react/forbid-dom-props` (forbid `style`) and `react/no-danger` to
   `apps/desktop/eslint.config.js`, adding `eslint-plugin-react` to `apps/desktop/package.json` if it is
   missing. `pnpm --filter appsdesktop lint` must stay green, because the current code has no inline styles.
+  *Done with the core rule `no-restricted-syntax` (selectors for the `style` and `dangerouslySetInnerHTML` JSX
+  attributes) instead of `eslint-plugin-react`. That gives the same protection without a new dependency
+  (Art. VII.6) and avoids the plugin's uncertain support for ESLint 10.*
 
 ---
 

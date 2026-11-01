@@ -50,3 +50,10 @@ yarn-error.log*
 *.log
 *.swp
 .idea/
+
+# Release signing material (specs/002, contracts/release-artifacts.md): never committed
+*.p12
+*.pfx
+*.key
+secring.*
+private-keys-v1.d/
