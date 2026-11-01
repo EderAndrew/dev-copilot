@@ -1,10 +1,12 @@
 # dev-copilot Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-10-27
+Auto-generated from all feature plans. Last updated: 2026-11-01
 
 Normative rules: `.specify/memory/constitution.md` (v1.1.0) and `docs/adr/`.
 
 ## Active Technologies
+- Rust + Tauri 2.12 with `tauri-plugin-updater` (core-driven, minisign-verified); `sysinfo` in `tooling/perf-sampler` only; release via GitHub Actions draft releases, Developer ID + notarization, Authenticode, OpenPGP-signed SHA256SUMS (002-desktop-release-readiness)
+- No new migration: `updates.*` keys in the existing `settings` table; release evidence in `docs/release/` (002-desktop-release-readiness)
 
 - Rust stable (edition 2024) + Tauri 2 (`tauri-plugin-dialog`), `tokio`/`tokio-util`, `cpal`, `rtrb`, `rubato`, `whisper-rs`, `reqwest` (rustls), `rusqlite` (SQLCipher), `keyring`, `serde`, `thiserror`, `tracing`, `jsonschema` (001-meeting-sessions)
 - TypeScript + React 19 + Vite, `i18next`/`react-i18next`, Vitest + Testing Library + `vitest-axe` (001-meeting-sessions)
@@ -39,6 +41,7 @@ pnpm --filter appsdesktop tauri dev
 Rust: Rust API Guidelines, typed errors, no `unwrap`/`expect` on recoverable paths, `unsafe` only with `// SAFETY:`. TypeScript: strict mode; no business rules in React components.
 
 ## Recent Changes
+- 002-desktop-release-readiness: strict CSP (no `'unsafe-inline'`), signed installers per OS, verified in-app updates, release checklist/evidence
 
 - 001-meeting-sessions: Added Rust core stack (Tauri 2, tokio, cpal, whisper-rs, rusqlite/SQLCipher, keyring) and React/i18next frontend
 
