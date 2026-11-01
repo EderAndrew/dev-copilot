@@ -53,6 +53,7 @@ fn harness() -> Harness {
                 ScriptedTranscriber::local(Vec::new()),
             ))),
             gate: Arc::default(),
+            metrics: None,
             analyzers: Arc::new(ScriptedAnalysisProviderFactory::new(Arc::new(
                 ScriptedAnalysisProvider::local(),
             ))),
@@ -383,6 +384,7 @@ async fn interrupted_sessions_are_failed_on_startup() {
             ScriptedTranscriber::local(Vec::new()),
         ))),
         gate: Arc::default(),
+        metrics: None,
         analyzers: Arc::new(ScriptedAnalysisProviderFactory::new(Arc::new(
             ScriptedAnalysisProvider::local(),
         ))),

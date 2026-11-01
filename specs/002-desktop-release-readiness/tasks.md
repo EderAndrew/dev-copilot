@@ -85,18 +85,20 @@ in parallel with them.
   - Secrets per the key table in `specs/002-desktop-release-readiness/contracts/release-artifacts.md`.
   Document the setup (names only, never values) in `docs/release/signing-and-distribution.md`, section
   "Segredos".
-- [ ] T009 Write `docs/adr/ADR-005.md` (status *Proposto*): distribution, signing and updates. It records the
+- [X] T009 Write `docs/adr/ADR-005.md` (status *Proposto*): distribution, signing and updates. It records the
   research decisions R1–R6 (CSP, macOS, Windows, Linux, updater, pipeline), the alternatives, the
   macOS Keychain/identity finding, the update rollback limits (no downgrade; key rotation), the fact that
   builds are not bit-for-bit reproducible (so the final artifacts get a smoke test instead of inheriting all rc
   evidence, T095), the justification for placing the measurement tool `perf-sampler` under `tooling/`
   (Art. VII.3: development tooling, never shipped), and the review triggers. Include a fenced line
   `updater-pubkey-id: <key id>` once T006 is done (read by T039a).
-- [ ] T010 [P] Write `apps/desktop/src-tauri/tests/version_consistency.rs`. It asserts that the `version` in
+  *Written with status Proposto. The identity/key table holds placeholders, and the `updater-pubkey-id` line
+  is left as a commented instruction, until the manual tasks T005–T007 record real values.*
+- [X] T010 [P] Write `apps/desktop/src-tauri/tests/version_consistency.rs`. It asserts that the `version` in
   `apps/desktop/src-tauri/tauri.conf.json`, in `apps/desktop/package.json` and in
   `apps/desktop/src-tauri/Cargo.toml` are equal, and, when `RELEASE_TAG` is set, that it equals `v<version>`
   or `v<version>-rc.N`.
-- [ ] T011 [P] Create the evidence templates from
+- [X] T011 [P] Create the evidence templates from
   `specs/002-desktop-release-readiness/contracts/release-evidence.md`:
   - `docs/release/checklist.md` (12 items).
   - `docs/release/v0.1.0/candidate.md`.
@@ -105,20 +107,20 @@ in parallel with them.
   - `docs/release/v0.1.0/evidence/_template.md` (sections Ambiente, I1–I4, C1–C2, matrix cases 1–13/3b/3c/11b,
     U1–U4, Limitações, Problemas).
   - `docs/release/v0.1.0/decision.md`.
-- [ ] T012 Add the port `MetricsSink` (`fn record(&self, timing: SegmentTiming)`) and the value
+- [X] T012 Add the port `MetricsSink` (`fn record(&self, timing: SegmentTiming)`) and the value
   `SegmentTiming { kind: Partial|Final, speech_start_ms, speech_end_ms, emitted_ms, provider: ProviderId }`
   (`ProviderId` from `devcopilot_domain::ids`; the application layer has no model identifier, so the model in use
   is recorded in the measurement plan, not per row)
   to `crates/application/src/ports.rs`. Do this with no text field at all, so content cannot leak by design.
   Emit one timing per partial and final from `crates/application/src/transcription.rs` through an optional
   `Option<Arc<dyn MetricsSink>>` (no-op when absent).
-- [ ] T013 [P] Unit tests in `crates/application/tests/transcription_metrics.rs`, using a scripted transcriber
+- [X] T013 [P] Unit tests in `crates/application/tests/transcription_metrics.rs`, using a scripted transcriber
   and a recording sink:
   - One timing per partial and final, in order.
   - `speech_end_ms ≥ speech_start_ms`.
   - No sink → no work.
   - Timings stop after stop/cancel.
-- [ ] T014 Implement `CsvMetricsSink` in `apps/desktop/src-tauri/src/metrics.rs`. It writes
+- [X] T014 Implement `CsvMetricsSink` in `apps/desktop/src-tauri/src/metrics.rs`. It writes
   `metrics-<UTC date>.csv` to the app log directory, with columns
   `kind,speech_start_ms,speech_end_ms,emitted_ms,provider` and a bounded, non-blocking writer. Wire it in
   `apps/desktop/src-tauri/src/composition.rs` only when the environment variable `DEVCOPILOT_METRICS=1` is
@@ -126,10 +128,13 @@ in parallel with them.
   Retention: on startup, delete `metrics-*.csv` files older than 7 days. When `DEVCOPILOT_METRICS` is unset,
   create no file and leave existing ones to the same 7-day cleanup. Unit-test the cleanup with a temp dir in
   `apps/desktop/src-tauri/src/metrics.rs` (`#[cfg(test)]`) (Art. IV.7, IV.12).
-- [ ] T015 Extend `apps/desktop/src-tauri/tests/log_redaction.rs`: run the scripted session with
+- [X] T015 Extend `apps/desktop/src-tauri/tests/log_redaction.rs`: run the scripted session with
   `DEVCOPILOT_METRICS=1` and assert that the metrics CSV contains none of the synthetic phrases or secrets and
   only the five declared columns (SC-014 of 001).
-- [ ] T016 [P] Implement `tooling/perf-sampler/src/main.rs`, with unit tests in the same crate for argument
+  *The test turns the mode on through `metrics::sink_for(Some("1"), …)`, the same path `DEVCOPILOT_METRICS`
+  takes, so it does not mutate the process environment. A partial with a synthetic phrase was added so
+  the CSV check also covers partials.*
+- [X] T016 [P] Implement `tooling/perf-sampler/src/main.rs`, with unit tests in the same crate for argument
   parsing, the CSV writer, and the percentile/summary math:
   - `sample --process <name>|--pid <pid> --interval <s> --out <csv>` writes the columns
     `utc,cpu_percent_of_total,rss_bytes`. CPU is normalized to total capacity, so 100 % means all cores.

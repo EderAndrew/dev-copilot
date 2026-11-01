@@ -11,8 +11,8 @@ use devcopilot_application::ApplicationError;
 use devcopilot_application::analysis_service::{AnalysisDeps, AnalysisService, DEFAULT_TICK};
 use devcopilot_application::export_service::{ExportDeps, ExportService};
 use devcopilot_application::ports::{
-    AnalysisProviderFactory, AudioSource, AuthorizationError, Clock, EventPublisher, RemoteGate,
-    SecretStore, TranscriberFactory,
+    AnalysisProviderFactory, AudioSource, AuthorizationError, Clock, EventPublisher, MetricsSink,
+    RemoteGate, SecretStore, TranscriberFactory,
 };
 use devcopilot_application::provider_service::ProviderService;
 use devcopilot_application::question_service::{QuestionDeps, QuestionService};
@@ -34,6 +34,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 
 use crate::commands::IpcError;
 use crate::events::ChannelEventPublisher;
+use crate::metrics;
 use crate::models::LocalModels;
 
 /// Services that need the encrypted database.
@@ -71,6 +72,9 @@ pub struct Platform {
     /// Gate handed to the remote adapters; connected to the provider service by
     /// [`compose_core`].
     pub gate: Arc<DeferredGate>,
+    /// Transcription timings when the opt-in metrics mode is on (`DEVCOPILOT_METRICS=1`,
+    /// see [`crate::metrics`]); `None` otherwise.
+    pub metrics: Option<Arc<dyn MetricsSink>>,
 }
 
 /// [`RemoteGate`] that the adapter factories hold before storage exists: it refuses every
@@ -225,6 +229,7 @@ pub fn compose_core(data_dir: &Path, platform: Platform) -> Result<Core, Applica
         events: platform.events,
         analysis: Some(analysis.clone()),
         questions: Some(questions.clone()),
+        metrics: platform.metrics,
     });
     sessions.recover_on_startup()?;
     questions.recover_on_startup()?;
@@ -272,7 +277,15 @@ fn init_tracing(log_dir: Option<&Path>) -> Option<WorkerGuard> {
 
 /// Builds the managed state for the running app.
 pub fn build<R: Runtime>(app: &AppHandle<R>) -> AppState {
-    let log_guard = init_tracing(app.path().app_log_dir().ok().as_deref());
+    let log_dir = app.path().app_log_dir().ok();
+    let log_guard = init_tracing(log_dir.as_deref());
+    let metrics = log_dir.as_deref().and_then(|dir| {
+        // Retention applies whether or not the metrics mode is on (Art. IV.12).
+        if let Err(err) = metrics::remove_expired(dir, metrics::today_utc()) {
+            tracing::warn!(error = %err, "expired metrics files not cleaned up");
+        }
+        metrics::sink_from_env(dir)
+    });
     let events = Arc::new(ChannelEventPublisher::default());
     let data_dir = app
         .path()
@@ -300,6 +313,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> AppState {
             )),
             secrets,
             gate,
+            metrics,
         };
         compose_core(&dir, platform)
     });

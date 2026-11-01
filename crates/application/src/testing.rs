@@ -31,10 +31,11 @@ use crate::ports::{
     AnalysisOutput, AnalysisProvider, AnalysisProviderFactory, AnalysisRequest,
     AnalysisRunRepository, AnswerOutput, AudioChunk, AudioChunkStream, AudioError, AudioSource,
     AuthorizationError, BoundedAudioSink, BoxFuture, CaptureHandle, Clock, EventPublisher,
-    ExportRepository, ProviderDescriptor, ProviderError, ProviderRepository, QuestionRepository,
-    QuestionRequest, RecordRepository, RemoteGate, RepositoryError, SecretStore, SecretStoreError,
-    SegmentRepository, SessionRepository, SettingsRepository, SinkError, SourceFault,
-    SourceFaultNotifier, Transcriber, TranscriberFactory, TranscriptSink, TranscriptUpdate,
+    ExportRepository, MetricsSink, ProviderDescriptor, ProviderError, ProviderRepository,
+    QuestionRepository, QuestionRequest, RecordRepository, RemoteGate, RepositoryError,
+    SecretStore, SecretStoreError, SegmentRepository, SegmentTiming, SessionRepository,
+    SettingsRepository, SinkError, SourceFault, SourceFaultNotifier, Transcriber,
+    TranscriberFactory, TranscriptSink, TranscriptUpdate,
 };
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -1483,6 +1484,30 @@ impl RecordingEventPublisher {
 impl EventPublisher for RecordingEventPublisher {
     fn publish(&self, session: SessionId, event: SessionEvent) {
         lock(&self.events).push((session, event));
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Metrics
+// ---------------------------------------------------------------------------------------------
+
+/// Metrics sink that records every timing (002 metrics mode).
+#[derive(Debug, Default)]
+pub struct RecordingMetricsSink {
+    timings: Mutex<Vec<SegmentTiming>>,
+}
+
+impl RecordingMetricsSink {
+    /// Every timing recorded so far, in order.
+    #[must_use]
+    pub fn timings(&self) -> Vec<SegmentTiming> {
+        lock(&self.timings).clone()
+    }
+}
+
+impl MetricsSink for RecordingMetricsSink {
+    fn record(&self, timing: SegmentTiming) {
+        lock(&self.timings).push(timing);
     }
 }
 

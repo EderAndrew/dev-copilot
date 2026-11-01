@@ -306,6 +306,60 @@ pub trait TranscriberFactory: Send + Sync {
     ) -> Result<Arc<dyn Transcriber>, ProviderError>;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Measurement (002 research R7)
+// ---------------------------------------------------------------------------------------------
+
+/// Which transcriber update a [`SegmentTiming`] measures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TimingKind {
+    /// A partial update (published, never persisted).
+    Partial,
+    /// A final update (persisted).
+    Final,
+}
+
+impl TimingKind {
+    /// Stable lowercase code, as written to the metrics CSV.
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Partial => "partial",
+            Self::Final => "final",
+        }
+    }
+}
+
+/// Timing of one transcriber update, for latency measurement (002 FR-017).
+///
+/// It has no text field on purpose: session content cannot reach the metrics file by
+/// construction (Art. IV). All three instants are milliseconds on the session timeline
+/// (offsets from the first capture), so latency is `emitted_ms − speech_*_ms`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SegmentTiming {
+    /// Partial or final.
+    pub kind: TimingKind,
+    /// Start of the speech the update covers.
+    pub speech_start_ms: u64,
+    /// End of the speech the update covers. A partial has no end of its own, so it uses the
+    /// end of the audio handed to the transcriber so far. Always `≥ speech_start_ms`.
+    pub speech_end_ms: u64,
+    /// When the update reached the pipeline, by the monotonic clock.
+    pub emitted_ms: u64,
+    /// Transcription provider that produced the update. The model in use goes in the
+    /// measurement plan, not in each row.
+    pub provider: ProviderId,
+}
+
+/// Receives transcription timings when the opt-in metrics mode is on.
+///
+/// `record` runs on the transcription task, so implementations must not block: they drop
+/// timings rather than slow transcription down.
+pub trait MetricsSink: Send + Sync {
+    /// Records one timing.
+    fn record(&self, timing: SegmentTiming);
+}
+
 /// A final segment sent for analysis.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnalysisSegment {

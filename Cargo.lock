@@ -1257,6 +1257,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-updater",
  "tempfile",
+ "time",
  "tokio",
  "tokio-util",
  "tracing",
@@ -3676,6 +3677,7 @@ dependencies = [
  "anyhow",
  "clap",
  "csv",
+ "serde",
  "sysinfo",
 ]
 

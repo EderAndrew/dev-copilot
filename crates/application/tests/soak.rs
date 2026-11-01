@@ -315,6 +315,7 @@ async fn two_hour_session_stays_bounded() {
         events: events.clone(),
         analysis: Some(analysis),
         questions: None,
+        metrics: None,
     });
 
     let session = service

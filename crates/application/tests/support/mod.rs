@@ -10,7 +10,7 @@ use std::time::Duration as StdDuration;
 use devcopilot_application::analysis_service::{AnalysisDeps, AnalysisService};
 use devcopilot_application::events::SessionEvent;
 use devcopilot_application::export_service::{ExportDeps, ExportService};
-use devcopilot_application::ports::{AudioSource, SessionRepository};
+use devcopilot_application::ports::{AudioSource, MetricsSink, SessionRepository};
 use devcopilot_application::provider_service::ProviderService;
 use devcopilot_application::question_service::{QuestionDeps, QuestionService};
 use devcopilot_application::record_service::RecordService;
@@ -64,8 +64,19 @@ pub fn fixture() -> Fixture {
     fixture
 }
 
+/// [`fixture`] recording transcription timings into `metrics` (002 metrics mode).
+pub fn fixture_with_metrics(metrics: Arc<dyn MetricsSink>) -> Fixture {
+    let fixture = build(Some(metrics));
+    fixture.add_transcriber();
+    fixture
+}
+
 /// [`fixture`] with no transcription provider configured.
 pub fn fixture_without_transcriber() -> Fixture {
+    build(None)
+}
+
+fn build(metrics: Option<Arc<dyn MetricsSink>>) -> Fixture {
     let sessions = Arc::new(InMemorySessionRepository::default());
     let segments = Arc::new(InMemorySegmentRepository::default());
     let transcriber = Arc::new(ScriptedTranscriber::local(Vec::new()));
@@ -140,6 +151,7 @@ pub fn fixture_without_transcriber() -> Fixture {
         events: events.clone(),
         analysis: Some(analysis.clone()),
         questions: Some(question_service.clone()),
+        metrics,
     });
     let record_service = RecordService::new(records.clone(), sessions.clone(), clock.clone());
     Fixture {

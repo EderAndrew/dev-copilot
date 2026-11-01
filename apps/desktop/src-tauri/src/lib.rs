@@ -7,6 +7,7 @@ pub mod commands;
 pub mod composition;
 pub mod dto;
 pub mod events;
+pub mod metrics;
 pub mod models;
 
 use tauri::Manager;

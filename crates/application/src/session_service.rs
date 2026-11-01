@@ -51,7 +51,7 @@ use crate::capture_pipeline::{
 use crate::error::ApplicationError;
 use crate::events::{ProviderStage, SessionEvent, SourceStatus};
 use crate::ports::{
-    AudioError, AudioSource, Clock, EventPublisher, SecretStore, SegmentRepository,
+    AudioError, AudioSource, Clock, EventPublisher, MetricsSink, SecretStore, SegmentRepository,
     SessionRepository, SourceFault, Transcriber, TranscriberFactory,
 };
 use crate::provider_service::ProviderService;
@@ -89,6 +89,9 @@ pub struct SessionDeps {
     pub analysis: Option<AnalysisService>,
     /// Contextual questions, cancelled when their session is deleted.
     pub questions: Option<QuestionService>,
+    /// Transcription timings of the opt-in metrics mode (002 research R7); `None` records
+    /// nothing.
+    pub metrics: Option<Arc<dyn MetricsSink>>,
 }
 
 /// Largest page of [`SessionService::list_page`].
@@ -1049,6 +1052,7 @@ impl Inner {
                 events: Arc::clone(&self.deps.events),
                 on_fatal: self.fatal_handler(id, cancel.clone()),
                 analysis: active.analysis.as_ref().map(SessionAnalysis::feed),
+                metrics: self.deps.metrics.clone(),
             },
             streams.chunks,
         ));

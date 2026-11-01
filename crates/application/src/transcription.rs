@@ -22,12 +22,16 @@
 //!
 //! Offsets are relative to the session start: chunks are shifted by the capture's offset base
 //! before the transcriber sees them, so its updates already carry session offsets.
+//!
+//! With a [`MetricsSink`] (opt-in metrics mode, 002 research R7), one [`SegmentTiming`] is
+//! recorded per partial published and per final persisted, never after the stage closes.
+//! Without one, no timing is computed.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use devcopilot_domain::audio_source::AudioSourceKind;
-use devcopilot_domain::ids::{SegmentId, SessionId};
+use devcopilot_domain::ids::{ProviderId, SegmentId, SessionId};
 use devcopilot_domain::session::FailureReason;
 use devcopilot_domain::time::Duration;
 use devcopilot_domain::transcript::{GapReason, SegmentKind, SegmentSpec, TranscriptSegment};
@@ -38,8 +42,8 @@ use tokio_util::sync::CancellationToken;
 use crate::analysis_service::AnalysisFeed;
 use crate::events::{FinalSegment, SessionEvent};
 use crate::ports::{
-    AudioChunk, AudioChunkStream, EventPublisher, ProviderError, SAMPLE_RATE_HZ, SegmentRepository,
-    Transcriber, TranscriptUpdate,
+    AudioChunk, AudioChunkStream, EventPublisher, MetricsSink, ProviderError, SAMPLE_RATE_HZ,
+    SegmentRepository, SegmentTiming, TimingKind, Transcriber, TranscriptUpdate,
 };
 
 /// Most audio waiting for the transcriber (research R3: ~30 s of chunks).
@@ -83,6 +87,32 @@ pub struct TranscriptionDeps {
     pub on_fatal: FatalHandler,
     /// Incremental analysis of the session, when an analysis provider is usable.
     pub analysis: Option<AnalysisFeed>,
+    /// Timing sink of the opt-in metrics mode; `None` records nothing.
+    pub metrics: Option<Arc<dyn MetricsSink>>,
+}
+
+/// Turns updates into [`SegmentTiming`]s on the session timeline.
+struct Metrics {
+    sink: Arc<dyn MetricsSink>,
+    provider: ProviderId,
+    /// Monotonic instant at which this capture's audio starts.
+    anchor: tokio::time::Instant,
+    /// Session offset of `anchor`.
+    offset_base: Duration,
+}
+
+impl Metrics {
+    fn record(&self, kind: TimingKind, start: Duration, end: Duration) {
+        let elapsed = u64::try_from(self.anchor.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let speech_start_ms = start.as_millis();
+        self.sink.record(SegmentTiming {
+            kind,
+            speech_start_ms,
+            speech_end_ms: end.as_millis().max(speech_start_ms),
+            emitted_ms: self.offset_base.as_millis().saturating_add(elapsed),
+            provider: self.provider,
+        });
+    }
 }
 
 fn chunk_duration(chunk: &AudioChunk) -> Duration {
@@ -117,6 +147,7 @@ struct Recorder {
     events: Arc<dyn EventPublisher>,
     on_fatal: FatalHandler,
     analysis: Option<AnalysisFeed>,
+    metrics: Option<Metrics>,
     progress: Mutex<Progress>,
 }
 
@@ -181,6 +212,9 @@ impl Recorder {
                 if let Some(analysis) = &self.analysis {
                     analysis.final_persisted(segment.seq(), segment.duration());
                 }
+                if let Some(metrics) = &self.metrics {
+                    metrics.record(TimingKind::Final, segment.start(), segment.end());
+                }
                 SessionEvent::FinalSegment(FinalSegment {
                     id: segment.id(),
                     seq: segment.seq(),
@@ -234,12 +268,19 @@ impl Recorder {
                 start,
                 text,
             } => {
-                if !self.lock().closed {
+                let progress = self.lock();
+                if !progress.closed {
+                    let consumed_end = progress.consumed_end;
+                    // Held so a concurrent stop cannot close the stage between the check and
+                    // the publish (no partial or timing after stop).
                     self.publish(SessionEvent::PartialSegment {
                         source: self.tag(source),
                         start,
                         text,
                     });
+                    if let Some(metrics) = &self.metrics {
+                        metrics.record(TimingKind::Partial, start, consumed_end);
+                    }
                 }
                 true
             }
@@ -337,6 +378,12 @@ impl Transcription {
     /// Starts transcribing `chunks`. Must be called within a Tokio runtime.
     #[must_use]
     pub fn spawn(deps: TranscriptionDeps, chunks: AudioChunkStream) -> Self {
+        let metrics = deps.metrics.map(|sink| Metrics {
+            sink,
+            provider: deps.transcriber.descriptor().id,
+            anchor: tokio::time::Instant::now(),
+            offset_base: deps.offset_base,
+        });
         let recorder = Arc::new(Recorder {
             session_id: deps.session_id,
             two_sources: deps.session_sources.len() > 1,
@@ -345,6 +392,7 @@ impl Transcription {
             events: deps.events,
             on_fatal: deps.on_fatal,
             analysis: deps.analysis,
+            metrics,
             progress: Mutex::new(Progress {
                 next_seq: deps.first_seq,
                 captured_end: deps.offset_base,
@@ -500,7 +548,75 @@ async fn run(
 
 #[cfg(test)]
 mod tests {
+    use devcopilot_domain::Redacted;
+    use devcopilot_domain::text::SegmentText;
+
     use super::*;
+    use crate::testing::{
+        InMemorySegmentRepository, RecordingEventPublisher, RecordingMetricsSink,
+    };
+
+    fn recorder(sink: Arc<RecordingMetricsSink>) -> Recorder {
+        Recorder {
+            session_id: SessionId::new(),
+            two_sources: false,
+            session_sources: vec![AudioSourceKind::Microphone],
+            segments: Arc::new(InMemorySegmentRepository::default()),
+            events: Arc::new(RecordingEventPublisher::default()),
+            on_fatal: Arc::new(|_| {}),
+            analysis: None,
+            metrics: Some(Metrics {
+                sink,
+                provider: ProviderId::new(),
+                anchor: tokio::time::Instant::now(),
+                offset_base: Duration::from_secs(10),
+            }),
+            progress: Mutex::new(Progress::default()),
+        }
+    }
+
+    #[allow(clippy::expect_used)]
+    fn updates() -> [TranscriptUpdate; 2] {
+        [
+            TranscriptUpdate::Partial {
+                source: AudioSourceKind::Microphone,
+                start: Duration::from_secs(10),
+                text: Redacted::new("p".into()),
+            },
+            TranscriptUpdate::Final {
+                source: AudioSourceKind::Microphone,
+                start: Duration::from_secs(10),
+                end: Duration::from_secs(11),
+                text: Redacted::new(SegmentText::parse("f").expect("valid text")),
+            },
+        ]
+    }
+
+    #[tokio::test]
+    async fn timings_are_on_the_session_timeline() {
+        let sink = Arc::new(RecordingMetricsSink::default());
+        let recorder = recorder(Arc::clone(&sink));
+        for update in updates() {
+            assert!(recorder.apply(update));
+        }
+        let timings = sink.timings();
+        assert_eq!(timings.len(), 2);
+        assert!(timings.iter().all(|t| t.emitted_ms >= 10_000));
+        assert_eq!(timings[1].speech_end_ms, 11_000);
+    }
+
+    /// The stop drain deadline and session cancellation both close the stage; nothing the
+    /// transcriber emits afterwards is timed.
+    #[tokio::test]
+    async fn no_timing_once_the_stage_is_closed() {
+        let sink = Arc::new(RecordingMetricsSink::default());
+        let recorder = recorder(Arc::clone(&sink));
+        recorder.close();
+        for update in updates() {
+            recorder.apply(update);
+        }
+        assert!(sink.timings().is_empty());
+    }
 
     fn chunk(start_ms: u64, secs: usize) -> AudioChunk {
         AudioChunk {

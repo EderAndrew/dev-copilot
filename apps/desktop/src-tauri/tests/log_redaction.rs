@@ -2,6 +2,9 @@
 //! composition root — capture, transcript, analysis, records, questions, export and a remote
 //! provider key — while every log event is written to a file at the most verbose level. The
 //! file must contain the operations but none of the session content or the secret.
+//!
+//! The session runs with the metrics mode on (`DEVCOPILOT_METRICS=1`, 002 T015): the metrics
+//! CSV must hold only its five declared columns and none of the content either.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -14,7 +17,8 @@ use std::time::Duration as StdDuration;
 
 use devcopilot_application::export_service::ExportRequest;
 use devcopilot_application::ports::{
-    AnalysisOutput, AnswerOutput, AudioSource, EventPublisher, ProviderError, TranscriptUpdate,
+    AnalysisOutput, AnswerOutput, AudioSource, EventPublisher, MetricsSink, ProviderError,
+    TranscriptUpdate,
 };
 use devcopilot_application::session_service::NewSession;
 use devcopilot_application::testing::{
@@ -22,6 +26,7 @@ use devcopilot_application::testing::{
     ScriptedAudioSource, ScriptedTranscriber, ScriptedTranscriberFactory, ToggleableSecretStore,
 };
 use devcopilot_desktop_lib::composition::{Core, Platform, compose_core};
+use devcopilot_desktop_lib::metrics::{self, CSV_HEADER};
 use devcopilot_domain::Redacted;
 use devcopilot_domain::audio_source::AudioSourceKind;
 use devcopilot_domain::export::{ExportContent, ExportFormat};
@@ -40,6 +45,7 @@ use devcopilot_domain::time::Duration;
 /// Content that must never reach the log (synthetic, Art. IV.16).
 const TITLE: &str = "Planejamento-ZETA-titulo";
 const SPOKEN: &str = "frase-falada-ZETA-7731 sobre o cliente";
+const PARTIAL: &str = "parcial-ZETA-3306 sobre o cli";
 const SPOKEN_AFTER_FAILURE: &str = "segunda-frase-ZETA-8842";
 const QUESTION: &str = "pergunta-ZETA-5519 sobre prazos?";
 const ANSWER: &str = "resposta-ZETA-6620 com detalhes";
@@ -50,6 +56,7 @@ const SECRET: &str = "sk-ant-ZETA-SECRET-0d1e2f3a";
 const FORBIDDEN: &[&str] = &[
     TITLE,
     "ZETA-7731",
+    "ZETA-3306",
     "ZETA-8842",
     "ZETA-5519",
     "ZETA-6620",
@@ -152,6 +159,9 @@ async fn scripted_session_leaves_no_content_or_secret_in_the_log() {
     let dir = tempfile::tempdir().unwrap();
     let log_path = dir.path().join("devcopilot.log");
     install_log(&log_path);
+    let metrics_dir = dir.path().join("logs");
+    // The value the app reads from DEVCOPILOT_METRICS (no process-wide env mutation in tests).
+    let metrics_sink = metrics::sink_for(Some("1"), &metrics_dir).expect("metrics mode on");
 
     let mic = Arc::new(ScriptedAudioSource::granted(AudioSourceKind::Microphone));
     let transcriber = Arc::new(ScriptedTranscriber::local(Vec::new()));
@@ -166,6 +176,7 @@ async fn scripted_session_leaves_no_content_or_secret_in_the_log() {
             transcribers: Arc::new(ScriptedTranscriberFactory::new(transcriber.clone())),
             gate: Arc::default(),
             analyzers: Arc::new(ScriptedAnalysisProviderFactory::new(analyzer.clone())),
+            metrics: Some(metrics_sink as Arc<dyn MetricsSink>),
         },
     )
     .unwrap();
@@ -186,6 +197,11 @@ async fn scripted_session_leaves_no_content_or_secret_in_the_log() {
         core.sessions.get(id).unwrap().state() == SessionState::Capturing
     })
     .await;
+    transcriber.emit(TranscriptUpdate::Partial {
+        source: AudioSourceKind::Microphone,
+        start: Duration::ZERO,
+        text: Redacted::new(PARTIAL.to_owned()),
+    });
     transcriber.emit(final_update(0, SPOKEN));
     until("first final", || {
         core.sessions.transcript(id).unwrap().len() == 1
@@ -286,5 +302,31 @@ async fn scripted_session_leaves_no_content_or_secret_in_the_log() {
     assert!(log.contains(&id.to_string()));
     for phrase in FORBIDDEN {
         assert!(!log.contains(phrase), "log leaked `{phrase}`");
+    }
+
+    // The metrics CSV: header, then one row per partial and final, five declared columns.
+    let csv_path = metrics_dir.join(metrics::file_name(metrics::today_utc()));
+    until("metrics rows", || {
+        std::fs::read_to_string(&csv_path).is_ok_and(|csv| csv.lines().count() >= 4)
+    })
+    .await;
+    let csv = std::fs::read_to_string(&csv_path).unwrap();
+    let mut lines = csv.lines();
+    assert_eq!(lines.next(), Some(CSV_HEADER));
+    let mut kinds = Vec::new();
+    for row in lines {
+        let fields: Vec<&str> = row.split(',').collect();
+        assert_eq!(fields.len(), 5, "unexpected columns in `{row}`");
+        kinds.push(fields[0]);
+        for number in &fields[1..4] {
+            number
+                .parse::<u64>()
+                .unwrap_or_else(|_| panic!("not a number in `{row}`"));
+        }
+        ProviderId::parse(fields[4]).unwrap_or_else(|_| panic!("not a provider id in `{row}`"));
+    }
+    assert_eq!(kinds, ["partial", "final", "final"]);
+    for phrase in FORBIDDEN {
+        assert!(!csv.contains(phrase), "metrics leaked `{phrase}`");
     }
 }

@@ -7,7 +7,7 @@ pasta valem para todos os releases. Cada release tem uma pasta própria com as e
 
 | Documento | Conteúdo | Status |
 |-----------|----------|--------|
-| [checklist.md](checklist.md) | Os 12 critérios de publicação, cada um apontando para a evidência | a criar (T011) |
+| [checklist.md](checklist.md) | Os 12 critérios de publicação, cada um apontando para a evidência | modelo pronto (T011) |
 | [signing-and-distribution.md](signing-and-distribution.md) | Identidades, chaves, pipeline, assinatura local do `SHA256SUMS`, renovação e rotação | a criar (T008, T053) |
 | [verify-downloads.md](verify-downloads.md) | Como o usuário verifica os downloads em cada SO | a criar (T054) |
 | [rollback.md](rollback.md) | Gatilhos, passos, comunicação e chaves | a criar (T088) |
