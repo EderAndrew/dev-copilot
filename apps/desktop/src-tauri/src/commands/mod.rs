@@ -4,6 +4,7 @@
 //! Commands with input take a single `request` argument whose shape is the contract payload.
 
 pub mod audio;
+pub mod diagnostics;
 pub mod error;
 pub mod export;
 pub mod providers;

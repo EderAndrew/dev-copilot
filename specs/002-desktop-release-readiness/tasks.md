@@ -157,27 +157,27 @@ build (closes F-1 in code).
 
 ### Tests for User Story 2 (REQUIRED) ⚠️
 
-- [ ] T017 [P] [US2] Write `apps/desktop/src-tauri/tests/csp_policy.rs`. It parses `app.security.csp` from
+- [X] T017 [P] [US2] Write `apps/desktop/src-tauri/tests/csp_policy.rs`. It parses `app.security.csp` from
   `tauri.conf.json` and enforces invariants 1–4 of
   `specs/002-desktop-release-readiness/contracts/csp-policy.md`: no unsafe keywords or wildcards, the exact
   `connect-src` allowlist, `object-src 'none'`/`base-uri 'self'`/`form-action 'none'` present, and
   `'sha256-…'` in `style-src` only if it is in an in-test exception list (initially empty) that cites an ADR.
   It must fail on the current config.
-- [ ] T018 [P] [US2] Write `apps/desktop/scripts/check-dist.mjs`. It fails if any HTML file in
+- [X] T018 [P] [US2] Write `apps/desktop/scripts/check-dist.mjs`. It fails if any HTML file in
   `apps/desktop/dist/` contains a `<style` element or a `style=` attribute. Add the script
   `"test:dist": "node scripts/check-dist.mjs"` to `apps/desktop/package.json`, and a step
   `pnpm --filter appsdesktop build && pnpm --filter appsdesktop test:dist` to the frontend job in
   `.github/workflows/ci.yml`.
-- [ ] T018a [P] [US2] Add a `test:dist` task to `turbo.json` with `dependsOn: ["build"]`,
+- [X] T018a [P] [US2] Add a `test:dist` task to `turbo.json` with `dependsOn: ["build"]`,
   `inputs: ["dist/**", "scripts/check-dist.mjs"]` and no outputs. Keep the release and perf tasks out of
   `turbo.json`, because they must not be cached (Art. VII.5).
-- [ ] T019 [P] [US2] Write frontend tests in `apps/desktop/src/diagnostics/cspReporter.test.ts`. A
+- [X] T019 [P] [US2] Write frontend tests in `apps/desktop/src/diagnostics/cspReporter.test.ts`. A
   `SecurityPolicyViolationEvent` is mapped to `CspViolationDto`:
   - The directive maps to its enum value, and an unknown directive becomes `other`.
   - `blockedURI` is reduced to its scheme, or to `inline`/`eval`.
   - `sample` and the full URL are never sent.
   - An IPC failure is swallowed and never throws.
-- [ ] T020 [P] [US2] Write Rust tests for the CSP report command in
+- [X] T020 [P] [US2] Write Rust tests for the CSP report command in
   `apps/desktop/src-tauri/src/commands/diagnostics.rs` (`#[cfg(test)]`):
   - Unknown fields are rejected (`deny_unknown_fields`).
   - A `blockedScheme` that does not match `^[a-z][a-z0-9+.-]{0,15}$|^inline$|^eval$` returns `invalid_input`
@@ -191,21 +191,24 @@ build (closes F-1 in code).
   Detalhe, Exportação, Exclusão, Provedores, Configurações) on macOS, Windows and Linux into
   `docs/release/v0.1.0/evidence/csp-visual/baseline/<os>/`, as PNGs of at most 500 KB each. Rendering differs
   across OSes, so each OS is compared only with its own baseline.
-- [ ] T022 [US2] Remove `'unsafe-inline'` from `style-src` in `app.security.csp` of
+- [X] T022 [US2] Remove `'unsafe-inline'` from `style-src` in `app.security.csp` of
   `apps/desktop/src-tauri/tauri.conf.json`, so the value equals the contract in `contracts/csp-policy.md`.
   Leave `devCsp` unchanged. T017 must now pass.
-- [ ] T023 [US2] Implement the command `diagnostics_report_csp_violation` in
+- [X] T023 [US2] Implement the command `diagnostics_report_csp_violation` in
   `apps/desktop/src-tauri/src/commands/diagnostics.rs`:
   - DTO `CspViolationDto` per `contracts/ipc-updates.md`.
   - Rate limiter of 20 per minute.
   - `tracing::warn!(directive, scheme, disposition, "csp_violation")`.
   Register it in `apps/desktop/src-tauri/src/commands/mod.rs` and in `generate_handler!` in
   `apps/desktop/src-tauri/src/lib.rs`.
-- [ ] T024 [US2] Add the `CspViolationDto` type and the `reportCspViolation` method in
+  Note: the limiter uses fixed 60 s windows; the dropped-report summary line is written when the next
+  window opens with a new report. The `{}` output is `EmptyDto`, with a fixture under
+  `contracts/fixtures/EmptyDto/`.
+- [X] T024 [US2] Add the `CspViolationDto` type and the `reportCspViolation` method in
   `apps/desktop/src/ipc/types.ts` and `apps/desktop/src/ipc/client.ts`. Add contract fixtures under
   `specs/002-desktop-release-readiness/contracts/fixtures/CspViolationDto/` and extend
   `apps/desktop/src/ipc/contract.test.ts` to load fixtures from the 002 folder as well as the 001 one.
-- [ ] T025 [US2] Implement `apps/desktop/src/diagnostics/cspReporter.ts`. It installs a
+- [X] T025 [US2] Implement `apps/desktop/src/diagnostics/cspReporter.ts`. It installs a
   `securitypolicyviolation` listener on `document` that sends the minimal DTO. Call it once from
   `apps/desktop/src/main.tsx` before rendering. T019 must pass.
 - [ ] T026 [US2] Manual: verify research R1 on all three OSes with a local production build

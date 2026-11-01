@@ -122,3 +122,7 @@ jobs:
         run: |
           pnpm --filter appsdesktop check
           pnpm --filter appsdesktop test
+
+      # The built HTML must not need 'unsafe-inline' (specs/002 T018, research R1).
+      - name: Production bundle has no inline styles
+        run: pnpm --filter appsdesktop build && pnpm --filter appsdesktop test:dist

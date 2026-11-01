@@ -55,10 +55,7 @@ export type ProviderAdapterKind =
 export type DataCategory = "audio" | "transcript" | "records" | "questions";
 /** Authorization status of a provider (spec "Provedor"); local providers need none. */
 export type AuthorizationStatus =
-  | "not_required"
-  | "configured"
-  | "authorized"
-  | "revoked";
+  "not_required" | "configured" | "authorized" | "revoked";
 export type AuthorizationState = "granted" | "revoked";
 
 export type ProviderDto = {
@@ -408,3 +405,28 @@ export type AudioSourceDto = {
 };
 
 export type PermissionHelpDto = { messageKey: string };
+
+// Diagnostics (specs/002 contracts/ipc-updates.md) ----------------------------------------------
+
+export type CspDirective =
+  | "style-src"
+  | "style-src-elem"
+  | "style-src-attr"
+  | "script-src"
+  | "script-src-elem"
+  | "img-src"
+  | "font-src"
+  | "connect-src"
+  | "default-src"
+  | "other";
+
+/** Minimal CSP violation report: never the sample, the URL or the document address. */
+export type CspViolationDto = {
+  effectiveDirective: CspDirective;
+  /** ≤ 16 chars: a scheme such as "https" or "data", or "inline" | "eval". */
+  blockedScheme: string;
+  disposition: "enforce" | "report";
+};
+
+/** Empty object output (`{}`). */
+export type EmptyDto = Record<string, never>;

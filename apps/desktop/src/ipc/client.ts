@@ -6,6 +6,8 @@ import type {
   AudioSourceDto,
   AuthorizationPreviewDto,
   AudioSourceKind,
+  CspViolationDto,
+  EmptyDto,
   ErrorCode,
   ExportResultDto,
   ExportSessionDto,
@@ -81,6 +83,9 @@ async function call<T>(
 }
 
 export const ipc = {
+  /** Minimal CSP violation report (specs/002 R1); the core rate-limits the log lines. */
+  reportCspViolation: (request: CspViolationDto) =>
+    call<EmptyDto>("diagnostics_report_csp_violation", { request }),
   settingsGet: () => call<SettingsDto>("settings_get"),
   settingsUpdate: (request: SettingsUpdateDto) =>
     call<SettingsDto>("settings_update", { request }),

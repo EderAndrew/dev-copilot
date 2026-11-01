@@ -21,6 +21,7 @@ use tauri::Manager;
 pub fn run() -> tauri::Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(commands::diagnostics::CspReports::default())
         .setup(|app| {
             let state = composition::build(app.handle());
             app.manage(state);
@@ -60,6 +61,7 @@ pub fn run() -> tauri::Result<()> {
             commands::audio::audio_sources_list,
             commands::audio::audio_permission_request,
             commands::audio::audio_permission_help,
+            commands::diagnostics::diagnostics_report_csp_violation,
         ])
         .run(tauri::generate_context!())
 }

@@ -1,5 +1,6 @@
-//! Every shared fixture in `specs/001-meeting-sessions/contracts/fixtures/` round-trips through
-//! its Rust DTO unchanged (research R11).
+//! Every shared fixture in `specs/001-meeting-sessions/contracts/fixtures/` and
+//! `specs/002-desktop-release-readiness/contracts/fixtures/` round-trips through its Rust DTO
+//! unchanged (research R11).
 
 // Test helpers outside `#[test]` fns are not covered by clippy.toml's test allowances.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -8,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use devcopilot_desktop_lib::commands::IpcError;
 use devcopilot_desktop_lib::commands::audio::{AudioSourceDto, PermissionHelpDto};
+use devcopilot_desktop_lib::commands::diagnostics::{CspViolationDto, EmptyDto};
 use devcopilot_desktop_lib::commands::export::{ExportResultDto, ExportSessionDto};
 use devcopilot_desktop_lib::commands::providers::{
     AuthorizationPreviewDto, JobIdDto, LocalModelDownloadDto, ProviderAuthorizationDto,
@@ -31,13 +33,27 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-fn fixtures_dir() -> PathBuf {
+/// Fixture directories, by feature.
+const FEATURES: [&str; 2] = ["001-meeting-sessions", "002-desktop-release-readiness"];
+
+fn fixtures_dir(feature: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../specs/001-meeting-sessions/contracts/fixtures")
+        .join("../../../specs")
+        .join(feature)
+        .join("contracts/fixtures")
+}
+
+/// The directory of `dto`, in whichever feature defines it.
+fn dto_dir(dto: &str) -> PathBuf {
+    FEATURES
+        .iter()
+        .map(|feature| fixtures_dir(feature).join(dto))
+        .find(|dir| dir.is_dir())
+        .unwrap_or_else(|| panic!("no fixture directory for {dto}"))
 }
 
 fn fixtures(dto: &str) -> Vec<(PathBuf, Value)> {
-    let dir = fixtures_dir().join(dto);
+    let dir = dto_dir(dto);
     let mut files: Vec<_> = std::fs::read_dir(&dir)
         .unwrap_or_else(|err| panic!("{}: {err}", dir.display()))
         .map(|entry| entry.unwrap().path())
@@ -151,10 +167,18 @@ fn session_events() {
 }
 
 #[test]
+fn diagnostics() {
+    assert_round_trip::<CspViolationDto>("CspViolationDto");
+    assert_round_trip::<EmptyDto>("EmptyDto");
+}
+
+#[test]
 fn every_fixture_directory_is_covered() {
     let covered = [
         "AudioSourceDto",
         "AuthorizationPreviewDto",
+        "CspViolationDto",
+        "EmptyDto",
         "ExportResultDto",
         "ExportSessionDto",
         "IpcError",
@@ -192,8 +216,9 @@ fn every_fixture_directory_is_covered() {
         "SettingsDto",
         "SettingsUpdateDto",
     ];
-    let mut dirs: Vec<String> = std::fs::read_dir(fixtures_dir())
-        .unwrap()
+    let mut dirs: Vec<String> = FEATURES
+        .iter()
+        .flat_map(|feature| std::fs::read_dir(fixtures_dir(feature)).unwrap())
         .map(|entry| entry.unwrap())
         .filter(|entry| entry.path().is_dir())
         .map(|entry| entry.file_name().to_string_lossy().into_owned())

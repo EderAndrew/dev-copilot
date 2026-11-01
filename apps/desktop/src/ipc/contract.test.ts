@@ -1,5 +1,5 @@
-// Every shared fixture in specs/001-meeting-sessions/contracts/fixtures/ must match the
-// TypeScript DTOs in ./types (research R11). Enum value lists below are typed as
+// Every shared fixture in specs/001-meeting-sessions/contracts/fixtures/ and
+// specs/002-desktop-release-readiness/contracts/fixtures/ must match the TypeScript DTOs in ./types (research R11). Enum value lists below are typed as
 // `Record<Union, true>`, so they fail to compile when they drift from ./types.
 import { describe, expect, it } from "vitest";
 
@@ -9,6 +9,7 @@ import type {
   AuthorizationState,
   AuthorizationStatus,
   Certainty,
+  CspDirective,
   DataCategory,
   ErrorCode,
   ExportContent,
@@ -32,7 +33,10 @@ import type {
 } from "./types";
 
 const fixtures = import.meta.glob<unknown>(
-  "../../../../specs/001-meeting-sessions/contracts/fixtures/*/*.json",
+  [
+    "../../../../specs/001-meeting-sessions/contracts/fixtures/*/*.json",
+    "../../../../specs/002-desktop-release-readiness/contracts/fixtures/*/*.json",
+  ],
   { eager: true, import: "default" },
 );
 
@@ -385,7 +389,34 @@ const downloadEventShapes: Record<ModelDownloadEvent["type"], Shape> = {
 const exportFormat = keys<ExportFormat>({ markdown: true, json: true });
 const exportContent = keys<ExportContent>({ plan: true, transcript: true });
 
+const cspDirective = keys<CspDirective>({
+  "style-src": true,
+  "style-src-elem": true,
+  "style-src-attr": true,
+  "script-src": true,
+  "script-src-elem": true,
+  "img-src": true,
+  "font-src": true,
+  "connect-src": true,
+  "default-src": true,
+  other: true,
+});
+const blockedScheme: Check = (v) =>
+  typeof v === "string" && /^[a-z][a-z0-9+.-]{0,15}$/.test(v);
+
 const dtoShapes: Record<string, (value: unknown) => string[]> = {
+  CspViolationDto: (v) =>
+    problems(v, {
+      required: {
+        effectiveDirective: cspDirective,
+        blockedScheme,
+        disposition: keys<"enforce" | "report">({
+          enforce: true,
+          report: true,
+        }),
+      },
+    }),
+  EmptyDto: (v) => problems(v, { required: {} }),
   ExportSessionDto: (v) =>
     problems(v, {
       required: {
@@ -600,12 +631,13 @@ const dtoShapes: Record<string, (value: unknown) => string[]> = {
 
 const entries = Object.entries(fixtures).map(([path, value]) => {
   const [dto, file] = path.split("/").slice(-2);
-  return { dto, file, value };
+  return { dto, file, value, feature: path.includes("/002-") ? "002" : "001" };
 });
 
 describe("contract fixtures", () => {
-  it("are found", () => {
-    expect(entries.length).toBeGreaterThan(0);
+  it("are found for both features", () => {
+    expect(entries.some((e) => e.feature === "001")).toBe(true);
+    expect(entries.some((e) => e.feature === "002")).toBe(true);
   });
 
   it("only use known DTO directories", () => {

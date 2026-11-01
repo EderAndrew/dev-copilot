@@ -11,7 +11,8 @@
     "tauri": "tauri",
     "lint": "eslint --max-warnings 0 .",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,json}\"",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:dist": "node scripts/check-dist.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
