@@ -1244,8 +1244,10 @@ dependencies = [
 name = "devcopilot-desktop"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "devcopilot-application",
  "devcopilot-audio",
+ "devcopilot-desktop",
  "devcopilot-domain",
  "devcopilot-intelligence",
  "devcopilot-persistence",
@@ -1257,6 +1259,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-updater",
  "tempfile",
+ "thiserror 2.0.21",
  "time",
  "tokio",
  "tokio-util",

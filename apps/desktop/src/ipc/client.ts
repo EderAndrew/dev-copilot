@@ -39,6 +39,8 @@ import type {
   SessionStartDto,
   SettingsDto,
   SettingsUpdateDto,
+  UpdateEvent,
+  UpdateStatusDto,
 } from "./types";
 
 const ERROR_CODES: ReadonlySet<string> = new Set<ErrorCode>([
@@ -52,6 +54,9 @@ const ERROR_CODES: ReadonlySet<string> = new Set<ErrorCode>([
   "authorization_required",
   "provider_error",
   "storage_error",
+  "updates_disabled",
+  "notice_pending",
+  "version_mismatch",
   "internal",
 ]);
 
@@ -89,6 +94,20 @@ export const ipc = {
   settingsGet: () => call<SettingsDto>("settings_get"),
   settingsUpdate: (request: SettingsUpdateDto) =>
     call<SettingsDto>("settings_update", { request }),
+  updateStatusGet: () => call<UpdateStatusDto>("update_status_get"),
+  /** Starts a check; resolves with `checking`. The core refuses it while disabled or before the notice. */
+  updateCheck: () => call<UpdateStatusDto>("update_check"),
+  /** Call only from the confirmation dialog, with the version it displayed. */
+  updateInstall: (version: string) =>
+    call<UpdateStatusDto>("update_install", { request: { version } }),
+  updateCancel: () => call<UpdateStatusDto>("update_cancel"),
+  updateNoticeAcknowledge: () => call<SettingsDto>("update_notice_acknowledge"),
+  /** Routes update states to `onStatus`; resolves with the current state. */
+  subscribeUpdates: (onStatus: (status: UpdateStatusDto) => void) => {
+    const channel = new Channel<UpdateEvent>();
+    channel.onmessage = (event) => onStatus(event.status);
+    return call<UpdateStatusDto>("update_subscribe", { channel });
+  },
   providerList: () => call<ProviderDto[]>("provider_list"),
   providerUpsert: (request: ProviderUpsertDto) =>
     call<ProviderDto>("provider_upsert", { request }),

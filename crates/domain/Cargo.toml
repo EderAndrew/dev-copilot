@@ -7,7 +7,7 @@ publish.workspace = true
 # Pure business rules: no Tauri, audio, database or AI dependencies (Constitution Art. II.2).
 [dependencies]
 thiserror.workspace = true
-time.workspace = true
+time = { workspace = true, features = ["formatting", "parsing"] }
 uuid.workspace = true
 
 [lints]

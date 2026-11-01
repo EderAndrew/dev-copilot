@@ -12,5 +12,6 @@ pub mod questions;
 pub mod records;
 pub mod sessions;
 pub mod settings;
+pub mod updates;
 
 pub use error::IpcError;

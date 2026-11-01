@@ -8,6 +8,7 @@ import type {
   IpcError,
   SettingsDto,
   UiLanguage,
+  UpdateStatusDto,
 } from "../../ipc/types";
 
 const LIMIT_FIELDS = [
@@ -41,13 +42,38 @@ function parseDraft(draft: LimitDraft): AnalysisLimitsDto | LimitField {
 type SettingsPageProps = {
   client?: Pick<IpcClient, "settingsGet" | "settingsUpdate">;
   onLanguageChange?: (language: UiLanguage) => void;
+  /** Global update state, for the "Atualizações" section. */
+  updateStatus?: UpdateStatusDto | null;
+  /** "Verificar agora"; the core refuses it while disabled or before the notice. */
+  onCheckUpdates?: () => void;
 };
+
+/** Text of the update state shown next to "Verificar agora", if any. */
+function updateStatusText(
+  status: UpdateStatusDto | null | undefined,
+  t: (key: string) => string,
+): string {
+  switch (status?.state) {
+    case "checking":
+      return t("settings.updates.checking");
+    case "up_to_date":
+      return t("settings.updates.upToDate");
+    case "failed":
+      return t(`updates.failed.${status.reason}`);
+    case "notice_pending":
+      return t("settings.updates.noticeFirst");
+    default:
+      return "";
+  }
+}
 
 export function SettingsPage({
   client = ipc,
   onLanguageChange,
+  updateStatus,
+  onCheckUpdates,
 }: SettingsPageProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [settings, setSettings] = useState<SettingsDto | null>(null);
   const [language, setLanguage] = useState<UiLanguage>("pt-BR");
   const [draft, setDraft] = useState<LimitDraft | null>(null);
@@ -70,6 +96,33 @@ export function SettingsPage({
       active = false;
     };
   }, [client]);
+
+  async function toggleUpdateChecks(enabled: boolean) {
+    setError(null);
+    try {
+      setSettings(await client.settingsUpdate({ updateCheckEnabled: enabled }));
+    } catch (failure) {
+      setError(toIpcError(failure));
+    }
+  }
+
+  function formatInstant(rfc3339: string): string {
+    return new Intl.DateTimeFormat(i18n.language, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(rfc3339));
+  }
+
+  const lastCheckedAt =
+    (updateStatus?.state === "idle" || updateStatus?.state === "up_to_date"
+      ? updateStatus.lastCheckedAt
+      : undefined) ?? settings?.updateLastCheckedAt;
+  const canCheckNow =
+    settings?.updateCheckEnabled === true &&
+    settings.updateNoticeAcknowledged &&
+    updateStatus?.state !== "checking" &&
+    updateStatus?.state !== "downloading" &&
+    updateStatus?.state !== "installing";
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -149,6 +202,39 @@ export function SettingsPage({
                 )}
               </div>
             ))}
+          </fieldset>
+          <fieldset aria-describedby="updates-destinations">
+            <legend>{t("settings.updates.title")}</legend>
+            <label>
+              <input
+                type="checkbox"
+                checked={settings.updateCheckEnabled}
+                onChange={(event) =>
+                  void toggleUpdateChecks(event.target.checked)
+                }
+              />
+              {t("settings.updates.toggle")}
+            </label>
+            <p id="updates-destinations">
+              {t("settings.updates.destinations")}
+            </p>
+            <p>
+              {lastCheckedAt
+                ? t("settings.updates.lastChecked", {
+                    when: formatInstant(lastCheckedAt),
+                  })
+                : t("settings.updates.neverChecked")}
+            </p>
+            <button
+              type="button"
+              disabled={!canCheckNow}
+              onClick={() => onCheckUpdates?.()}
+            >
+              {t("settings.updates.checkNow")}
+            </button>
+            <p role="status" aria-live="polite">
+              {updateStatusText(updateStatus, t)}
+            </p>
           </fieldset>
           <button type="submit">{t("settings.save")}</button>
           <p role="status">{saved ? t("settings.saved") : ""}</p>

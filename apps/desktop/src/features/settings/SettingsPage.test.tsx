@@ -16,6 +16,8 @@ const settings: SettingsDto = {
     maxCallsPerHour: 40,
     maxTokensPerSession: 200000,
   },
+  updateCheckEnabled: true,
+  updateNoticeAcknowledged: false,
 };
 
 function client(
@@ -50,9 +52,9 @@ describe("SettingsPage", () => {
       uiLanguage: "en",
       analysisLimits: { ...settings.analysisLimits, maxCallsPerHour: 20 },
     });
-    expect((await screen.findByRole("status")).textContent).toBe(
-      "Configurações salvas.",
-    );
+    expect(
+      (await screen.findByText("Configurações salvas.")).getAttribute("role"),
+    ).toBe("status");
     expect(onLanguageChange).toHaveBeenCalledWith("en");
   });
 
@@ -84,6 +86,55 @@ describe("SettingsPage", () => {
     expect((await screen.findByRole("alert")).textContent).toContain(
       "O cofre de credenciais do sistema não está disponível.",
     );
+  });
+
+  it("shows the updates section with last check and destinations", async () => {
+    const api = client({
+      settingsGet: () =>
+        Promise.resolve({
+          ...settings,
+          updateNoticeAcknowledged: true,
+          updateLastCheckedAt: "2026-11-01T12:00:00Z",
+        }),
+    });
+    render(
+      <SettingsPage
+        client={api}
+        updateStatus={{
+          state: "up_to_date",
+          lastCheckedAt: "2026-11-01T12:00:00Z",
+        }}
+      />,
+    );
+    expect(
+      await screen.findByRole("group", { name: "Atualizações" }),
+    ).toBeTruthy();
+    expect(screen.getByText(/^Última verificação: /)).toBeTruthy();
+    expect(screen.getByText(/objects\.githubusercontent\.com/)).toBeTruthy();
+    expect(
+      screen.getByText("Você já está na versão mais recente."),
+    ).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Verificar agora",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+  });
+
+  it("disables checking until the notice is dismissed", async () => {
+    render(
+      <SettingsPage
+        client={client()}
+        updateStatus={{ state: "notice_pending" }}
+      />,
+    );
+    const button = await screen.findByRole("button", {
+      name: "Verificar agora",
+    });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Nenhuma verificação feita ainda.")).toBeTruthy();
   });
 
   it("has no axe violations", async () => {

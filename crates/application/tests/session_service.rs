@@ -8,7 +8,7 @@ mod support;
 
 use devcopilot_application::ApplicationError;
 use devcopilot_application::events::{SessionEvent, SourceStatus};
-use devcopilot_application::ports::{AudioError, RepositoryError, SourceFault};
+use devcopilot_application::ports::{AudioError, RepositoryError, SessionActivity, SourceFault};
 use devcopilot_application::session_service::NewSession;
 use devcopilot_domain::audio_source::{
     AudioSourceKind, Availability, PermissionState, UnavailableReason,
@@ -498,4 +498,23 @@ async fn fault_after_stop_is_ignored() {
     f.mic.trigger_fault(SourceFault::Lost);
     f.wait_for_state(session.id(), SessionState::Ended).await;
     assert_eq!(f.stored(session.id()).failure(), None);
+}
+
+// --- update blocking (002 T035) ----------------------------------------------------------------
+
+#[tokio::test]
+async fn session_activity_covers_capturing_paused_and_stopping() {
+    let f = fixture();
+    let session = f.create_mic();
+    assert!(!f.service.has_active_session(), "idle session");
+    f.start_capturing(session.id()).await;
+    assert!(f.service.has_active_session(), "capturing");
+    f.service.pause(session.id()).unwrap();
+    assert!(f.service.has_active_session(), "paused");
+    let stopping = f.service.stop(session.id()).unwrap();
+    if stopping.state() == SessionState::Stopping {
+        assert!(f.service.has_active_session(), "stopping");
+    }
+    f.wait_for_state(session.id(), SessionState::Ended).await;
+    wait_until(|| !f.service.has_active_session()).await;
 }

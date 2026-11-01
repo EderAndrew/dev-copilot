@@ -35,6 +35,19 @@
     ],
     "macOS": {
       "infoPlist": "./Info.plist"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "PENDING-T006-updater-public-key",
+      "endpoints": [
+        "https://github.com/EderAndrew/dev-copilot/releases/latest/download/latest.json"
+      ],
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

@@ -1,0 +1,1 @@
+{ "type": "update_status", "status": { "state": "downloading", "version": "0.2.0", "receivedBytes": 1048576, "totalBytes": 20971520 } }

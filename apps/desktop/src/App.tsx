@@ -9,6 +9,9 @@ import { SessionHistory } from "./features/sessions/SessionHistory";
 import { SessionsPage } from "./features/sessions/SessionsPage";
 import { useSessionStore } from "./features/sessions/sessionStore";
 import { SettingsPage } from "./features/settings/SettingsPage";
+import { UpdateBanner } from "./features/updates/UpdateBanner";
+import { UpdateNotice } from "./features/updates/UpdateNotice";
+import { useUpdateStatus } from "./features/updates/useUpdateStatus";
 import { applyLanguage, DEFAULT_LANGUAGE } from "./i18n";
 import { ipc, toIpcError } from "./ipc/client";
 import type { IpcError, UiLanguage } from "./ipc/types";
@@ -21,6 +24,7 @@ function App() {
   const [openSession, setOpenSession] = useState<string | null>(null);
   // Lives above the pages so the indicator stays visible on every screen (SC-003).
   const sessionStore = useSessionStore(ipc);
+  const updates = useUpdateStatus(ipc);
 
   useEffect(() => {
     ipc.settingsGet().then(
@@ -53,6 +57,15 @@ function App() {
       }
     >
       {startupError && <p role="alert">{t(startupError.messageKey)}</p>}
+      {updates.status?.state === "notice_pending" && (
+        <UpdateNotice onAcknowledge={updates.acknowledge} />
+      )}
+      <UpdateBanner
+        status={updates.status}
+        error={updates.error}
+        onInstall={updates.install}
+        onCancel={updates.cancel}
+      />
       {page === "sessions" && (
         <SessionsPage store={sessionStore} defaultLanguage={language} />
       )}
@@ -68,7 +81,11 @@ function App() {
         ))}
       {page === "providers" && <ProvidersPage />}
       {page === "settings" && (
-        <SettingsPage onLanguageChange={changeLanguage} />
+        <SettingsPage
+          onLanguageChange={changeLanguage}
+          updateStatus={updates.status}
+          onCheckUpdates={updates.check}
+        />
       )}
     </Layout>
   );

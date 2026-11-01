@@ -27,6 +27,7 @@ use devcopilot_desktop_lib::commands::sessions::{
     SessionPageDto, SessionRenameDto, SessionStartDto,
 };
 use devcopilot_desktop_lib::commands::settings::{SettingsDto, SettingsUpdateDto};
+use devcopilot_desktop_lib::commands::updates::{UpdateEvent, UpdateInstallDto, UpdateStatusDto};
 use devcopilot_desktop_lib::events::IpcSessionEvent;
 use devcopilot_desktop_lib::models::{LocalModelDto, ModelDownloadEvent};
 use serde::Serialize;
@@ -173,6 +174,38 @@ fn diagnostics() {
 }
 
 #[test]
+fn updates() {
+    assert_round_trip::<UpdateStatusDto>("UpdateStatusDto");
+    assert_round_trip::<UpdateEvent>("UpdateEvent");
+    assert_round_trip::<UpdateInstallDto>("UpdateInstallDto");
+}
+
+#[test]
+fn every_update_status_variant_has_a_fixture() {
+    let mut states: Vec<String> = fixtures("UpdateStatusDto")
+        .into_iter()
+        .map(|(_, value)| value["state"].as_str().unwrap().to_owned())
+        .collect();
+    states.sort();
+    states.dedup();
+    assert_eq!(
+        states,
+        [
+            "available",
+            "blocked_by_session",
+            "checking",
+            "disabled",
+            "downloading",
+            "failed",
+            "idle",
+            "installing",
+            "notice_pending",
+            "up_to_date"
+        ]
+    );
+}
+
+#[test]
 fn every_fixture_directory_is_covered() {
     let covered = [
         "AudioSourceDto",
@@ -215,6 +248,9 @@ fn every_fixture_directory_is_covered() {
         "SessionStartDto",
         "SettingsDto",
         "SettingsUpdateDto",
+        "UpdateEvent",
+        "UpdateInstallDto",
+        "UpdateStatusDto",
     ];
     let mut dirs: Vec<String> = FEATURES
         .iter()

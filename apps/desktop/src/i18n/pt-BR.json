@@ -163,7 +163,18 @@
     "maxTokensPerSession": "Máximo de tokens por sessão",
     "save": "Salvar",
     "saved": "Configurações salvas.",
-    "invalidNumber": "Informe um número inteiro."
+    "invalidNumber": "Informe um número inteiro.",
+    "updates": {
+      "title": "Atualizações",
+      "toggle": "Verificar atualizações automaticamente",
+      "destinations": "As verificações contatam github.com e o armazenamento de arquivos do GitHub (objects.githubusercontent.com). Nenhum conteúdo de sessão é enviado.",
+      "lastChecked": "Última verificação: {{when}}",
+      "neverChecked": "Nenhuma verificação feita ainda.",
+      "checkNow": "Verificar agora",
+      "checking": "Verificando…",
+      "upToDate": "Você já está na versão mais recente.",
+      "noticeFirst": "Dispense o aviso sobre atualizações para poder verificar."
+    }
   },
   "errors": {
     "invalidInput": "Valor inválido. Revise os campos e tente novamente.",
@@ -180,7 +191,10 @@
     "modelDownloadNetwork": "Não foi possível baixar o modelo. Verifique a conexão e tente de novo.",
     "modelVerificationFailed": "O arquivo baixado não confere com o modelo esperado e foi descartado.",
     "modelDownloadStorage": "Não foi possível gravar o modelo no disco.",
-    "modelDownloadCancelled": "Download cancelado."
+    "modelDownloadCancelled": "Download cancelado.",
+    "updatesDisabled": "A verificação de atualizações está desligada nas Configurações.",
+    "noticePending": "Dispense primeiro o aviso sobre atualizações.",
+    "versionMismatch": "A versão confirmada não é a última verificada. Verifique de novo antes de instalar."
   },
   "transcript": {
     "title": "Transcrição",
@@ -383,5 +397,42 @@
     "revocable": "Você pode revogar esta autorização a qualquer momento em Provedores.",
     "accept": "Autorizar",
     "decline": "Recusar"
+  },
+  "updates": {
+    "notice": {
+      "title": "Atualizações do Dev Copilot",
+      "body": "Depois que você dispensar este aviso, o app verifica se há uma versão nova ao iniciar e a cada 24 horas. A verificação é uma requisição sem corpo: não envia conteúdo de sessão nem credenciais, só o que qualquer download revela (endereço IP e versão do app). Nada é instalado sem a sua confirmação, e todo pacote tem a assinatura verificada antes.",
+      "destinationsLabel": "Destinos contatados:",
+      "destination": {
+        "manifest": "github.com: arquivo com a versão mais recente (latest.json)",
+        "assets": "objects.githubusercontent.com: armazenamento de arquivos do GitHub, para baixar o pacote que você confirmar"
+      },
+      "settingsHint": "Você pode desligar a verificação a qualquer momento em Configurações › Atualizações.",
+      "acknowledge": "Entendi"
+    },
+    "banner": {
+      "available": "Versão {{version}} disponível",
+      "notesLabel": "Novidades",
+      "install": "Instalar…",
+      "downloading": "Baixando a versão {{version}}…",
+      "progressLabel": "Progresso do download",
+      "cancel": "Cancelar download",
+      "installing": "Instalando a versão {{version}}. O app vai reiniciar.",
+      "blocked": "A atualização para a versão {{version}} espera o fim da sessão em andamento. Pare a sessão e tente de novo.",
+      "retry": "Tentar instalar de novo"
+    },
+    "confirm": {
+      "title": "Instalar a versão {{version}}?",
+      "body": "O pacote será baixado e terá a assinatura verificada antes da instalação. Ao final, o app reinicia. A instalação não acontece enquanto houver uma sessão em andamento.",
+      "confirm": "Baixar e instalar",
+      "cancel": "Agora não"
+    },
+    "failed": {
+      "network": "Não foi possível verificar ou baixar a atualização. Verifique a conexão e tente de novo.",
+      "signature_invalid": "O pacote baixado não tem uma assinatura válida e foi descartado. A versão instalada não mudou.",
+      "manifest_invalid": "As informações de atualização recebidas são inválidas. A versão instalada não mudou.",
+      "download_interrupted": "O download foi interrompido. A versão instalada não mudou.",
+      "install_failed": "Não foi possível instalar a atualização. A versão instalada não mudou."
+    }
   }
 }

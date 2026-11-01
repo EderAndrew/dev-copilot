@@ -11,14 +11,15 @@ use devcopilot_application::ApplicationError;
 use devcopilot_application::analysis_service::{AnalysisDeps, AnalysisService, DEFAULT_TICK};
 use devcopilot_application::export_service::{ExportDeps, ExportService};
 use devcopilot_application::ports::{
-    AnalysisProviderFactory, AudioSource, AuthorizationError, Clock, EventPublisher, MetricsSink,
-    RemoteGate, SecretStore, TranscriberFactory,
+    AnalysisProviderFactory, AppUpdater, AudioSource, AuthorizationError, Clock, EventPublisher,
+    MetricsSink, RemoteGate, SecretStore, SessionActivity, TranscriberFactory,
 };
 use devcopilot_application::provider_service::ProviderService;
 use devcopilot_application::question_service::{QuestionDeps, QuestionService};
 use devcopilot_application::record_service::RecordService;
 use devcopilot_application::session_service::{SessionDeps, SessionService};
 use devcopilot_application::settings_service::SettingsService;
+use devcopilot_application::update_service::{UpdateDeps, UpdateService};
 use devcopilot_audio::{CpalMicrophone, system_source};
 use devcopilot_domain::ids::ProviderId;
 use devcopilot_domain::provider::DataCategory;
@@ -30,12 +31,14 @@ use devcopilot_persistence::{
     SqliteSegmentRepository, SqliteSessionRepository, SqliteSettingsRepository,
 };
 use tauri::{AppHandle, Manager, Runtime};
+use tokio_util::sync::CancellationToken;
 use tracing_appender::non_blocking::WorkerGuard;
 
 use crate::commands::IpcError;
 use crate::events::ChannelEventPublisher;
 use crate::metrics;
 use crate::models::LocalModels;
+use crate::updater::TauriUpdater;
 
 /// Services that need the encrypted database.
 pub struct Core {
@@ -141,6 +144,10 @@ pub struct AppState {
     pub events: Arc<ChannelEventPublisher>,
     /// Local model catalog and downloads; `None` without an app data directory.
     pub models: Option<Arc<LocalModels>>,
+    /// In-app updates; `None` when storage is unavailable (its settings live there).
+    updates: Option<UpdateService>,
+    /// Fired when the app exits; stops the update scheduler.
+    pub shutdown: CancellationToken,
     _log_guard: Option<WorkerGuard>,
 }
 
@@ -155,6 +162,33 @@ impl AppState {
             .as_ref()
             .map_err(|err| IpcError::from(err.clone()))
     }
+
+    /// The update use cases, or the storage startup error.
+    ///
+    /// # Errors
+    ///
+    /// The error that prevented opening storage.
+    pub fn updates(&self) -> Result<&UpdateService, IpcError> {
+        self.core()?;
+        self.updates
+            .as_ref()
+            .ok_or_else(|| ApplicationError::Internal("updates unavailable".into()).into())
+    }
+}
+
+/// Builds the update use case over `core`'s settings and sessions (002 US8).
+#[must_use]
+pub fn compose_updates(
+    core: &Core,
+    updater: Arc<dyn AppUpdater>,
+    clock: Arc<dyn Clock>,
+) -> UpdateService {
+    UpdateService::new(UpdateDeps {
+        updater,
+        sessions: Arc::new(core.sessions.clone()) as Arc<dyn SessionActivity>,
+        settings: Arc::clone(&core.settings),
+        clock,
+    })
 }
 
 /// Opens the encrypted database in `data_dir`, wires the services and fails sessions and
@@ -276,6 +310,10 @@ fn init_tracing(log_dir: Option<&Path>) -> Option<WorkerGuard> {
 }
 
 /// Builds the managed state for the running app.
+///
+/// The update scheduler is spawned here. It only checks once the first-run notice was
+/// dismissed, and nothing about updates can fail startup: without storage there is simply
+/// no update service.
 pub fn build<R: Runtime>(app: &AppHandle<R>) -> AppState {
     let log_dir = app.path().app_log_dir().ok();
     let log_guard = init_tracing(log_dir.as_deref());
@@ -323,10 +361,21 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> AppState {
             tracing::error!(code = err.code().as_str(), error = %err, "storage unavailable")
         }
     }
+    let shutdown = CancellationToken::new();
+    let updates = core.as_ref().ok().map(|core| {
+        let updater = Arc::new(TauriUpdater::new(app.clone())) as Arc<dyn AppUpdater>;
+        let updates = compose_updates(core, updater, Arc::new(SystemClock));
+        let scheduler = updates.clone();
+        let token = shutdown.clone();
+        tauri::async_runtime::spawn(async move { scheduler.run_scheduler(token).await });
+        updates
+    });
     AppState {
         core,
         events,
         models,
+        updates,
+        shutdown,
         _log_guard: log_guard,
     }
 }

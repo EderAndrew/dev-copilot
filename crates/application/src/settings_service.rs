@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use devcopilot_domain::ids::ProviderId;
 use devcopilot_domain::language::UiLanguage;
+use devcopilot_domain::time::Timestamp;
 
 use crate::error::ApplicationError;
 use crate::ports::SettingsRepository;
@@ -19,6 +20,9 @@ const MIN_INTERVAL_SECS: &str = "analysis.min_interval_secs";
 const MAX_CALLS_PER_HOUR: &str = "analysis.max_calls_per_hour";
 const MAX_TOKENS_PER_SESSION: &str = "analysis.max_tokens_per_session";
 const PROVIDER_TOKEN_CAP_PREFIX: &str = "analysis.max_tokens_per_session.";
+const UPDATE_CHECK_ENABLED: &str = "updates.check_enabled";
+const UPDATE_NOTICE_ACKNOWLEDGED: &str = "updates.notice_acknowledged";
+const UPDATE_LAST_CHECKED_AT: &str = "updates.last_checked_at";
 
 /// Inclusive bounds of a numeric limit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,7 +81,7 @@ impl Default for AnalysisLimits {
 }
 
 /// User settings.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AppSettings {
     /// Interface language.
     pub ui_language: UiLanguage,
@@ -85,6 +89,26 @@ pub struct AppSettings {
     pub consent_reminder_dismissed: bool,
     /// Analysis limits.
     pub analysis_limits: AnalysisLimits,
+    /// Automatic and manual update checks are allowed (002 FR-008b).
+    pub update_check_enabled: bool,
+    /// The first-run update notice was dismissed; no check happens before (002 FR-008a).
+    pub update_notice_acknowledged: bool,
+    /// Last completed update check, for display only.
+    pub update_last_checked_at: Option<Timestamp>,
+}
+
+impl Default for AppSettings {
+    /// Updates checks on, notice pending, never checked (002 data-model §1.1).
+    fn default() -> Self {
+        Self {
+            ui_language: UiLanguage::default(),
+            consent_reminder_dismissed: false,
+            analysis_limits: AnalysisLimits::default(),
+            update_check_enabled: true,
+            update_notice_acknowledged: false,
+            update_last_checked_at: None,
+        }
+    }
 }
 
 /// Partial update; `None` keeps the current value.
@@ -154,7 +178,69 @@ impl SettingsService {
                     limits.max_tokens_per_session,
                 )?,
             },
+            update_check_enabled: self.update_check_enabled()?,
+            update_notice_acknowledged: self.update_notice_acknowledged()?,
+            update_last_checked_at: self.update_last_checked_at()?,
         })
+    }
+
+    /// Whether update checks are allowed (`updates.check_enabled`, default `true`).
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::Storage`] when the repository fails.
+    pub fn update_check_enabled(&self) -> Result<bool, ApplicationError> {
+        self.read_bool(UPDATE_CHECK_ENABLED, true)
+    }
+
+    /// Switches update checks on or off. Callers that run checks must react to the change;
+    /// the desktop app goes through `UpdateService::set_check_enabled`.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::Storage`] when the repository fails.
+    pub fn set_update_check_enabled(&self, enabled: bool) -> Result<(), ApplicationError> {
+        Ok(self.repo.set(UPDATE_CHECK_ENABLED, &enabled.to_string())?)
+    }
+
+    /// Whether the first-run update notice was dismissed (`updates.notice_acknowledged`,
+    /// default `false`).
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::Storage`] when the repository fails.
+    pub fn update_notice_acknowledged(&self) -> Result<bool, ApplicationError> {
+        self.read_bool(UPDATE_NOTICE_ACKNOWLEDGED, false)
+    }
+
+    /// Records that the first-run update notice was dismissed. There is no way back.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::Storage`] when the repository fails.
+    pub fn acknowledge_update_notice(&self) -> Result<(), ApplicationError> {
+        Ok(self.repo.set(UPDATE_NOTICE_ACKNOWLEDGED, "true")?)
+    }
+
+    /// Last completed update check (`updates.last_checked_at`, RFC 3339). An invalid stored
+    /// value reads as absent.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::Storage`] when the repository fails.
+    pub fn update_last_checked_at(&self) -> Result<Option<Timestamp>, ApplicationError> {
+        Ok(self
+            .read(UPDATE_LAST_CHECKED_AT)?
+            .and_then(|v| Timestamp::parse_rfc3339(&v).ok()))
+    }
+
+    /// Stores the instant of a completed update check.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::Storage`] when the repository fails.
+    pub fn set_update_last_checked_at(&self, at: Timestamp) -> Result<(), ApplicationError> {
+        Ok(self.repo.set(UPDATE_LAST_CHECKED_AT, &at.to_rfc3339())?)
     }
 
     /// Applies `update` and returns the resulting settings. Nothing is written when any value
@@ -228,6 +314,13 @@ impl SettingsService {
 
     fn read(&self, key: &str) -> Result<Option<String>, ApplicationError> {
         Ok(self.repo.get(key)?)
+    }
+
+    fn read_bool(&self, key: &str, default: bool) -> Result<bool, ApplicationError> {
+        Ok(self
+            .read(key)?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(default))
     }
 
     fn read_limit(
@@ -366,6 +459,51 @@ mod tests {
         repo.set(MAX_CALLS_PER_HOUR, "0").unwrap();
         repo.set(TRIGGER_FINALS, "abc").unwrap();
         assert_eq!(service.get().unwrap(), AppSettings::default());
+    }
+
+    #[test]
+    fn update_settings_defaults() {
+        let (service, repo) = service();
+        assert!(service.update_check_enabled().unwrap());
+        assert!(!service.update_notice_acknowledged().unwrap());
+        assert_eq!(service.update_last_checked_at().unwrap(), None);
+        let settings = service.get().unwrap();
+        assert!(settings.update_check_enabled);
+        assert!(!settings.update_notice_acknowledged);
+        assert_eq!(settings.update_last_checked_at, None);
+        assert!(repo.snapshot().is_empty(), "reading writes nothing");
+    }
+
+    #[test]
+    fn update_settings_round_trip() {
+        let (service, repo) = service();
+        service.set_update_check_enabled(false).unwrap();
+        service.acknowledge_update_notice().unwrap();
+        let at = Timestamp::from_unix_millis(1_793_059_200_000).unwrap();
+        service.set_update_last_checked_at(at).unwrap();
+        let settings = service.get().unwrap();
+        assert!(!settings.update_check_enabled);
+        assert!(settings.update_notice_acknowledged);
+        assert_eq!(settings.update_last_checked_at, Some(at));
+        assert_eq!(
+            repo.snapshot()
+                .get(UPDATE_LAST_CHECKED_AT)
+                .map(String::as_str),
+            Some("2026-10-27T00:00:00Z")
+        );
+        service.set_update_check_enabled(true).unwrap();
+        assert!(service.update_check_enabled().unwrap());
+    }
+
+    #[test]
+    fn invalid_update_settings_fall_back_to_defaults() {
+        let (service, repo) = service();
+        repo.set(UPDATE_CHECK_ENABLED, "maybe").unwrap();
+        repo.set(UPDATE_NOTICE_ACKNOWLEDGED, "1").unwrap();
+        repo.set(UPDATE_LAST_CHECKED_AT, "not a date").unwrap();
+        assert!(service.update_check_enabled().unwrap());
+        assert!(!service.update_notice_acknowledged().unwrap());
+        assert_eq!(service.update_last_checked_at().unwrap(), None);
     }
 
     #[test]

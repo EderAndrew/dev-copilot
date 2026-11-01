@@ -360,6 +360,107 @@ pub trait MetricsSink: Send + Sync {
     fn record(&self, timing: SegmentTiming);
 }
 
+// ---------------------------------------------------------------------------------------------
+// App updates (002 US8, research R5)
+// ---------------------------------------------------------------------------------------------
+
+/// Largest number of characters of release notes kept from a manifest (data-model §1.2).
+pub const MAX_UPDATE_NOTES_CHARS: usize = 4_000;
+
+/// A newer, not yet downloaded app version announced by the update manifest.
+///
+/// `notes` is untrusted text from the manifest: it is shown as plain text, never rendered as
+/// HTML or Markdown. Plugin types never cross the [`AppUpdater`] port (Art. VI.2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AvailableUpdate {
+    /// Semver of the announced version, greater than the installed one.
+    pub version: String,
+    /// Release notes, at most [`MAX_UPDATE_NOTES_CHARS`] characters.
+    pub notes: String,
+    /// Publication instant, when the manifest has one.
+    pub published_at: Option<Timestamp>,
+}
+
+/// Why an update check, download or install failed. None of them changes the installed
+/// version (FR-008c).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Error)]
+pub enum UpdateFailure {
+    /// The manifest or package could not be fetched.
+    #[error("network")]
+    Network,
+    /// The package signature does not verify against the embedded public key.
+    #[error("signature_invalid")]
+    SignatureInvalid,
+    /// The manifest is malformed or announces an insecure URL.
+    #[error("manifest_invalid")]
+    ManifestInvalid,
+    /// The package download stopped before the end.
+    #[error("download_interrupted")]
+    DownloadInterrupted,
+    /// The verified package could not be installed.
+    #[error("install_failed")]
+    InstallFailed,
+}
+
+impl UpdateFailure {
+    /// Stable snake_case code (contracts/ipc-updates.md `failed.reason`).
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Network => "network",
+            Self::SignatureInvalid => "signature_invalid",
+            Self::ManifestInvalid => "manifest_invalid",
+            Self::DownloadInterrupted => "download_interrupted",
+            Self::InstallFailed => "install_failed",
+        }
+    }
+}
+
+/// Signed in-app updates, driven only by the core (research R5).
+///
+/// The adapter verifies the package signature before it reports a download as complete, and
+/// never installs a package it did not verify. Download and install are separate steps so the
+/// use case can check for active sessions between them (data-model §1.3).
+pub trait AppUpdater: Send + Sync {
+    /// Fetches the manifest. `None` when no version newer than the installed one exists.
+    ///
+    /// # Errors
+    ///
+    /// See [`UpdateFailure`].
+    fn check(&self) -> BoxFuture<'_, Result<Option<AvailableUpdate>, UpdateFailure>>;
+
+    /// Downloads and verifies the package of `update`, reporting `(received, total)` bytes.
+    /// Stops with [`UpdateFailure::DownloadInterrupted`] when `cancel` fires.
+    ///
+    /// # Errors
+    ///
+    /// See [`UpdateFailure`].
+    fn download<'a>(
+        &'a self,
+        update: &'a AvailableUpdate,
+        progress: &'a (dyn Fn(u64, Option<u64>) + Send + Sync),
+        cancel: CancellationToken,
+    ) -> BoxFuture<'a, Result<(), UpdateFailure>>;
+
+    /// Installs the package verified by the last [`AppUpdater::download`] of `update`. On
+    /// Windows the installer may end the process.
+    ///
+    /// # Errors
+    ///
+    /// [`UpdateFailure::InstallFailed`], or [`UpdateFailure::SignatureInvalid`] when no
+    /// verified package for `update` is held.
+    fn install(&self, update: &AvailableUpdate) -> Result<(), UpdateFailure>;
+
+    /// Restarts the app into the installed version.
+    fn restart(&self);
+}
+
+/// Tells whether a session could be capturing, so an update never interrupts one.
+pub trait SessionActivity: Send + Sync {
+    /// True while any session is `starting`, `capturing`, `paused` or `stopping`.
+    fn has_active_session(&self) -> bool;
+}
+
 /// A final segment sent for analysis.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnalysisSegment {

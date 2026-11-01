@@ -23,19 +23,20 @@ use devcopilot_domain::session::Session;
 use devcopilot_domain::text::AnswerText;
 use devcopilot_domain::time::{Duration, Timestamp};
 use devcopilot_domain::transcript::TranscriptSegment;
-use tokio::sync::Notify;
+use tokio::sync::{Notify, watch};
 use tokio_util::sync::CancellationToken;
 
 use crate::events::SessionEvent;
 use crate::ports::{
     AnalysisOutput, AnalysisProvider, AnalysisProviderFactory, AnalysisRequest,
-    AnalysisRunRepository, AnswerOutput, AudioChunk, AudioChunkStream, AudioError, AudioSource,
-    AuthorizationError, BoundedAudioSink, BoxFuture, CaptureHandle, Clock, EventPublisher,
-    ExportRepository, MetricsSink, ProviderDescriptor, ProviderError, ProviderRepository,
-    QuestionRepository, QuestionRequest, RecordRepository, RemoteGate, RepositoryError,
-    SecretStore, SecretStoreError, SegmentRepository, SegmentTiming, SessionRepository,
-    SettingsRepository, SinkError, SourceFault, SourceFaultNotifier, Transcriber,
-    TranscriberFactory, TranscriptSink, TranscriptUpdate,
+    AnalysisRunRepository, AnswerOutput, AppUpdater, AudioChunk, AudioChunkStream, AudioError,
+    AudioSource, AuthorizationError, AvailableUpdate, BoundedAudioSink, BoxFuture, CaptureHandle,
+    Clock, EventPublisher, ExportRepository, MetricsSink, ProviderDescriptor, ProviderError,
+    ProviderRepository, QuestionRepository, QuestionRequest, RecordRepository, RemoteGate,
+    RepositoryError, SecretStore, SecretStoreError, SegmentRepository, SegmentTiming,
+    SessionActivity, SessionRepository, SettingsRepository, SinkError, SourceFault,
+    SourceFaultNotifier, Transcriber, TranscriberFactory, TranscriptSink, TranscriptUpdate,
+    UpdateFailure,
 };
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -1508,6 +1509,189 @@ impl RecordingMetricsSink {
 impl MetricsSink for RecordingMetricsSink {
     fn record(&self, timing: SegmentTiming) {
         lock(&self.timings).push(timing);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Updates
+// ---------------------------------------------------------------------------------------------
+
+/// A gate tests open and close to hold an asynchronous step mid-way.
+#[derive(Debug)]
+struct Gate(watch::Sender<bool>);
+
+impl Gate {
+    fn open() -> Self {
+        Self(watch::channel(true).0)
+    }
+
+    fn set(&self, open: bool) {
+        self.0.send_replace(open);
+    }
+
+    async fn pass(&self) {
+        let mut rx = self.0.subscribe();
+        let _ = rx.wait_for(|open| *open).await;
+    }
+}
+
+/// Scripted [`AppUpdater`] that counts every call, so tests can assert that nothing was
+/// requested or installed.
+#[derive(Debug)]
+pub struct ScriptedUpdater {
+    check_result: Mutex<Result<Option<AvailableUpdate>, UpdateFailure>>,
+    download_result: Mutex<Result<(), UpdateFailure>>,
+    install_result: Mutex<Result<(), UpdateFailure>>,
+    check_gate: Gate,
+    download_gate: Gate,
+    checks: AtomicUsize,
+    downloads: AtomicUsize,
+    installs: AtomicUsize,
+    restarts: AtomicUsize,
+    download_cancelled: AtomicBool,
+}
+
+impl Default for ScriptedUpdater {
+    fn default() -> Self {
+        Self {
+            check_result: Mutex::new(Ok(None)),
+            download_result: Mutex::new(Ok(())),
+            install_result: Mutex::new(Ok(())),
+            check_gate: Gate::open(),
+            download_gate: Gate::open(),
+            checks: AtomicUsize::new(0),
+            downloads: AtomicUsize::new(0),
+            installs: AtomicUsize::new(0),
+            restarts: AtomicUsize::new(0),
+            download_cancelled: AtomicBool::new(false),
+        }
+    }
+}
+
+impl ScriptedUpdater {
+    /// What the next checks return.
+    pub fn set_check_result(&self, result: Result<Option<AvailableUpdate>, UpdateFailure>) {
+        *lock(&self.check_result) = result;
+    }
+
+    /// What the next downloads return once they pass the gate.
+    pub fn set_download_result(&self, result: Result<(), UpdateFailure>) {
+        *lock(&self.download_result) = result;
+    }
+
+    /// What the next installs return.
+    pub fn set_install_result(&self, result: Result<(), UpdateFailure>) {
+        *lock(&self.install_result) = result;
+    }
+
+    /// Holds checks until [`ScriptedUpdater::release_checks`].
+    pub fn hold_checks(&self) {
+        self.check_gate.set(false);
+    }
+
+    /// Lets held checks finish.
+    pub fn release_checks(&self) {
+        self.check_gate.set(true);
+    }
+
+    /// Holds downloads after their first progress report until
+    /// [`ScriptedUpdater::release_downloads`].
+    pub fn hold_downloads(&self) {
+        self.download_gate.set(false);
+    }
+
+    /// Lets held downloads finish.
+    pub fn release_downloads(&self) {
+        self.download_gate.set(true);
+    }
+
+    /// Number of manifest requests.
+    #[must_use]
+    pub fn check_count(&self) -> usize {
+        self.checks.load(Ordering::SeqCst)
+    }
+
+    /// Number of package downloads started.
+    #[must_use]
+    pub fn download_count(&self) -> usize {
+        self.downloads.load(Ordering::SeqCst)
+    }
+
+    /// Number of installs; zero means the installed version is unchanged.
+    #[must_use]
+    pub fn install_count(&self) -> usize {
+        self.installs.load(Ordering::SeqCst)
+    }
+
+    /// Number of restarts.
+    #[must_use]
+    pub fn restart_count(&self) -> usize {
+        self.restarts.load(Ordering::SeqCst)
+    }
+
+    /// Whether a download saw its cancellation token fire.
+    #[must_use]
+    pub fn download_was_cancelled(&self) -> bool {
+        self.download_cancelled.load(Ordering::SeqCst)
+    }
+}
+
+impl AppUpdater for ScriptedUpdater {
+    fn check(&self) -> BoxFuture<'_, Result<Option<AvailableUpdate>, UpdateFailure>> {
+        Box::pin(async move {
+            self.checks.fetch_add(1, Ordering::SeqCst);
+            self.check_gate.pass().await;
+            lock(&self.check_result).clone()
+        })
+    }
+
+    fn download<'a>(
+        &'a self,
+        _update: &'a AvailableUpdate,
+        progress: &'a (dyn Fn(u64, Option<u64>) + Send + Sync),
+        cancel: CancellationToken,
+    ) -> BoxFuture<'a, Result<(), UpdateFailure>> {
+        Box::pin(async move {
+            self.downloads.fetch_add(1, Ordering::SeqCst);
+            progress(10, Some(100));
+            tokio::select! {
+                () = cancel.cancelled() => {
+                    self.download_cancelled.store(true, Ordering::SeqCst);
+                    return Err(UpdateFailure::DownloadInterrupted);
+                }
+                () = self.download_gate.pass() => {}
+            }
+            progress(100, Some(100));
+            *lock(&self.download_result)
+        })
+    }
+
+    fn install(&self, _update: &AvailableUpdate) -> Result<(), UpdateFailure> {
+        self.installs.fetch_add(1, Ordering::SeqCst);
+        *lock(&self.install_result)
+    }
+
+    fn restart(&self) {
+        self.restarts.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+/// [`SessionActivity`] switched by the test.
+#[derive(Debug, Default)]
+pub struct FakeSessionActivity {
+    active: AtomicBool,
+}
+
+impl FakeSessionActivity {
+    /// Simulates a session entering or leaving `starting`/`capturing`/`paused`/`stopping`.
+    pub fn set_active(&self, active: bool) {
+        self.active.store(active, Ordering::SeqCst);
+    }
+}
+
+impl SessionActivity for FakeSessionActivity {
+    fn has_active_session(&self) -> bool {
+        self.active.load(Ordering::SeqCst)
     }
 }
 

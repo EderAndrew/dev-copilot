@@ -45,6 +45,25 @@ impl Timestamp {
         self.0
     }
 
+    /// RFC 3339 in UTC (e.g. `2026-11-01T12:00:00Z`, or `…:00.042Z` with milliseconds).
+    #[must_use]
+    pub fn to_rfc3339(&self) -> String {
+        self.0
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_else(|_| self.unix_millis().to_string())
+    }
+
+    /// Parses an RFC 3339 instant, converting it to UTC and truncating to milliseconds.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DomainError::InvalidInput`] when `value` is not RFC 3339.
+    pub fn parse_rfc3339(value: &str) -> Result<Self, DomainError> {
+        OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
+            .map(Self::from_datetime)
+            .map_err(|_| DomainError::invalid("timestamp", InputProblem::Malformed))
+    }
+
     /// Time elapsed from `earlier` to `self`, or zero when `earlier` is later.
     #[must_use]
     pub fn saturating_duration_since(&self, earlier: Self) -> Duration {
@@ -159,6 +178,16 @@ mod tests {
             Duration::from(std::time::Duration::from_millis(1_500)),
             Duration::from_millis(1_500)
         );
+    }
+
+    #[test]
+    fn rfc3339_round_trips() {
+        let ts = Timestamp::from_unix_millis(1_793_059_200_042).unwrap();
+        assert_eq!(ts.to_rfc3339(), "2026-10-27T00:00:00.042Z");
+        assert_eq!(Timestamp::parse_rfc3339(&ts.to_rfc3339()).unwrap(), ts);
+        let offset = Timestamp::parse_rfc3339("2026-10-27T03:00:00+03:00").unwrap();
+        assert_eq!(offset.to_rfc3339(), "2026-10-27T00:00:00Z");
+        assert!(Timestamp::parse_rfc3339("yesterday").is_err());
     }
 
     #[test]

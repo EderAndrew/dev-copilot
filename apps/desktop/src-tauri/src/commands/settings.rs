@@ -1,4 +1,8 @@
 //! `settings_get` and `settings_update`.
+//!
+//! 002 adds the `updates.*` settings (contracts/ipc-updates.md): `updateCheckEnabled` is
+//! writable here and goes through the update use case, so switching it off cancels a check
+//! or download in progress; the other two fields are read-only.
 
 use devcopilot_application::settings_service::{AnalysisLimits, AppSettings, SettingsUpdate};
 use devcopilot_domain::language::UiLanguage;
@@ -22,17 +26,25 @@ pub struct AnalysisLimitsDto {
 }
 
 /// User settings.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[allow(missing_docs)]
 pub struct SettingsDto {
     pub ui_language: Code<UiLanguage>,
     pub consent_reminder_dismissed: bool,
     pub analysis_limits: AnalysisLimitsDto,
+    pub update_check_enabled: bool,
+    pub update_notice_acknowledged: bool,
+    /// RFC 3339.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_last_checked_at: Option<String>,
 }
 
 /// `Partial<SettingsDto>`; limits are replaced as a whole.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+///
+/// The read-only fields are accepted by the parser only so `settings_update` can answer them
+/// with `invalid_input` instead of a generic deserialization error.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[allow(missing_docs)]
 pub struct SettingsUpdateDto {
@@ -42,6 +54,32 @@ pub struct SettingsUpdateDto {
     pub consent_reminder_dismissed: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub analysis_limits: Option<AnalysisLimitsDto>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_check_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_notice_acknowledged: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_last_checked_at: Option<serde_json::Value>,
+}
+
+impl SettingsUpdateDto {
+    /// Refuses the read-only fields.
+    ///
+    /// # Errors
+    ///
+    /// `invalid_input` with `problem: read_only`.
+    pub fn check_writable(&self) -> Result<(), IpcError> {
+        if self.update_notice_acknowledged.is_some() {
+            return Err(IpcError::invalid_input(
+                "updateNoticeAcknowledged",
+                "read_only",
+            ));
+        }
+        if self.update_last_checked_at.is_some() {
+            return Err(IpcError::invalid_input("updateLastCheckedAt", "read_only"));
+        }
+        Ok(())
+    }
 }
 
 impl From<AnalysisLimitsDto> for AnalysisLimits {
@@ -74,6 +112,9 @@ impl From<AppSettings> for SettingsDto {
             ui_language: Code(settings.ui_language),
             consent_reminder_dismissed: settings.consent_reminder_dismissed,
             analysis_limits: settings.analysis_limits.into(),
+            update_check_enabled: settings.update_check_enabled,
+            update_notice_acknowledged: settings.update_notice_acknowledged,
+            update_last_checked_at: settings.update_last_checked_at.map(|at| at.to_rfc3339()),
         }
     }
 }
@@ -102,13 +143,20 @@ pub async fn settings_get(state: State<'_, AppState>) -> Result<SettingsDto, Ipc
 ///
 /// # Errors
 ///
-/// `invalid_input` for out-of-range limits; see [`settings_get`].
+/// `invalid_input` for out-of-range limits or a read-only field; see [`settings_get`].
 #[tauri::command]
 pub async fn settings_update(
     state: State<'_, AppState>,
     request: SettingsUpdateDto,
 ) -> Result<SettingsDto, IpcError> {
-    Ok(state.core()?.settings.update(request.into())?.into())
+    request.check_writable()?;
+    let core = state.core()?;
+    let check_enabled = request.update_check_enabled;
+    let mut settings = core.settings.update(request.into())?;
+    if let Some(enabled) = check_enabled {
+        settings = state.updates()?.set_check_enabled(enabled)?;
+    }
+    Ok(settings.into())
 }
 
 #[cfg(test)]
@@ -124,6 +172,26 @@ mod tests {
             SettingsUpdate::from(partial).ui_language,
             Some(UiLanguage::En)
         );
+    }
+
+    #[test]
+    fn read_only_update_fields_are_invalid_input() {
+        for json in [
+            r#"{"updateNoticeAcknowledged":true}"#,
+            r#"{"updateLastCheckedAt":"2026-11-01T00:00:00Z"}"#,
+        ] {
+            let request: SettingsUpdateDto = serde_json::from_str(json).unwrap();
+            let err = request.check_writable().unwrap_err();
+            assert_eq!(err.code, "invalid_input");
+            assert_eq!(
+                err.details.get("problem").map(String::as_str),
+                Some("read_only")
+            );
+        }
+        let toggle: SettingsUpdateDto =
+            serde_json::from_str(r#"{"updateCheckEnabled":false}"#).unwrap();
+        assert!(toggle.check_writable().is_ok());
+        assert_eq!(toggle.update_check_enabled, Some(false));
     }
 
     #[test]

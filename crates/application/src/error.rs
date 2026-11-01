@@ -29,6 +29,12 @@ pub enum ErrorCode {
     ProviderError,
     /// Storage failure.
     StorageError,
+    /// Update checks are switched off (002 FR-008b).
+    UpdatesDisabled,
+    /// The first-run update notice has not been dismissed yet (002 FR-008a).
+    NoticePending,
+    /// The confirmed version differs from the last checked one (002 US8).
+    VersionMismatch,
     /// Unexpected failure.
     Internal,
 }
@@ -48,6 +54,9 @@ impl ErrorCode {
             Self::AuthorizationRequired => "authorization_required",
             Self::ProviderError => "provider_error",
             Self::StorageError => "storage_error",
+            Self::UpdatesDisabled => "updates_disabled",
+            Self::NoticePending => "notice_pending",
+            Self::VersionMismatch => "version_mismatch",
             Self::Internal => "internal",
         }
     }
@@ -66,6 +75,9 @@ impl ErrorCode {
             Self::AuthorizationRequired => "errors.authorizationRequired",
             Self::ProviderError => "errors.providerError",
             Self::StorageError => "errors.storageError",
+            Self::UpdatesDisabled => "errors.updatesDisabled",
+            Self::NoticePending => "errors.noticePending",
+            Self::VersionMismatch => "errors.versionMismatch",
             Self::Internal => "errors.internal",
         }
     }
@@ -113,6 +125,15 @@ pub enum ApplicationError {
     /// Storage failure.
     #[error("storage error")]
     Storage(#[source] RepositoryError),
+    /// Update checks are switched off.
+    #[error("updates disabled")]
+    UpdatesDisabled,
+    /// The first-run update notice is still pending.
+    #[error("update notice pending")]
+    NoticePending,
+    /// `update_install` named a version other than the last checked one.
+    #[error("update version mismatch")]
+    VersionMismatch,
     /// Unexpected failure.
     #[error("internal error: {0}")]
     Internal(String),
@@ -133,6 +154,9 @@ impl ApplicationError {
             Self::AuthorizationRequired { .. } => ErrorCode::AuthorizationRequired,
             Self::Provider(_) => ErrorCode::ProviderError,
             Self::Storage(_) => ErrorCode::StorageError,
+            Self::UpdatesDisabled => ErrorCode::UpdatesDisabled,
+            Self::NoticePending => ErrorCode::NoticePending,
+            Self::VersionMismatch => ErrorCode::VersionMismatch,
             Self::Internal(_) => ErrorCode::Internal,
         }
     }
@@ -242,6 +266,31 @@ mod tests {
                 problem: "empty"
             }
         );
+    }
+
+    #[test]
+    fn update_errors_have_stable_codes() {
+        let cases = [
+            (
+                ApplicationError::UpdatesDisabled,
+                "updates_disabled",
+                "errors.updatesDisabled",
+            ),
+            (
+                ApplicationError::NoticePending,
+                "notice_pending",
+                "errors.noticePending",
+            ),
+            (
+                ApplicationError::VersionMismatch,
+                "version_mismatch",
+                "errors.versionMismatch",
+            ),
+        ];
+        for (err, code, key) in cases {
+            assert_eq!(err.code().as_str(), code);
+            assert_eq!(err.code().message_key(), key);
+        }
     }
 
     #[test]

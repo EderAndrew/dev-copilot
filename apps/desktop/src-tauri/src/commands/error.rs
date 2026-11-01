@@ -122,4 +122,17 @@ mod tests {
         );
         assert_eq!(IpcError::from(ApplicationError::NotFound).code, "not_found");
     }
+
+    #[test]
+    fn update_errors_map_to_their_codes() {
+        for (err, code) in [
+            (ApplicationError::UpdatesDisabled, "updates_disabled"),
+            (ApplicationError::NoticePending, "notice_pending"),
+            (ApplicationError::VersionMismatch, "version_mismatch"),
+        ] {
+            let ipc = IpcError::from(err);
+            assert_eq!(ipc.code, code);
+            assert!(ipc.details.is_empty());
+        }
+    }
 }

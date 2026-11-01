@@ -235,7 +235,7 @@ pending (quickstart §6).
 
 ### Tests for User Story 8 (REQUIRED) ⚠️
 
-- [ ] T027 [P] [US8] Write unit tests in `crates/application/tests/update_service.rs`, using a fake
+- [X] T027 [P] [US8] Write unit tests in `crates/application/tests/update_service.rs`, using a fake
   `AppUpdater`, a fake `SessionActivity`, an in-memory `SettingsRepository` and a manual clock. They cover
   data-model §1.3:
   - With `check_enabled=false`: zero calls, state `disabled`.
@@ -248,10 +248,10 @@ pending (quickstart §6).
   - Disabling cancels a check or download in progress.
   - Every failure leaves the "installed version unchanged" flag intact.
   - The scheduler fires at startup and every 24 h only when enabled and acknowledged.
-- [ ] T028 [P] [US8] Add unit tests in `crates/application/src/settings_service.rs` (`#[cfg(test)]`) for the
+- [X] T028 [P] [US8] Add unit tests in `crates/application/src/settings_service.rs` (`#[cfg(test)]`) for the
   keys `updates.check_enabled` (default true), `updates.notice_acknowledged` (default false) and
   `updates.last_checked_at` (invalid → absent).
-- [ ] T029 [P] [US8] Write adapter contract tests in `apps/desktop/src-tauri/tests/updater_adapter.rs`, with
+- [X] T029 [P] [US8] Write adapter contract tests in `apps/desktop/src-tauri/tests/updater_adapter.rs`, with
   `wiremock` serving `latest.json` and packages signed by a test minisign key generated into
   `apps/desktop/src-tauri/tests/fixtures/updater/`, and `tauri::test` mock runtime. Cases:
   - A valid newer update → `AvailableUpdate`.
@@ -265,10 +265,13 @@ pending (quickstart §6).
   conversion, HTTPS and notes rules into pure functions in `apps/desktop/src-tauri/src/updater.rs` and test them
   there (`#[cfg(test)]`). The signature and download cases are then covered against the real plugin by T047, and
   the decision is recorded in `research.md` R5.
-- [ ] T030 [P] [US8] Write a capability guard test in `apps/desktop/src-tauri/tests/capabilities.rs`: every
+  *The plugin works under the mock runtime, so these tests run against the real plugin (no fallback to
+  pure functions). Debug builds of the plugin accept `http://` endpoints, so `TauriUpdater` validates the
+  config itself before any request. Recorded in research R5.*
+- [X] T030 [P] [US8] Write a capability guard test in `apps/desktop/src-tauri/tests/capabilities.rs`: every
   file in `apps/desktop/src-tauri/capabilities/` grants exactly `core:default` and no `updater:*`, `dialog:*`,
   `fs:*`, `http:*` or `shell:*` permission.
-- [ ] T031 [P] [US8] Write frontend tests in `apps/desktop/src/features/updates/updates.test.tsx`, with
+- [X] T031 [P] [US8] Write frontend tests in `apps/desktop/src/features/updates/updates.test.tsx`, with
   `vitest-axe` on each state:
   - `UpdateNotice` lists the destinations from `contracts/csp-policy.md`, and "Entendi" calls
     `update_notice_acknowledge`.
@@ -277,29 +280,35 @@ pending (quickstart §6).
     `update_install` with the displayed version.
   - The `blocked_by_session` and `failed` messages are announced in a polite live region.
   - The Settings toggle calls `settings_update({ updateCheckEnabled })`.
-- [ ] T032 [P] [US8] Add contract fixtures for `UpdateStatusDto` (every variant), `UpdateEvent` and the
+- [X] T032 [P] [US8] Add contract fixtures for `UpdateStatusDto` (every variant), `UpdateEvent` and the
   extended `SettingsDto` under `specs/002-desktop-release-readiness/contracts/fixtures/`, and the
   corresponding cases in `apps/desktop/src/ipc/contract.test.ts`.
+  *The extended `SettingsDto` fixtures stay in `specs/001-meeting-sessions/contracts/fixtures/SettingsDto/`
+  (the DTO has one fixture directory; a second one under 002 would be shadowed). `UpdateStatusDto`,
+  `UpdateEvent` and `UpdateInstallDto` live under 002.*
 
 ### Implementation for User Story 8
 
-- [ ] T033 [US8] Add to `crates/application/src/ports.rs`:
+- [X] T033 [US8] Add to `crates/application/src/ports.rs`:
   - The trait `AppUpdater` (`async fn check(&self) -> Result<Option<AvailableUpdate>, UpdateFailure>`;
     `async fn download_and_install(&self, update: &AvailableUpdate, progress: &dyn Fn(u64, Option<u64>), cancel: CancellationToken) -> Result<(), UpdateFailure>`;
     `fn restart(&self)`).
   - The value `AvailableUpdate { version, notes, published_at }`.
   - The enum `UpdateFailure { Network, SignatureInvalid, ManifestInvalid, DownloadInterrupted, InstallFailed }`.
   - The trait `SessionActivity { fn has_active_session(&self) -> bool }`.
-- [ ] T034 [US8] Add the settings keys and accessors (`update_check_enabled`, `set_update_check_enabled`,
+  *Deviation: the port has separate `download` (download and verify) and `install` steps instead of
+  `download_and_install`, so the use case can re-check sessions right before installing (T027, data-model
+  §1.3). Recorded in research R5.*
+- [X] T034 [US8] Add the settings keys and accessors (`update_check_enabled`, `set_update_check_enabled`,
   `update_notice_acknowledged`, `acknowledge_update_notice`, `update_last_checked_at`) to
   `crates/application/src/settings_service.rs`. T028 must pass.
-- [ ] T035 [US8] Implement `SessionActivity` for `SessionService` in
+- [X] T035 [US8] Implement `SessionActivity` for `SessionService` in
   `crates/application/src/session_service.rs`: true when any session is `starting`, `capturing`, `paused` or
   `stopping`, using the existing `is_active()` plus `stopping`.
-- [ ] T036 [US8] Add the error variants `UpdatesDisabled`, `NoticePending` and `VersionMismatch` to
+- [X] T036 [US8] Add the error variants `UpdatesDisabled`, `NoticePending` and `VersionMismatch` to
   `crates/application/src/error.rs`, and their codes `updates_disabled`, `notice_pending` and
   `version_mismatch` to the IPC error mapping in `apps/desktop/src-tauri/src/commands/error.rs`.
-- [ ] T037 [US8] Implement `crates/application/src/update_service.rs` (exported from
+- [X] T037 [US8] Implement `crates/application/src/update_service.rs` (exported from
   `crates/application/src/lib.rs`):
   - The `UpdateStatus` state machine from data-model §1.3.
   - Single-flight operations with a cancellation token.
@@ -308,7 +317,7 @@ pending (quickstart §6).
   - A status publisher for subscribers.
   - `run_scheduler(cancel)`: a check at startup and every 24 h while enabled and acknowledged.
   T027 must pass.
-- [ ] T038 [US8] Implement `TauriUpdater` in `apps/desktop/src-tauri/src/updater.rs`:
+- [X] T038 [US8] Implement `TauriUpdater` in `apps/desktop/src-tauri/src/updater.rs`:
   - Wraps `tauri_plugin_updater::UpdaterExt` and maps plugin errors to `UpdateFailure`.
   - Rejects non-HTTPS endpoints and URLs.
   - Truncates notes to 4 000 characters.
@@ -320,35 +329,39 @@ pending (quickstart §6).
   - `endpoints`: `["https://github.com/EderAndrew/dev-copilot/releases/latest/download/latest.json"]`.
   - Windows `installMode` `passive`.
   - `bundle.createUpdaterArtifacts: true`.
-- [ ] T039a [US8] Add `apps/desktop/src-tauri/tests/updater_config.rs`. It asserts that
+  *Done except `pubkey`: endpoints, `installMode: passive`, `createUpdaterArtifacts` and
+  `requireSignedVersion: true` are set. `pubkey` holds the marker `PENDING-T006-updater-public-key` until T006.
+  With the marker, every check fails with `manifest_invalid` and makes no request, and `updater_config.rs`
+  fails when `RELEASE_TAG` is set.*
+- [X] T039a [US8] Add `apps/desktop/src-tauri/tests/updater_config.rs`. It asserts that
   `plugins.updater.endpoints` is exactly
   `["https://github.com/EderAndrew/dev-copilot/releases/latest/download/latest.json"]`, that every endpoint is
   HTTPS, and that the key ID of `plugins.updater.pubkey` equals the `updater-pubkey-id` line recorded in
   `docs/adr/ADR-005.md`. A wrong key in production would only surface at 0.1.1, when updates would already be
   broken for everyone.
-- [ ] T040 [US8] Implement the thin commands `update_status_get`, `update_check`, `update_install`,
+- [X] T040 [US8] Implement the thin commands `update_status_get`, `update_check`, `update_install`,
   `update_cancel`, `update_notice_acknowledge` and the channel `update_subscribe` in
   `apps/desktop/src-tauri/src/commands/updates.rs` per `contracts/ipc-updates.md`. Add `updateCheckEnabled`,
   `updateNoticeAcknowledged` and `updateLastCheckedAt` to `SettingsDto` in
   `apps/desktop/src-tauri/src/dto.rs` and `apps/desktop/src-tauri/src/commands/settings.rs`, with
   `settings_update` rejecting the two read-only fields with `invalid_input`. Register everything in
   `apps/desktop/src-tauri/src/commands/mod.rs` and `apps/desktop/src-tauri/src/lib.rs`.
-- [ ] T041 [US8] Wire `UpdateService` in `apps/desktop/src-tauri/src/composition.rs`: inject `TauriUpdater`,
+- [X] T041 [US8] Wire `UpdateService` in `apps/desktop/src-tauri/src/composition.rs`: inject `TauriUpdater`,
   `SessionService` as `SessionActivity` and the settings repository, and spawn `run_scheduler` with the app
   shutdown token. A failure in the updater must never fail app startup.
-- [ ] T042 [P] [US8] Add the types `UpdateStatusDto`, `UpdateEvent` and the extended `SettingsDto`, plus the
+- [X] T042 [P] [US8] Add the types `UpdateStatusDto`, `UpdateEvent` and the extended `SettingsDto`, plus the
   client methods and the `subscribeUpdates` channel helper, in `apps/desktop/src/ipc/types.ts` and
   `apps/desktop/src/ipc/client.ts`. T032 must pass.
-- [ ] T043 [US8] Implement `apps/desktop/src/features/updates/UpdateNotice.tsx`, `UpdateBanner.tsx`,
+- [X] T043 [US8] Implement `apps/desktop/src/features/updates/UpdateNotice.tsx`, `UpdateBanner.tsx`,
   `UpdateConfirmDialog.tsx` and `useUpdateStatus.ts` (presentation only; every rule stays in the core). Mount
   the notice and banner in `apps/desktop/src/App.tsx`.
-- [ ] T044 [US8] Add the "Atualizações" section to `apps/desktop/src/features/settings/SettingsPage.tsx`:
+- [X] T044 [US8] Add the "Atualizações" section to `apps/desktop/src/features/settings/SettingsPage.tsx`:
   toggle, "Verificar agora", last check time, and the destinations text. Update
   `apps/desktop/src/features/settings/SettingsPage.test.tsx`.
-- [ ] T045 [US8] Add every new string to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
+- [X] T045 [US8] Add every new string to `apps/desktop/src/i18n/pt-BR.json` and `apps/desktop/src/i18n/en.json`
   (notice, destinations, banner, confirmation, blocked, failure reasons, settings). The existing i18n
   completeness test must pass (SC-019 of 001). T031 must pass.
-- [ ] T046 [US8] Update `specs/001-meeting-sessions/contracts/ipc-commands.md` (`SettingsDto` fields) and
+- [X] T046 [US8] Update `specs/001-meeting-sessions/contracts/ipc-commands.md` (`SettingsDto` fields) and
   `docs/local-data.md` (new `updates.*` settings keys, non-sensitive; the opt-in `metrics-<date>.csv`
   diagnostic file: location, columns, no session content, 7-day retention, how to delete it) to reference
   `specs/002-desktop-release-readiness/contracts/ipc-updates.md`.

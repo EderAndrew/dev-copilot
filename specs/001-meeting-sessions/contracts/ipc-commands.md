@@ -126,3 +126,10 @@ padrão definido. Nunca há troca automática para outro provedor remoto (FR-048
 |---------|---------|-------|
 | `settings_get` | `{}` | `SettingsDto` |
 | `settings_update` | `Partial<SettingsDto>` | `SettingsDto` |
+
+`SettingsDto` = `{ uiLanguage, consentReminderDismissed, analysisLimits, updateCheckEnabled,
+updateNoticeAcknowledged, updateLastCheckedAt? }`. Os três campos `update*` foram acrescentados pela 002 e
+estão definidos em `specs/002-desktop-release-readiness/contracts/ipc-updates.md`: `settings_update` aceita
+`updateCheckEnabled`, e `updateNoticeAcknowledged`/`updateLastCheckedAt` são só leitura (tentar alterá-los
+retorna `invalid_input` com `problem: "read_only"`). Os comandos de atualização (`update_*`) também estão
+nesse contrato.

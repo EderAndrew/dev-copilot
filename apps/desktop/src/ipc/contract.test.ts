@@ -30,6 +30,8 @@ import type {
   SessionState,
   UiLanguage,
   UnavailableReason,
+  UpdateFailureReason,
+  UpdateState,
 } from "./types";
 
 const fixtures = import.meta.glob<unknown>(
@@ -104,6 +106,9 @@ const errorCode = keys<ErrorCode>({
   authorization_required: true,
   provider_error: true,
   storage_error: true,
+  updates_disabled: true,
+  notice_pending: true,
+  version_mismatch: true,
   internal: true,
 });
 const uiLanguage = keys<UiLanguage>({ "pt-BR": true, en: true });
@@ -404,7 +409,51 @@ const cspDirective = keys<CspDirective>({
 const blockedScheme: Check = (v) =>
   typeof v === "string" && /^[a-z][a-z0-9+.-]{0,15}$/.test(v);
 
+const updateFailure = keys<UpdateFailureReason>({
+  network: true,
+  signature_invalid: true,
+  manifest_invalid: true,
+  download_interrupted: true,
+  install_failed: true,
+});
+const rfc3339: Check = (v) =>
+  typeof v === "string" &&
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(v);
+const updateShapes: Record<UpdateState, Shape> = {
+  disabled: { required: { state: str } },
+  notice_pending: { required: { state: str } },
+  idle: { required: { state: str }, optional: { lastCheckedAt: rfc3339 } },
+  checking: { required: { state: str } },
+  up_to_date: { required: { state: str, lastCheckedAt: rfc3339 } },
+  available: {
+    required: { state: str, version: str, notes: str },
+    optional: { publishedAt: rfc3339 },
+  },
+  blocked_by_session: { required: { state: str, version: str } },
+  downloading: {
+    required: { state: str, version: str, receivedBytes: nonNegativeInt },
+    optional: { totalBytes: nonNegativeInt },
+  },
+  installing: { required: { state: str, version: str } },
+  failed: { required: { state: str, reason: updateFailure } },
+};
+const updateStatus = (v: unknown): string[] => {
+  const state = (v as { state?: unknown } | null)?.state;
+  const shape =
+    typeof state === "string" ? updateShapes[state as UpdateState] : undefined;
+  return shape ? problems(v, shape) : [`unknown update state ${String(state)}`];
+};
+
 const dtoShapes: Record<string, (value: unknown) => string[]> = {
+  UpdateStatusDto: updateStatus,
+  UpdateEvent: (v) => {
+    const found = problems(v, {
+      required: { type: literal("update_status"), status: () => true },
+    });
+    const status = (v as { status?: unknown } | null)?.status;
+    return [...found, ...updateStatus(status).map((p) => `status: ${p}`)];
+  },
+  UpdateInstallDto: (v) => problems(v, { required: { version: str } }),
   CspViolationDto: (v) =>
     problems(v, {
       required: {
@@ -435,12 +484,24 @@ const dtoShapes: Record<string, (value: unknown) => string[]> = {
     }),
   SettingsDto: (v) =>
     problems(v, {
-      required: { uiLanguage, consentReminderDismissed: bool, analysisLimits },
+      required: {
+        uiLanguage,
+        consentReminderDismissed: bool,
+        analysisLimits,
+        updateCheckEnabled: bool,
+        updateNoticeAcknowledged: bool,
+      },
+      optional: { updateLastCheckedAt: rfc3339 },
     }),
   SettingsUpdateDto: (v) =>
     problems(v, {
       required: {},
-      optional: { uiLanguage, consentReminderDismissed: bool, analysisLimits },
+      optional: {
+        uiLanguage,
+        consentReminderDismissed: bool,
+        analysisLimits,
+        updateCheckEnabled: bool,
+      },
     }),
   ProviderDto: (v) =>
     problems(v, {
@@ -673,5 +734,14 @@ describe("contract fixtures", () => {
     expect(dtoShapes.SettingsUpdateDto({ theme: "dark" })).toEqual([
       "unknown theme",
     ]);
+    expect(
+      dtoShapes.SettingsUpdateDto({ updateNoticeAcknowledged: true }),
+    ).toEqual(["unknown updateNoticeAcknowledged"]);
+    expect(dtoShapes.UpdateStatusDto({ state: "rolled_back" })).toEqual([
+      "unknown update state rolled_back",
+    ]);
+    expect(
+      dtoShapes.UpdateStatusDto({ state: "failed", reason: "timeout" }),
+    ).toEqual(["invalid reason"]);
   });
 });

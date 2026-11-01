@@ -9,6 +9,7 @@ pub mod dto;
 pub mod events;
 pub mod metrics;
 pub mod models;
+pub mod updater;
 
 use tauri::Manager;
 
@@ -19,8 +20,11 @@ use tauri::Manager;
 /// Returns the Tauri error when the runtime cannot be initialized or fails while running.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> tauri::Result<()> {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // Driven from the core only (`updater::TauriUpdater`); no capability grants
+        // `updater:*` to the webview (002 research R5, tests/capabilities.rs).
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(commands::diagnostics::CspReports::default())
         .setup(|app| {
             let state = composition::build(app.handle());
@@ -62,6 +66,20 @@ pub fn run() -> tauri::Result<()> {
             commands::audio::audio_permission_request,
             commands::audio::audio_permission_help,
             commands::diagnostics::diagnostics_report_csp_violation,
+            commands::updates::update_status_get,
+            commands::updates::update_check,
+            commands::updates::update_install,
+            commands::updates::update_cancel,
+            commands::updates::update_notice_acknowledge,
+            commands::updates::update_subscribe,
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())?;
+    app.run(|handle, event| {
+        if let tauri::RunEvent::Exit = event
+            && let Some(state) = handle.try_state::<composition::AppState>()
+        {
+            state.shutdown.cancel();
+        }
+    });
+    Ok(())
 }

@@ -20,8 +20,10 @@ tauri-build = { workspace = true, features = [] }
 tauri = { workspace = true, features = [] }
 tauri-plugin-dialog.workspace = true
 tauri-plugin-updater.workspace = true
+base64.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 devcopilot-application.workspace = true
 devcopilot-audio.workspace = true
 devcopilot-domain.workspace = true
@@ -35,7 +37,13 @@ tracing-appender.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
 
+[features]
+# Lets adapter contract tests reach a plain-HTTP mock server (`TauriUpdater::allowing_plain_http`).
+test-support = []
+
 [dev-dependencies]
+devcopilot-desktop = { path = ".", features = ["test-support"] }
+tauri = { workspace = true, features = ["test"] }
 devcopilot-intelligence = { workspace = true, features = ["test-support"] }
 sha2.workspace = true
 wiremock.workspace = true

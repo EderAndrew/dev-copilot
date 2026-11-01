@@ -52,7 +52,7 @@ use crate::error::ApplicationError;
 use crate::events::{ProviderStage, SessionEvent, SourceStatus};
 use crate::ports::{
     AudioError, AudioSource, Clock, EventPublisher, MetricsSink, SecretStore, SegmentRepository,
-    SessionRepository, SourceFault, Transcriber, TranscriberFactory,
+    SessionActivity, SessionRepository, SourceFault, Transcriber, TranscriberFactory,
 };
 use crate::provider_service::ProviderService;
 use crate::question_service::QuestionService;
@@ -694,6 +694,17 @@ impl SessionService {
             tracing::warn!(count = recovered.len(), "interrupted sessions recovered");
         }
         Ok(recovered)
+    }
+}
+
+impl SessionActivity for SessionService {
+    /// The in-memory active session stays registered from `start` until its stop drain
+    /// finishes, so `starting`, `capturing`, `paused` and `stopping` all count (002 US8).
+    fn has_active_session(&self) -> bool {
+        self.inner
+            .lock()
+            .as_ref()
+            .is_some_and(|active| active.session.state().is_active())
     }
 }
 

@@ -138,6 +138,28 @@ antes de construir em cima delas. Se uma verificação falhar, a decisão é rev
   SQLCipher no Linux (ADR-004). Crates novos no lockfile: `minisign-verify`, `zip`, `tar`, `filetime`, `xattr`,
   `osakit` e dependências de plataforma. `cargo deny check` passa (advisories, bans, licenses, sources).
   Nenhuma feature extra é necessária.
+- **Resultado da implementação (T029, T033, T037, T038, 2026-11-01)**:
+  - O `tauri-plugin-updater` 2.14.1 funciona no runtime mock do `tauri::test` (feature `test` do `tauri` só
+    em dev-dependencies). Por isso a T029 testa o adaptador contra o plugin real, com `wiremock`: assinatura
+    adulterada, de outra chave, ligada a outra versão, manifesto malformado, download truncado e
+    cancelamento. Não foi preciso recorrer às funções puras. As chaves de teste ficam em
+    `apps/desktop/src-tauri/tests/fixtures/updater/` (só as públicas; as privadas foram descartadas).
+  - **Achado**: em build de debug o plugin só avisa sobre endpoint `http://` e faz a requisição mesmo assim.
+    A recusa só existe em build de release. O `TauriUpdater` valida a configuração antes de qualquer
+    requisição (`updater::validate_config`): endpoints só HTTPS, nenhuma opção `dangerous*` nem
+    `allowDowngrades`, e `pubkey` bem formada. A URL do pacote no manifesto também precisa ser HTTPS, porque
+    o plugin só registra um aviso.
+  - **`requireSignedVersion: true`**: a assinatura precisa carregar a versão que assina, o que impede parear
+    uma versão anunciada maior com o pacote legítimo de uma versão antiga (downgrade por manifesto forjado).
+    Como 0.1.0 é o primeiro release, não há release antigo sem versão na assinatura. O CLI do Tauri grava a
+    versão ao assinar (`--app-version`).
+  - **Porta em dois passos**: a porta `AppUpdater` tem `download` (baixa e verifica) e `install` separados,
+    em vez de um `download_and_install`. Assim o caso de uso checa as sessões de novo entre os dois passos
+    (data-model §1.3). Cancelar um download volta para `available` (o update continua válido) e cancelar uma
+    verificação volta para `idle`. Uma falha leva a `failed` e exige nova verificação.
+  - Até a T006, `plugins.updater.pubkey` tem o marcador `PENDING-T006-updater-public-key`. Com ele, toda
+    verificação falha com `manifest_invalid` sem nenhuma requisição, e `tests/updater_config.rs` falha quando
+    `RELEASE_TAG` está definido. Um release não sai sem a chave real.
 - **Rollback de uma atualização publicada**: o updater não aceita downgrade. Suspender uma versão significa
   republicar o `latest.json` apontando para a versão anterior (os apps que ainda não atualizaram deixam de vê-la)
   e corrigir para a frente com uma versão N+1. Rotação da chave de atualização: uma versão assinada com a chave

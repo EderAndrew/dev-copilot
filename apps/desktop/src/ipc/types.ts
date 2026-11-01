@@ -16,6 +16,9 @@ export type ErrorCode =
   | "authorization_required"
   | "provider_error"
   | "storage_error"
+  | "updates_disabled"
+  | "notice_pending"
+  | "version_mismatch"
   | "internal";
 
 export type IpcError = {
@@ -38,9 +41,57 @@ export type SettingsDto = {
   uiLanguage: UiLanguage;
   consentReminderDismissed: boolean;
   analysisLimits: AnalysisLimitsDto;
+  /** `updates.check_enabled` (specs/002 contracts/ipc-updates.md). */
+  updateCheckEnabled: boolean;
+  /** Read only; changed by `update_notice_acknowledge`. */
+  updateNoticeAcknowledged: boolean;
+  /** RFC 3339, read only. */
+  updateLastCheckedAt?: string;
 };
 
-export type SettingsUpdateDto = Partial<SettingsDto>;
+/** The two read-only update fields are refused by the core with `invalid_input`. */
+export type SettingsUpdateDto = Partial<
+  Pick<
+    SettingsDto,
+    | "uiLanguage"
+    | "consentReminderDismissed"
+    | "analysisLimits"
+    | "updateCheckEnabled"
+  >
+>;
+
+// Updates (specs/002 contracts/ipc-updates.md) ---------------------------------------------
+
+export type UpdateFailureReason =
+  | "network"
+  | "signature_invalid"
+  | "manifest_invalid"
+  | "download_interrupted"
+  | "install_failed";
+
+/** `notes` is untrusted plain text: render it as text, never as HTML or Markdown. */
+export type UpdateStatusDto =
+  | { state: "disabled" }
+  | { state: "notice_pending" }
+  | { state: "idle"; lastCheckedAt?: string }
+  | { state: "checking" }
+  | { state: "up_to_date"; lastCheckedAt: string }
+  | { state: "available"; version: string; notes: string; publishedAt?: string }
+  | { state: "blocked_by_session"; version: string }
+  | {
+      state: "downloading";
+      version: string;
+      receivedBytes: number;
+      totalBytes?: number;
+    }
+  | { state: "installing"; version: string }
+  | { state: "failed"; reason: UpdateFailureReason };
+
+export type UpdateState = UpdateStatusDto["state"];
+
+export type UpdateEvent = { type: "update_status"; status: UpdateStatusDto };
+
+export type UpdateInstallDto = { version: string };
 
 // Providers -----------------------------------------------------------------------------------
 

@@ -163,7 +163,18 @@
     "maxTokensPerSession": "Maximum tokens per session",
     "save": "Save",
     "saved": "Settings saved.",
-    "invalidNumber": "Enter a whole number."
+    "invalidNumber": "Enter a whole number.",
+    "updates": {
+      "title": "Updates",
+      "toggle": "Check for updates automatically",
+      "destinations": "Checks contact github.com and GitHub file storage (objects.githubusercontent.com). No session content is sent.",
+      "lastChecked": "Last check: {{when}}",
+      "neverChecked": "No check yet.",
+      "checkNow": "Check now",
+      "checking": "Checking…",
+      "upToDate": "You are on the latest version.",
+      "noticeFirst": "Dismiss the updates notice to be able to check."
+    }
   },
   "errors": {
     "invalidInput": "Invalid value. Check the fields and try again.",
@@ -180,7 +191,10 @@
     "modelDownloadNetwork": "The model could not be downloaded. Check your connection and try again.",
     "modelVerificationFailed": "The downloaded file does not match the expected model and was discarded.",
     "modelDownloadStorage": "The model could not be written to disk.",
-    "modelDownloadCancelled": "Download cancelled."
+    "modelDownloadCancelled": "Download cancelled.",
+    "updatesDisabled": "Update checks are turned off in Settings.",
+    "noticePending": "Dismiss the updates notice first.",
+    "versionMismatch": "The confirmed version is not the last one checked. Check again before installing."
   },
   "transcript": {
     "title": "Transcript",
@@ -383,5 +397,42 @@
     "revocable": "You can revoke this authorization at any time under Providers.",
     "accept": "Authorize",
     "decline": "Decline"
+  },
+  "updates": {
+    "notice": {
+      "title": "Dev Copilot updates",
+      "body": "Once you dismiss this notice, the app checks for a new version at startup and every 24 hours. A check is a request without a body: it sends no session content or credentials, only what any download reveals (IP address and app version). Nothing is installed without your confirmation, and every package has its signature verified first.",
+      "destinationsLabel": "Hosts contacted:",
+      "destination": {
+        "manifest": "github.com: file with the latest version (latest.json)",
+        "assets": "objects.githubusercontent.com: GitHub file storage, to download the package you confirm"
+      },
+      "settingsHint": "You can turn checks off at any time in Settings › Updates.",
+      "acknowledge": "Got it"
+    },
+    "banner": {
+      "available": "Version {{version}} available",
+      "notesLabel": "What's new",
+      "install": "Install…",
+      "downloading": "Downloading version {{version}}…",
+      "progressLabel": "Download progress",
+      "cancel": "Cancel download",
+      "installing": "Installing version {{version}}. The app will restart.",
+      "blocked": "The update to version {{version}} waits for the session in progress to end. Stop the session and try again.",
+      "retry": "Try installing again"
+    },
+    "confirm": {
+      "title": "Install version {{version}}?",
+      "body": "The package will be downloaded and its signature verified before installing. The app restarts at the end. Installation never happens while a session is in progress.",
+      "confirm": "Download and install",
+      "cancel": "Not now"
+    },
+    "failed": {
+      "network": "Could not check for or download the update. Check your connection and try again.",
+      "signature_invalid": "The downloaded package does not have a valid signature and was discarded. The installed version is unchanged.",
+      "manifest_invalid": "The update information received is invalid. The installed version is unchanged.",
+      "download_interrupted": "The download was interrupted. The installed version is unchanged.",
+      "install_failed": "Could not install the update. The installed version is unchanged."
+    }
   }
 }

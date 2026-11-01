@@ -36,6 +36,8 @@ const settings: SettingsDto = {
     maxCallsPerHour: 40,
     maxTokensPerSession: 200000,
   },
+  updateCheckEnabled: true,
+  updateNoticeAcknowledged: false,
 };
 
 const idle: SessionDto = {
@@ -72,25 +74,23 @@ function setup(overrides: Partial<SettingsDto> = {}) {
       Promise.reject(new Error("unused")),
     ),
     questionToRecord: vi.fn(() => Promise.reject(new Error("unused"))),
-    providerAuthorizationPreview: vi.fn(
-      (): Promise<AuthorizationPreviewDto> =>
-        Promise.resolve({
-          providerId: "p1",
-          destination: "stt.example.com",
-          dataCategories: ["audio"],
-          retentionNotice: "Retido conforme os termos do serviço.",
-        }),
+    providerAuthorizationPreview: vi.fn((): Promise<AuthorizationPreviewDto> =>
+      Promise.resolve({
+        providerId: "p1",
+        destination: "stt.example.com",
+        dataCategories: ["audio"],
+        retentionNotice: "Retido conforme os termos do serviço.",
+      }),
     ),
-    providerAuthorize: vi.fn(
-      (): Promise<ProviderAuthorizationDto> =>
-        Promise.resolve({
-          providerId: "p1",
-          state: "granted",
-          destination: "stt.example.com",
-          dataCategories: ["audio"],
-          retentionNotice: "Retido conforme os termos do serviço.",
-          grantedAt: 1,
-        }),
+    providerAuthorize: vi.fn((): Promise<ProviderAuthorizationDto> =>
+      Promise.resolve({
+        providerId: "p1",
+        state: "granted",
+        destination: "stt.example.com",
+        dataCategories: ["audio"],
+        retentionNotice: "Retido conforme os termos do serviço.",
+        grantedAt: 1,
+      }),
     ),
     sessionStart: vi.fn(() =>
       Promise.resolve({ ...idle, state: "starting" as const }),
@@ -396,8 +396,12 @@ describe("SessionsPage", () => {
         sources: ["microphone", "system"],
       });
       await user.type(await screen.findByLabelText("Título"), "Daily");
-      await user.click(screen.getByRole("checkbox", { name: "Áudio do sistema" }));
-      expect(screen.getByText(/cada trecho da transcrição indica/)).toBeTruthy();
+      await user.click(
+        screen.getByRole("checkbox", { name: "Áudio do sistema" }),
+      );
+      expect(
+        screen.getByText(/cada trecho da transcrição indica/),
+      ).toBeTruthy();
       await user.click(screen.getByRole("button", { name: "Criar sessão" }));
       await user.click(
         await screen.findByRole("button", { name: "Iniciar captura" }),
@@ -417,9 +421,9 @@ describe("SessionsPage", () => {
         sources: ["microphone"],
       });
       expect(
-        screen.getByText(/Áudio do sistema parou de capturar/).closest(
-          "[role='alert']",
-        ),
+        screen
+          .getByText(/Áudio do sistema parou de capturar/)
+          .closest("[role='alert']"),
       ).toBeTruthy();
       expect(captureStatus().textContent).toContain("Capturando: Microfone");
       expect(screen.getByText("capturando")).toBeTruthy();

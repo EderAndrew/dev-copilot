@@ -68,6 +68,8 @@ tauri-build = "2.7.4"
 tauri-plugin-dialog = "2.8.4"
 # Verified in-app updates, driven from the core only (002 research R5). Default features use rustls.
 tauri-plugin-updater = "2.14.1"
+# Reads the key id of the embedded updater public key (already in the tree via the plugin).
+base64 = "0.22.1"
 
 # Test-only
 wiremock = "0.6.5"

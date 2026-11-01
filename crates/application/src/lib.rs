@@ -17,6 +17,7 @@ pub mod record_service;
 pub mod session_service;
 pub mod settings_service;
 pub mod transcription;
+pub mod update_service;
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod testing;

@@ -18,6 +18,7 @@ O diretório de dados é o `app_data_dir` do Tauri para o identificador `com.dre
 | `devcopilot.db`, `devcopilot.db-wal`, `devcopilot.db-shm` | sessões, transcrições finais, registros e histórico, perguntas, execuções de análise, provedores, autorizações, exportações (sem caminho), configurações | sim (SQLCipher, banco inteiro, inclusive WAL) |
 | `models/*.bin` | modelos de transcrição local baixados por ação do usuário (catálogo fixo, SHA-256 verificado) | não — não são dados de sessão |
 | logs `devcopilot.log.*` | ids, códigos de estado e de erro; nunca conteúdo de sessão nem segredos (FR-051) | não |
+| `metrics-<data UTC>.csv` (na pasta de logs) | só com o modo de medição ligado (`DEVCOPILOT_METRICS=1`, 002): tempos de transcrição, ver abaixo | não, porque não há conteúdo de sessão |
 
 O diretório de dados é criado com permissão `0700` e o banco com `0600` (somente o usuário) em macOS e Linux.
 
@@ -63,7 +64,34 @@ inclusive durante o envio de trechos a um provedor STT remoto.
 | Áudio (sensível) | microfone, áudio do sistema | só memória | só para provedor STT remoto autorizado (categoria `audio`) |
 | Segredos | chave do banco, chaves de API | cofre do SO | chaves de API vão apenas no cabeçalho da requisição ao próprio provedor |
 | Metadados operacionais | ids, estados, códigos de erro, contagem de tokens | banco e logs | não |
-| Configuração não sensível | idioma da UI, limites de análise, provedores padrão | banco cifrado | não |
+| Configuração não sensível | idioma da UI, limites de análise, provedores padrão, chaves `updates.*` | banco cifrado | não |
+| Diagnóstico de medição (opt-in) | `metrics-<data>.csv`: tempos e id do provedor | pasta de logs | não |
+
+### Configurações de atualização (002)
+
+Guardadas na tabela `settings` do banco, sem migração nova (chave/valor). Nenhuma guarda dado pessoal ou de
+sessão. Valor inválido volta ao padrão.
+
+| Chave | Padrão | Uso |
+|-------|--------|-----|
+| `updates.check_enabled` | `true` | Desligada, o app não faz nenhuma requisição de atualização |
+| `updates.notice_acknowledged` | `false` | Fica `true` quando o aviso de primeira execução é dispensado; antes disso nenhuma verificação acontece |
+| `updates.last_checked_at` | ausente | RFC 3339 da última verificação concluída, exibida nas Configurações |
+
+As verificações contatam só `github.com` (o `latest.json` do release) e o armazenamento de arquivos do GitHub
+para o pacote confirmado, sem conteúdo de sessão. Contrato completo:
+`specs/002-desktop-release-readiness/contracts/ipc-updates.md`.
+
+### Arquivo de medição (002, opt-in)
+
+- **Quando existe:** só quando o app é iniciado com a variável de ambiente `DEVCOPILOT_METRICS=1`. Sem ela,
+  nenhum arquivo é criado.
+- **Onde:** na pasta de logs de diagnóstico (tabela acima), um arquivo por dia UTC: `metrics-AAAA-MM-DD.csv`.
+- **Colunas:** `kind,speech_start_ms,speech_end_ms,emitted_ms,provider` (parcial ou final, três instantes na
+  linha do tempo da sessão e o id do provedor). Não há coluna de texto, então nenhum conteúdo de sessão pode
+  chegar ao arquivo (verificado por `apps/desktop/src-tauri/tests/log_redaction.rs`).
+- **Retenção:** ao iniciar, o app apaga os `metrics-*.csv` com mais de 7 dias, com o modo ligado ou não.
+- **Como apagar:** feche o app e apague os arquivos `metrics-*.csv` da pasta de logs. Nada mais depende deles.
 
 ## Retenção e exclusão
 
