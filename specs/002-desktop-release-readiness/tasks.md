@@ -590,10 +590,16 @@ an explicit "not measured" with a reason, and a classification.
   of each OS) in
   `docs/release/v0.1.0/measurements.md`, attaching the CSVs to the draft release.
 - [ ] T081 [US5] Manual: analysis evaluation with Ollama and the planned model:
-  `DEVCOPILOT_EVAL_PROVIDER=ollama:<model> cargo test -p devcopilot-intelligence --release -- --ignored evaluation prompt_injection qa_evaluation`.
+  `DEVCOPILOT_EVAL_PROVIDER=ollama DEVCOPILOT_EVAL_MODEL=<model> cargo test -p devcopilot-intelligence --release --test evaluation --test qa_evaluation --test prompt_injection -- --nocapture`.
   Record recall, grounding, invented-item rate, injection and Q&A results against SC-008/SC-010/SC-011 in
   `docs/release/v0.1.0/measurements.md` and in the reference-provider table of `docs/adr/ADR-003.md`. A
   provider error or timeout is recorded as such, never counted as a pass.
+  *Command corrected in the Phase 8 prep. The original `-- --ignored evaluation prompt_injection qa_evaluation`
+  selected 0 tests and finished green, because none of the harnesses is `#[ignore]` and the filters match test
+  names, not files. `ollama:<model>` also failed the harness's `kind == "ollama"` check. The reference tests now
+  measure every fixture and report each provider error before failing, so no fixture goes unmeasured.
+  `prompt_injection` replays scripted worst-case model outputs and calls no provider, so its result does not
+  depend on the model. Record it as such. Procedure: `docs/release/v0.1.0/runbook-us5.md`.*
 - [ ] T082 [US5] Classify every result in `docs/release/v0.1.0/measurements.md` as `ok`, `limitação`
   (with a recommended model or hardware profile, also added to `docs/release/v0.1.0/limitations.md`) or
   `bloqueador` (open a `release-blocker` issue). A target changed after T075 needs a history row in

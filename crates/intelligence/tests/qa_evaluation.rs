@@ -341,30 +341,34 @@ async fn reference_provider_meets_sc_011() {
     })
     .unwrap();
     let adapter = OllamaAnalysisProvider::new(&provider).unwrap();
-    for transcript in transcripts() {
+    // Every transcript is measured before anything is asserted, so one failure never hides the
+    // others (T081/T082 record a value for each). A provider error is a failure, never a pass.
+    let mut failures = Vec::new();
+    'transcripts: for transcript in transcripts() {
         let fixture = Fixture::new(transcript);
+        let id = fixture.transcript.id.clone();
         let mut answers = Vec::new();
         for question in &fixture.transcript.questions {
-            let output = adapter
+            match adapter
                 .answer(fixture.request(question), CancellationToken::new())
                 .await
-                .unwrap();
-            answers.push(fixture.ground(output.answer));
+            {
+                Ok(output) => answers.push(fixture.ground(output.answer)),
+                Err(error) => {
+                    println!("qa eval {id} model={model}: provider error: {error}");
+                    failures.push(format!("{id}: provider error"));
+                    continue 'transcripts;
+                }
+            }
         }
         let metrics = measure(&fixture, &answers);
         println!(
-            "qa eval {} model={model}: cited_or_declared={:.2} invented={} accuracy={:.2}",
-            fixture.transcript.id, metrics.cited_or_declared, metrics.invented, metrics.accuracy
+            "qa eval {id} model={model}: cited_or_declared={:.2} invented={} accuracy={:.2}",
+            metrics.cited_or_declared, metrics.invented, metrics.accuracy
         );
-        assert!(
-            (metrics.cited_or_declared - 1.0).abs() < f64::EPSILON,
-            "{}: {metrics:?}",
-            fixture.transcript.id
-        );
-        assert_eq!(
-            metrics.invented, 0,
-            "{}: {metrics:?}",
-            fixture.transcript.id
-        );
+        if (metrics.cited_or_declared - 1.0).abs() >= f64::EPSILON || metrics.invented != 0 {
+            failures.push(format!("{id}: {metrics:?}"));
+        }
     }
+    assert!(failures.is_empty(), "SC-011 not met: {failures:#?}");
 }

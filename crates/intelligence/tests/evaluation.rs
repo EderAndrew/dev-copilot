@@ -274,12 +274,23 @@ async fn reference_provider_meets_sc_008() {
     })
     .unwrap();
     let adapter = OllamaAnalysisProvider::new(&provider).unwrap();
+    // Every fixture is measured before anything is asserted, so one failure never hides the
+    // others (T081/T082 record a value for each). A provider error is a failure, never a pass.
+    let mut failures = Vec::new();
     for transcript in transcripts() {
         let fixture = fixture(transcript);
-        let output = adapter
+        let id = fixture.transcript.id.clone();
+        let output = match adapter
             .analyze(fixture.request.clone(), CancellationToken::new())
             .await
-            .unwrap();
+        {
+            Ok(output) => output,
+            Err(error) => {
+                println!("eval {id} model={model}: provider error: {error}");
+                failures.push(format!("{id}: provider error"));
+                continue;
+            }
+        };
         let proposals: Vec<Proposal> = output
             .proposals
             .into_iter()
@@ -287,22 +298,12 @@ async fn reference_provider_meets_sc_008() {
             .collect();
         let metrics = measure(&fixture, &proposals);
         println!(
-            "eval {} model={model}: recall={:.2} grounding={:.2} invented={:.2} tokens={}",
-            fixture.transcript.id,
-            metrics.recall,
-            metrics.grounding,
-            metrics.invented_rate,
-            output.tokens_used
+            "eval {id} model={model}: recall={:.2} grounding={:.2} invented={:.2} tokens={}",
+            metrics.recall, metrics.grounding, metrics.invented_rate, output.tokens_used
         );
-        assert!(
-            metrics.recall >= 0.8,
-            "{}: {metrics:?}",
-            fixture.transcript.id
-        );
-        assert!(
-            (metrics.grounding - 1.0).abs() < f64::EPSILON,
-            "{}: {metrics:?}",
-            fixture.transcript.id
-        );
+        if metrics.recall < 0.8 || (metrics.grounding - 1.0).abs() >= f64::EPSILON {
+            failures.push(format!("{id}: {metrics:?}"));
+        }
     }
+    assert!(failures.is_empty(), "SC-008 not met: {failures:#?}");
 }

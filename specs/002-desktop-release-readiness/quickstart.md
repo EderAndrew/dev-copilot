@@ -77,11 +77,13 @@ cronometradas) e registre-os no arquivo de evidência da plataforma. Casos com a
 1. Aprove e versione `docs/release/v0.1.0/measurement-plan.md` **antes** da primeira medição.
 2. Latência: `DEVCOPILOT_METRICS=1` + gravações tocadas no dispositivo de entrada virtual; ≥ 100 trechos por
    combinação; mais uma execução ao vivo.
-3. CPU e memória: `cargo run -p perf-sampler --release -- sample --process "Dev Copilot" --interval 5 --out <csv>`,
-   depois `perf-sampler summarize --samples <csv> --warmup-min 10`
-   durante uma sessão de 2 h no app instalado.
-4. Análise: `DEVCOPILOT_EVAL_PROVIDER=ollama:<modelo> cargo test -p devcopilot-intelligence --release --
-   --ignored evaluation prompt_injection qa_evaluation`, com o modelo e o digest do plano.
+3. CPU e memória: `cargo run -p perf-sampler --release -- sample --process "Dev Copilot" --interval 5 --out <csv>`
+   (ou `--pid <pid>` se o nome do processo instalado for outro ou não for único), depois
+   `perf-sampler summarize --samples <csv> --warmup-min 10`, durante uma sessão de 2 h no app instalado.
+   Amostre também o processo da WebView (`docs/release/v0.1.0/runbook-us5.md` §5).
+4. Análise: `DEVCOPILOT_EVAL_PROVIDER=ollama DEVCOPILOT_EVAL_MODEL=<modelo> cargo test -p devcopilot-intelligence
+   --release --test evaluation --test qa_evaluation --test prompt_injection -- --nocapture`, com o modelo e o
+   digest do plano. Sem `--nocapture` as métricas por transcrição não aparecem.
 5. Registre em `measurements.md`, com cada resultado classificado como ok, limitação ou bloqueador, e atualize
    o ADR-003.
 
