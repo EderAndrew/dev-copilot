@@ -1,0 +1,438 @@
+{
+  "app": {
+    "title": "Dev Copilot",
+    "loading": "Carregando…"
+  },
+  "nav": {
+    "label": "Navegação principal",
+    "sessions": "Sessões",
+    "history": "Histórico",
+    "providers": "Provedores",
+    "settings": "Configurações"
+  },
+  "language": {
+    "label": "Idioma da interface",
+    "pt-BR": "Português (Brasil)",
+    "en": "English"
+  },
+  "capture": {
+    "regionLabel": "Estado da captura",
+    "on": "Capturando: {{sources}}",
+    "paused": "Captura pausada: {{sources}}",
+    "off": "Sem captura"
+  },
+  "sessions": {
+    "title": "Sessões",
+    "empty": "Nenhuma sessão ainda.",
+    "new": "Nova sessão",
+    "titleLabel": "Título",
+    "titleRequired": "Informe um título.",
+    "languageLabel": "Idioma da conversa",
+    "sourcesLabel": "Fontes de áudio",
+    "sourceRequired": "Selecione ao menos uma fonte disponível.",
+    "create": "Criar sessão",
+    "stateLabel": "Estado:",
+    "start": "Iniciar captura",
+    "cancelStart": "Cancelar início",
+    "stop": "Parar captura",
+    "stopping": "Parando…",
+    "newAnother": "Criar outra sessão",
+    "state": {
+      "idle": "ociosa",
+      "starting": "iniciando",
+      "capturing": "capturando",
+      "paused": "pausada",
+      "stopping": "parando",
+      "ended": "encerrada",
+      "failed": "falhou"
+    },
+    "failure": {
+      "permission_denied": "A captura parou porque a permissão de áudio foi negada ou revogada.",
+      "source_unavailable": "A captura parou porque a fonte de áudio ficou indisponível. O conteúdo já finalizado foi mantido.",
+      "no_transcriber": "Nenhum provedor de transcrição utilizável estava disponível.",
+      "storage_error": "Não foi possível gravar a sessão localmente.",
+      "secret_store_unavailable": "O cofre de credenciais do sistema ficou indisponível.",
+      "interrupted": "O aplicativo foi encerrado durante a captura. O conteúdo já finalizado foi mantido.",
+      "internal": "A captura parou por um erro inesperado."
+    },
+    "pause": "Pausar captura",
+    "resume": "Retomar captura",
+    "pausedHint": "Captura pausada: nada é captado nem processado até você retomar. O intervalo aparece como lacuna na transcrição."
+  },
+  "sources": {
+    "microphone": "Microfone",
+    "system": "Áudio do sistema",
+    "unavailable": {
+      "platform_unsupported": "Indisponível nesta plataforma.",
+      "not_validated_on_platform": "Ainda não validado nesta plataforma.",
+      "no_device": "Nenhum dispositivo encontrado.",
+      "os_version": "Requer uma versão mais recente do sistema operacional."
+    },
+    "dualHint": "Com duas fontes, cada trecho da transcrição indica de qual fonte veio. Se uma fonte falhar, a outra continua capturando.",
+    "dropped": {
+      "lost": "{{source}} parou de capturar (dispositivo perdido ou indisponível). As demais fontes continuam; a fonte não é reaberta automaticamente.",
+      "permission_revoked": "{{source}} parou de capturar porque a permissão foi negada ou revogada. As demais fontes continuam."
+    }
+  },
+  "consent": {
+    "title": "Antes de capturar",
+    "body": "Você é responsável por cumprir as políticas da sua organização e por informar os participantes e obter o consentimento deles quando aplicável. A captura só começa depois que você confirmar.",
+    "dontShowAgain": "Não mostrar novamente",
+    "confirm": "Entendi, iniciar captura",
+    "cancel": "Cancelar"
+  },
+  "permissionHelp": {
+    "title": "Como conceder a permissão",
+    "generic": "Abra as configurações de privacidade do sistema e permita que o Dev Copilot use o microfone. Depois, inicie a captura novamente.",
+    "macos": {
+      "microphone": "Abra Ajustes do Sistema › Privacidade e Segurança › Microfone e ative o Dev Copilot. Depois, inicie a captura novamente.",
+      "system": "Abra Ajustes do Sistema › Privacidade e Segurança e permita a gravação de áudio do sistema para o Dev Copilot."
+    },
+    "windows": {
+      "microphone": "Abra Configurações › Privacidade e segurança › Microfone, ative o acesso ao microfone e permita aplicativos da área de trabalho. Depois, inicie a captura novamente.",
+      "system": "A captura de áudio do sistema no Windows não exige permissão separada; verifique se o dispositivo de saída está ativo."
+    },
+    "linux": {
+      "microphone": "Verifique nas configurações de som (PipeWire/PulseAudio) se o microfone não está silenciado e se o aplicativo tem acesso a ele. Em ambientes sandbox (Flatpak/Snap), conceda a permissão de microfone. Depois, inicie a captura novamente.",
+      "system": "Verifique nas configurações de som (PipeWire/PulseAudio) se a fonte de monitoramento está disponível."
+    }
+  },
+  "providers": {
+    "title": "Provedores",
+    "empty": "Nenhum provedor configurado.",
+    "help": "Provedores locais processam tudo neste computador. Um provedor remoto só recebe dados depois que você o autoriza, e você pode revogar a autorização a qualquer momento.",
+    "name": "{{adapter}} ({{model}})",
+    "role": {
+      "transcription": "Transcrição",
+      "analysis": "Análise e perguntas"
+    },
+    "adapter": {
+      "whisper_local": "Whisper local",
+      "openai_compatible_stt": "Transcrição compatível com OpenAI",
+      "anthropic": "Anthropic",
+      "openai_compatible_chat": "Chat compatível com OpenAI",
+      "ollama": "Ollama (local)"
+    },
+    "category": {
+      "audio": "Áudio",
+      "transcript": "Transcrição",
+      "records": "Registros técnicos",
+      "questions": "Perguntas"
+    },
+    "status": {
+      "not_required": "Sem envio remoto",
+      "configured": "Não autorizado: nada é enviado",
+      "authorized": "Autorizado",
+      "revoked": "Autorização revogada: nada é enviado"
+    },
+    "credentialStored": "Chave de API guardada no cofre do sistema",
+    "isDefault": "Padrão",
+    "makeDefault": "Tornar {{name}} padrão",
+    "edit": "Editar {{name}}",
+    "authorize": "Autorizar {{name}}…",
+    "revoke": "Revogar autorização de {{name}}",
+    "revoked": "Autorização de {{name}} revogada. Nenhum envio novo ocorrerá.",
+    "authorized": "Provedor autorizado.",
+    "add": "Adicionar provedor",
+    "form": {
+      "newTitle": "Novo provedor",
+      "editTitle": "Editar provedor",
+      "adapter": "Tipo",
+      "remoteHint": "Provedor remoto: os dados saem deste computador somente depois da sua autorização. O endereço precisa usar https.",
+      "localHint": "Provedor local: o endereço precisa ser deste computador (127.0.0.1 ou localhost).",
+      "finalsOnly": "No modo remoto a transcrição mostra apenas o texto final de cada trecho, sem texto provisório.",
+      "endpoint": "Endereço",
+      "model": "Modelo",
+      "categories": "Dados enviados",
+      "secret": "Chave de API (opcional)",
+      "secretReplace": "Nova chave de API (deixe vazio para manter a atual)",
+      "reauthorizeHint": "Alterar o endereço ou os dados enviados revoga a autorização atual; será preciso autorizar de novo.",
+      "save": "Salvar",
+      "cancel": "Cancelar"
+    }
+  },
+  "settings": {
+    "title": "Configurações",
+    "general": "Geral",
+    "analysisLimits": "Limites da análise",
+    "analysisLimitsHelp": "Controlam a frequência e o custo da análise incremental.",
+    "triggerFinals": "Analisar a cada N trechos finais",
+    "triggerSpeechSecs": "Ou a cada N segundos de fala",
+    "minIntervalSecs": "Intervalo mínimo entre análises (segundos)",
+    "maxCallsPerHour": "Máximo de chamadas por hora",
+    "maxTokensPerSession": "Máximo de tokens por sessão",
+    "save": "Salvar",
+    "saved": "Configurações salvas.",
+    "invalidNumber": "Informe um número inteiro.",
+    "updates": {
+      "title": "Atualizações",
+      "toggle": "Verificar atualizações automaticamente",
+      "destinations": "As verificações contatam github.com e o armazenamento de arquivos do GitHub (objects.githubusercontent.com). Nenhum conteúdo de sessão é enviado.",
+      "lastChecked": "Última verificação: {{when}}",
+      "neverChecked": "Nenhuma verificação feita ainda.",
+      "checkNow": "Verificar agora",
+      "checking": "Verificando…",
+      "upToDate": "Você já está na versão mais recente.",
+      "noticeFirst": "Dispense o aviso sobre atualizações para poder verificar."
+    }
+  },
+  "errors": {
+    "invalidInput": "Valor inválido. Revise os campos e tente novamente.",
+    "notFound": "Item não encontrado.",
+    "invalidState": "Esta ação não é permitida no estado atual.",
+    "permissionDenied": "Permissão de captura negada pelo sistema operacional.",
+    "sourceUnavailable": "Fonte de áudio indisponível.",
+    "noTranscriber": "Nenhum provedor de transcrição utilizável está configurado.",
+    "secretStoreUnavailable": "O cofre de credenciais do sistema não está disponível. Nada será gravado até que ele esteja acessível.",
+    "authorizationRequired": "Este provedor remoto precisa da sua autorização antes de receber dados.",
+    "providerError": "O provedor falhou. Tente novamente mais tarde.",
+    "storageError": "Não foi possível gravar os dados localmente.",
+    "internal": "Ocorreu um erro inesperado.",
+    "modelDownloadNetwork": "Não foi possível baixar o modelo. Verifique a conexão e tente de novo.",
+    "modelVerificationFailed": "O arquivo baixado não confere com o modelo esperado e foi descartado.",
+    "modelDownloadStorage": "Não foi possível gravar o modelo no disco.",
+    "modelDownloadCancelled": "Download cancelado.",
+    "updatesDisabled": "A verificação de atualizações está desligada nas Configurações.",
+    "noticePending": "Dispense primeiro o aviso sobre atualizações.",
+    "versionMismatch": "A versão confirmada não é a última verificada. Verifique de novo antes de instalar."
+  },
+  "transcript": {
+    "title": "Transcrição",
+    "regionLabel": "Transcrição da sessão",
+    "empty": "A transcrição aparece aqui assim que alguém falar.",
+    "at": "aos {{time}}",
+    "partialLabel": "Parcial, ainda em reconhecimento:",
+    "gap": "Lacuna na transcrição ({{duration}}): {{reason}}",
+    "gapReason": {
+      "paused": "captura pausada",
+      "overload": "áudio descartado por sobrecarga",
+      "provider_failure": "falha do provedor de transcrição",
+      "cancelled_on_stop": "transcrição interrompida ao parar",
+      "source_lost": "fonte de áudio perdida",
+      "interrupted": "aplicativo encerrado durante a captura"
+    },
+    "lag": "A transcrição está atrasada cerca de {{seconds}} s em relação ao áudio.",
+    "followLatest": "Voltar ao trecho mais recente"
+  },
+  "providerInUse": {
+    "label": "Provedores em uso",
+    "item": "{{stage}}: {{locality}}",
+    "stage": {
+      "transcription": "Transcrição",
+      "analysis": "Análise",
+      "questions": "Perguntas"
+    },
+    "locality": {
+      "local": "local (neste computador)",
+      "remote": "remoto"
+    },
+    "fallback": "O provedor remoto de {{stage}} falhou; o provedor local assumiu esta etapa."
+  },
+  "models": {
+    "title": "Modelos locais de transcrição",
+    "help": "A transcrição local usa um modelo baixado uma única vez. O download só começa quando você pede e não envia nenhum dado das sessões.",
+    "size": "{{size}} MB",
+    "origin": "origem: {{origin}}",
+    "inUse": "(em uso)",
+    "download": "Baixar {{name}}",
+    "downloading": "Baixando…",
+    "use": "Usar {{name}} para transcrever"
+  },
+  "records": {
+    "title": "Registros técnicos",
+    "empty": "As propostas da análise aparecem aqui conforme a conversa avança.",
+    "badgesLabel": "Classificação",
+    "kind": {
+      "requirement": "Requisito",
+      "decision": "Decisão",
+      "risk": "Risco",
+      "open_question": "Pergunta em aberto",
+      "task": "Tarefa",
+      "assumption": "Premissa"
+    },
+    "nature": {
+      "observed": "Observado",
+      "inferred": "Inferido",
+      "suggested": "Sugerido"
+    },
+    "status": {
+      "proposed": "Proposto",
+      "confirmed": "Confirmado",
+      "rejected": "Rejeitado",
+      "pending": "Pendente"
+    },
+    "action": {
+      "confirmed": "Confirmar",
+      "rejected": "Rejeitar",
+      "pending": "Marcar como pendente",
+      "proposed": "Voltar a proposto"
+    },
+    "actionsLabel": "Revisar: {{text}}",
+    "userCreated": "Criado por você",
+    "conflict": "Conflita com outro registro",
+    "duplicate": "Possível duplicata",
+    "rationale": "Justificativa:",
+    "acceptanceCriteria": "Critérios de aceitação",
+    "alternatives": "Alternativas",
+    "evidence": "Evidência:",
+    "noEvidence": "Sem trecho de evidência (inferido ou sugerido).",
+    "segmentNumber": "trecho {{number}}",
+    "segmentIndex": "evidência {{index}}",
+    "analysis": {
+      "running": "Analisando os trechos novos…",
+      "ok_one": "Análise concluída: {{count}} nova proposta.",
+      "ok_other": "Análise concluída: {{count}} novas propostas.",
+      "invalid_output": "A resposta da análise veio fora do formato e foi descartada. Os registros existentes foram preservados.",
+      "provider_error": "A análise falhou. Os registros existentes foram preservados; os trechos serão analisados de novo na próxima vez.",
+      "rate_limited": "Limite de análises atingido. A captura continua; os trechos novos aguardam a próxima análise permitida."
+    }
+  },
+  "history": {
+    "title": "Sessões salvas",
+    "empty": "Nenhuma sessão salva ainda.",
+    "duration": "Duração: {{duration}}",
+    "more": "Carregar mais"
+  },
+  "detail": {
+    "back": "Voltar ao histórico",
+    "rename": "Renomear",
+    "createdAt": "Criada em",
+    "activeDuration": "Duração ativa",
+    "active": "Esta sessão ainda está em andamento; acompanhe-a na página Sessões.",
+    "runFinal": "Executar análise final",
+    "export": "Exportar…",
+    "delete": "Excluir sessão…"
+  },
+  "plan": {
+    "title": "Plano de desenvolvimento",
+    "filter": "Mostrar status",
+    "section": {
+      "task": "Tarefas técnicas",
+      "requirement": "Requisitos",
+      "decision": "Decisões",
+      "assumption": "Premissas",
+      "risk": "Riscos",
+      "open_question": "Perguntas em aberto"
+    },
+    "sectionEmpty": "Nenhum item.",
+    "edit": "Editar",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "text": "Texto",
+    "rationale": "Justificativa",
+    "criteriaHint": "Critérios de aceitação (um por linha)",
+    "alternativesHint": "Alternativas (uma por linha)",
+    "addTitle": "Adicionar item ao plano",
+    "kind": "Tipo",
+    "initialStatus": "Status",
+    "add": "Adicionar"
+  },
+  "questions": {
+    "title": "Perguntas sobre a sessão",
+    "label": "Sua pergunta",
+    "hint": "As respostas usam somente o conteúdo desta sessão. Ctrl+Enter envia.",
+    "waitPending": "Aguarde a resposta da pergunta anterior para perguntar de novo.",
+    "ask": "Perguntar",
+    "empty": "Pergunte, por exemplo, o que foi decidido sobre um tema. A captura continua enquanto a resposta é preparada.",
+    "you": "Pergunta:",
+    "status": {
+      "pending": "Aguardando resposta… A captura e a transcrição continuam normalmente.",
+      "failed": "Não foi possível responder. Nada foi alterado e a captura e a transcrição seguem normalmente. Tente perguntar de novo."
+    },
+    "certainty": {
+      "supported": "Sustentada pela sessão",
+      "partial": "Parcialmente sustentada: parte da resposta não foi discutida",
+      "no_evidence": "Sem evidência na sessão"
+    },
+    "citations": "Evidências citadas",
+    "noCitations": "Nenhum trecho ou registro da sessão sustenta uma resposta.",
+    "segmentUnavailable": "trecho indisponível",
+    "recordCitation": "Registro ({{kind}}):",
+    "recordUnavailable": "Registro indisponível.",
+    "kindLabel": "Tipo do item",
+    "convert": "Transformar em item proposto",
+    "convertLabel": "Transformar a resposta em item: {{question}}",
+    "converted": "Item proposto adicionado ao plano. Revise-o antes de confirmar."
+  },
+  "export": {
+    "title": "Exportar sessão",
+    "unencryptedWarning": "Os arquivos exportados não são cifrados. Quem tiver acesso a eles poderá ler o conteúdo da reunião; guarde-os em local seguro.",
+    "formats": "Formatos",
+    "format": {
+      "markdown": "Markdown (legível)",
+      "json": "JSON (estruturado)"
+    },
+    "content": "Conteúdo",
+    "part": {
+      "plan": "Plano, perguntas e respostas",
+      "transcript": "Transcrição"
+    },
+    "chooseSomething": "Escolha ao menos um formato e um conteúdo.",
+    "choosingDestination": "Escolha onde salvar na janela do sistema…",
+    "written": "Arquivos gravados: {{files}}",
+    "cancelled": "Exportação cancelada; nenhum arquivo foi gravado.",
+    "submit": "Exportar",
+    "close": "Fechar"
+  },
+  "deleteSession": {
+    "title": "Excluir “{{title}}”?",
+    "stopFirst": "Esta sessão ainda está em andamento. Pare a captura antes de excluí-la.",
+    "warning": {
+      "secureDeletion": "O conteúdo é removido do banco cifrado deste computador, mas a remoção segura não é garantida: SSDs, snapshots e o sistema de arquivos podem manter cópias de dados antigos.",
+      "backups": "Backups do sistema feitos antes da exclusão continuam contendo esta sessão.",
+      "exportedFiles": "Arquivos já exportados não são excluídos; apague-os você mesmo se necessário.",
+      "irreversible": "Esta ação não pode ser desfeita."
+    },
+    "confirm": "Excluir definitivamente",
+    "deleting": "Excluindo…",
+    "cancel": "Cancelar"
+  },
+  "authorization": {
+    "title": "Autorizar envio de dados para {{destination}}?",
+    "titleLoading": "Autorizar provedor remoto?",
+    "nothingSent": "Nada é enviado antes do seu aceite. Se recusar, nada é enviado.",
+    "destination": "Destino",
+    "categories": "Dados que serão enviados",
+    "retention": "Retenção",
+    "revocable": "Você pode revogar esta autorização a qualquer momento em Provedores.",
+    "accept": "Autorizar",
+    "decline": "Recusar"
+  },
+  "updates": {
+    "notice": {
+      "title": "Atualizações do Dev Copilot",
+      "body": "Depois que você dispensar este aviso, o app verifica se há uma versão nova ao iniciar e a cada 24 horas. A verificação é uma requisição sem corpo: não envia conteúdo de sessão nem credenciais, só o que qualquer download revela (endereço IP e versão do app). Nada é instalado sem a sua confirmação, e todo pacote tem a assinatura verificada antes.",
+      "destinationsLabel": "Destinos contatados:",
+      "destination": {
+        "manifest": "github.com: arquivo com a versão mais recente (latest.json)",
+        "assets": "objects.githubusercontent.com: armazenamento de arquivos do GitHub, para baixar o pacote que você confirmar"
+      },
+      "settingsHint": "Você pode desligar a verificação a qualquer momento em Configurações › Atualizações.",
+      "acknowledge": "Entendi"
+    },
+    "banner": {
+      "available": "Versão {{version}} disponível",
+      "notesLabel": "Novidades",
+      "install": "Instalar…",
+      "downloading": "Baixando a versão {{version}}…",
+      "progressLabel": "Progresso do download",
+      "cancel": "Cancelar download",
+      "installing": "Instalando a versão {{version}}. O app vai reiniciar.",
+      "blocked": "A atualização para a versão {{version}} espera o fim da sessão em andamento. Pare a sessão e tente de novo.",
+      "retry": "Tentar instalar de novo"
+    },
+    "confirm": {
+      "title": "Instalar a versão {{version}}?",
+      "body": "O pacote será baixado e terá a assinatura verificada antes da instalação. Ao final, o app reinicia. A instalação não acontece enquanto houver uma sessão em andamento.",
+      "confirm": "Baixar e instalar",
+      "cancel": "Agora não"
+    },
+    "failed": {
+      "network": "Não foi possível verificar ou baixar a atualização. Verifique a conexão e tente de novo.",
+      "signature_invalid": "O pacote baixado não tem uma assinatura válida e foi descartado. A versão instalada não mudou.",
+      "manifest_invalid": "As informações de atualização recebidas são inválidas. A versão instalada não mudou.",
+      "download_interrupted": "O download foi interrompido. A versão instalada não mudou.",
+      "install_failed": "Não foi possível instalar a atualização. A versão instalada não mudou."
+    }
+  }
+}

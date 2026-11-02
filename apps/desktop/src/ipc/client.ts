@@ -1,0 +1,211 @@
+// Typed wrappers over Tauri `invoke`. Every rejection is normalized to an `IpcError`, so UI code
+// only ever handles contract error codes.
+import { Channel, invoke } from "@tauri-apps/api/core";
+
+import type {
+  AudioSourceDto,
+  AuthorizationPreviewDto,
+  AudioSourceKind,
+  CspViolationDto,
+  EmptyDto,
+  ErrorCode,
+  ExportResultDto,
+  ExportSessionDto,
+  IpcError,
+  JobIdDto,
+  LocalModelDto,
+  ModelDownloadEvent,
+  PermissionHelpDto,
+  PermissionState,
+  PlanDto,
+  ProviderAuthorizationDto,
+  ProviderDto,
+  QuestionAskDto,
+  QuestionDto,
+  QuestionToRecordDto,
+  RecordCreateDto,
+  RecordDto,
+  RecordEditDto,
+  RecordSetStatusDto,
+  RunIdDto,
+  ProviderSetDefaultDto,
+  ProviderUpsertDto,
+  SessionCreateDto,
+  SessionDetailDto,
+  SessionDto,
+  SessionEvent,
+  SessionListDto,
+  SessionPageDto,
+  SessionStartDto,
+  SettingsDto,
+  SettingsUpdateDto,
+  UpdateEvent,
+  UpdateStatusDto,
+} from "./types";
+
+const ERROR_CODES: ReadonlySet<string> = new Set<ErrorCode>([
+  "invalid_input",
+  "not_found",
+  "invalid_state",
+  "permission_denied",
+  "source_unavailable",
+  "no_transcriber",
+  "secret_store_unavailable",
+  "authorization_required",
+  "provider_error",
+  "storage_error",
+  "updates_disabled",
+  "notice_pending",
+  "version_mismatch",
+  "internal",
+]);
+
+export function isIpcError(value: unknown): value is IpcError {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.code === "string" &&
+    ERROR_CODES.has(candidate.code) &&
+    typeof candidate.messageKey === "string"
+  );
+}
+
+export function toIpcError(value: unknown): IpcError {
+  if (isIpcError(value)) return value;
+  // Deserialization failures and runtime errors arrive as strings; their text is not shown.
+  return { code: "internal", messageKey: "errors.internal" };
+}
+
+async function call<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  try {
+    return await invoke<T>(command, args);
+  } catch (error) {
+    throw toIpcError(error);
+  }
+}
+
+export const ipc = {
+  /** Minimal CSP violation report (specs/002 R1); the core rate-limits the log lines. */
+  reportCspViolation: (request: CspViolationDto) =>
+    call<EmptyDto>("diagnostics_report_csp_violation", { request }),
+  settingsGet: () => call<SettingsDto>("settings_get"),
+  settingsUpdate: (request: SettingsUpdateDto) =>
+    call<SettingsDto>("settings_update", { request }),
+  updateStatusGet: () => call<UpdateStatusDto>("update_status_get"),
+  /** Starts a check; resolves with `checking`. The core refuses it while disabled or before the notice. */
+  updateCheck: () => call<UpdateStatusDto>("update_check"),
+  /** Call only from the confirmation dialog, with the version it displayed. */
+  updateInstall: (version: string) =>
+    call<UpdateStatusDto>("update_install", { request: { version } }),
+  updateCancel: () => call<UpdateStatusDto>("update_cancel"),
+  updateNoticeAcknowledge: () => call<SettingsDto>("update_notice_acknowledge"),
+  /** Routes update states to `onStatus`; resolves with the current state. */
+  subscribeUpdates: (onStatus: (status: UpdateStatusDto) => void) => {
+    const channel = new Channel<UpdateEvent>();
+    channel.onmessage = (event) => onStatus(event.status);
+    return call<UpdateStatusDto>("update_subscribe", { channel });
+  },
+  providerList: () => call<ProviderDto[]>("provider_list"),
+  providerUpsert: (request: ProviderUpsertDto) =>
+    call<ProviderDto>("provider_upsert", { request }),
+  providerSetDefault: (request: ProviderSetDefaultDto) =>
+    call<void>("provider_set_default", { request }),
+  /** Sends the API key straight to the OS credential store; it is never read back. */
+  providerSetSecret: (providerId: string, secret: string) =>
+    call<void>("provider_set_secret", { request: { providerId, secret } }),
+  providerAuthorizationPreview: (providerId: string) =>
+    call<AuthorizationPreviewDto>("provider_authorization_preview", {
+      request: { providerId },
+    }),
+  /** Records the user's explicit acceptance of the preview (FR-046). */
+  providerAuthorize: (providerId: string) =>
+    call<ProviderAuthorizationDto>("provider_authorize", {
+      request: { providerId, accepted: true },
+    }),
+  /** New sends stop immediately (FR-047). */
+  providerRevoke: (providerId: string) =>
+    call<ProviderAuthorizationDto>("provider_revoke", {
+      request: { providerId },
+    }),
+  localModelList: () => call<LocalModelDto[]>("local_model_list"),
+  /** Downloads a catalog model by explicit user action; progress goes to `onEvent`. */
+  localModelDownload: (
+    modelId: string,
+    onEvent: (event: ModelDownloadEvent) => void,
+  ) => {
+    const channel = new Channel<ModelDownloadEvent>();
+    channel.onmessage = onEvent;
+    return call<JobIdDto>("local_model_download", {
+      request: { modelId },
+      channel,
+    });
+  },
+  sessionCreate: (request: SessionCreateDto) =>
+    call<SessionDto>("session_create", { request }),
+  sessionStart: (request: SessionStartDto) =>
+    call<SessionDto>("session_start", { request }),
+  sessionCancelStart: (sessionId: string) =>
+    call<SessionDto>("session_cancel_start", { request: { sessionId } }),
+  /** Closes every source at once; the paused interval becomes `gap(paused)` (FR-006a). */
+  sessionPause: (sessionId: string) =>
+    call<SessionDto>("session_pause", { request: { sessionId } }),
+  /** The core re-checks transcriber, sources and permissions before capturing again. */
+  sessionResume: (sessionId: string) =>
+    call<SessionDto>("session_resume", { request: { sessionId } }),
+  sessionStop: (sessionId: string) =>
+    call<SessionDto>("session_stop", { request: { sessionId } }),
+  /** Routes the session's events to `onEvent`; resolves with the current session. */
+  sessionSubscribe: (
+    sessionId: string,
+    onEvent: (event: SessionEvent) => void,
+  ) => {
+    const channel = new Channel<SessionEvent>();
+    channel.onmessage = onEvent;
+    return call<SessionDto>("session_subscribe", {
+      request: { sessionId },
+      channel,
+    });
+  },
+  /** Changes a record's status by explicit user action (FR-024). */
+  recordSetStatus: (request: RecordSetStatusDto) =>
+    call<RecordDto>("record_set_status", { request }),
+  recordEdit: (request: RecordEditDto) =>
+    call<RecordDto>("record_edit", { request }),
+  recordCreate: (request: RecordCreateDto) =>
+    call<RecordDto>("record_create", { request }),
+  planGet: (sessionId: string) =>
+    call<PlanDto>("plan_get", { request: { sessionId } }),
+  /** Final analysis of an ended or failed session (FR-033); results arrive as events. */
+  analysisRunFinal: (sessionId: string) =>
+    call<RunIdDto>("analysis_run_final", { request: { sessionId } }),
+  /** Asks about a session (FR-034); the answer arrives as a `question_answered` event. */
+  questionAsk: (request: QuestionAskDto) =>
+    call<QuestionDto>("question_ask", { request }),
+  /** Turns an answer into a new proposed record by explicit user action (FR-037). */
+  questionToRecord: (request: QuestionToRecordDto) =>
+    call<RecordDto>("question_to_record", { request }),
+  sessionList: (request: SessionListDto = {}) =>
+    call<SessionPageDto>("session_list", { request }),
+  sessionGet: (sessionId: string) =>
+    call<SessionDetailDto>("session_get", { request: { sessionId } }),
+  sessionRename: (sessionId: string, title: string) =>
+    call<SessionDto>("session_rename", { request: { sessionId, title } }),
+  /** Deletes a session after the user confirmed the warnings (FR-042). */
+  sessionDelete: (sessionId: string) =>
+    call<Record<string, never>>("session_delete", {
+      request: { sessionId, confirmed: true },
+    }),
+  /** The core opens the save dialog and writes only where the user chose (FR-041). */
+  exportSession: (request: ExportSessionDto) =>
+    call<ExportResultDto>("export_session", { request }),
+  audioSourcesList: () => call<AudioSourceDto[]>("audio_sources_list"),
+  audioPermissionRequest: (kind: AudioSourceKind) =>
+    call<PermissionState>("audio_permission_request", { request: { kind } }),
+  audioPermissionHelp: (kind: AudioSourceKind) =>
+    call<PermissionHelpDto>("audio_permission_help", { request: { kind } }),
+};
+
+export type IpcClient = typeof ipc;

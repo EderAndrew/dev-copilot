@@ -1,0 +1,962 @@
+//! Ports implemented by infrastructure crates (contracts/provider-ports.md).
+//!
+//! Vendor types never cross these traits (Constitution Art. VI.2). Ports used across `.await`
+//! points return [`BoxFuture`] so they stay object-safe and can be composed as `Arc<dyn _>`.
+//!
+//! Repository ports for entities introduced by user stories grow with those stories.
+
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex, PoisonError};
+
+use devcopilot_domain::Redacted;
+use devcopilot_domain::analysis_run::AnalysisRun;
+use devcopilot_domain::audio_source::{AudioSourceKind, Availability, PermissionState};
+use devcopilot_domain::export::ExportRecord;
+use devcopilot_domain::ids::{ProviderId, QuestionId, RecordId, SegmentId, SessionId};
+use devcopilot_domain::language::SessionLanguage;
+use devcopilot_domain::provider::{
+    CredentialRef, DataCategory, Locality, Provider, ProviderAuthorization,
+};
+use devcopilot_domain::question::{Answer, ContextQuestion};
+use devcopilot_domain::record::{Proposal, RecordKind, RecordStatus, TechnicalRecord};
+use devcopilot_domain::record_change::RecordChange;
+use devcopilot_domain::session::Session;
+use devcopilot_domain::text::{QuestionText, RecordText, SegmentText};
+use devcopilot_domain::time::{Duration, Timestamp};
+use devcopilot_domain::transcript::TranscriptSegment;
+use thiserror::Error;
+use tokio::sync::{mpsc, oneshot};
+use tokio_util::sync::CancellationToken;
+
+use crate::events::SessionEvent;
+
+/// Boxed `Send` future returned by asynchronous ports.
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+// ---------------------------------------------------------------------------------------------
+// Audio
+// ---------------------------------------------------------------------------------------------
+
+/// A block of 16 kHz mono `f32` samples from one source.
+#[derive(Clone, PartialEq)]
+pub struct AudioChunk {
+    /// Source that produced the samples.
+    pub source: AudioSourceKind,
+    /// Offset of the first sample from the start of capture.
+    pub start: Duration,
+    /// Samples at 16 kHz, mono, in `[-1.0, 1.0]`.
+    pub samples: Vec<f32>,
+}
+
+impl std::fmt::Debug for AudioChunk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AudioChunk")
+            .field("source", &self.source)
+            .field("start", &self.start)
+            .field("samples", &self.samples.len())
+            .finish()
+    }
+}
+
+/// Sample rate of every [`AudioChunk`].
+pub const SAMPLE_RATE_HZ: u32 = 16_000;
+
+/// Why a chunk could not be handed to the pipeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum SinkError {
+    /// The bounded queue is full; the caller applies the overload policy (FR-019).
+    #[error("audio sink is full")]
+    Full,
+    /// The pipeline is gone (capture stopped).
+    #[error("audio sink is closed")]
+    Closed,
+}
+
+/// Bounded, non-blocking entry point of the capture pipeline (Art. V.3).
+#[derive(Debug, Clone)]
+pub struct BoundedAudioSink {
+    tx: mpsc::Sender<AudioChunk>,
+}
+
+impl BoundedAudioSink {
+    /// Creates a sink and the receiving end with room for `capacity` chunks.
+    #[must_use]
+    pub fn channel(capacity: usize) -> (Self, AudioChunkStream) {
+        let (tx, rx) = mpsc::channel(capacity.max(1));
+        (Self { tx }, rx)
+    }
+
+    /// Hands a chunk over without waiting.
+    ///
+    /// # Errors
+    ///
+    /// [`SinkError::Full`] when the queue is at capacity, [`SinkError::Closed`] when the
+    /// pipeline has stopped.
+    pub fn try_send(&self, chunk: AudioChunk) -> Result<(), SinkError> {
+        self.tx.try_send(chunk).map_err(|err| match err {
+            mpsc::error::TrySendError::Full(_) => SinkError::Full,
+            mpsc::error::TrySendError::Closed(_) => SinkError::Closed,
+        })
+    }
+}
+
+/// Receiving end of the audio queue consumed by the transcriber.
+pub type AudioChunkStream = mpsc::Receiver<AudioChunk>;
+
+/// Keeps a started capture alive; dropping it or calling [`CaptureHandle::stop`] closes the
+/// OS stream.
+pub trait CaptureHandle: Send {
+    /// Closes the stream immediately.
+    fn stop(self: Box<Self>);
+}
+
+/// Failures of an audio source.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum AudioError {
+    /// Permission not granted; nothing was captured.
+    #[error("audio permission not granted ({})", .0.code())]
+    PermissionNotGranted(PermissionState),
+    /// The source cannot be used.
+    #[error("audio source unavailable")]
+    Unavailable(Availability),
+    /// The selected device disappeared; capture never switches devices silently (FR-011).
+    #[error("audio device lost")]
+    DeviceLost,
+    /// Platform backend error, described without session content.
+    #[error("audio backend error: {0}")]
+    Backend(String),
+}
+
+/// Why a running capture ended on its own. Capture never resumes or switches device after a
+/// fault (FR-011); the user starts again explicitly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceFault {
+    /// The device disappeared, the default device changed, or the OS suspended or locked the
+    /// session.
+    Lost,
+    /// The OS permission was withdrawn while capturing (FR-010).
+    PermissionRevoked,
+}
+
+/// One-shot fault report from a running capture to the pipeline.
+///
+/// Cloneable and callable from any thread (e.g. a platform error callback); only the first
+/// report is delivered.
+#[derive(Debug, Clone)]
+pub struct SourceFaultNotifier {
+    tx: Arc<Mutex<Option<oneshot::Sender<SourceFault>>>>,
+}
+
+impl SourceFaultNotifier {
+    /// Creates a notifier and the receiving end.
+    #[must_use]
+    pub fn channel() -> (Self, oneshot::Receiver<SourceFault>) {
+        let (tx, rx) = oneshot::channel();
+        (
+            Self {
+                tx: Arc::new(Mutex::new(Some(tx))),
+            },
+            rx,
+        )
+    }
+
+    /// Reports `fault`; later reports are ignored.
+    pub fn notify(&self, fault: SourceFault) {
+        let sender = self
+            .tx
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(sender) = sender {
+            // The pipeline may already be gone; nothing to report to then.
+            let _ = sender.send(fault);
+        }
+    }
+}
+
+/// An OS audio source (microphone or system audio).
+pub trait AudioSource: Send + Sync {
+    /// Kind of source.
+    fn kind(&self) -> AudioSourceKind;
+
+    /// Whether the source can be used on this machine.
+    fn availability(&self) -> Availability;
+
+    /// Queries the OS without prompting.
+    fn permission(&self) -> PermissionState;
+
+    /// May show the OS permission prompt.
+    fn request_permission(&self) -> BoxFuture<'_, PermissionState>;
+
+    /// Starts writing 16 kHz mono chunks into `sink`.
+    ///
+    /// Guarantees: fails without capturing when permission is not granted; stops capturing as
+    /// soon as `cancel` fires; never switches device silently (FR-011); reports device loss
+    /// and permission revocation through `faults` and stops capturing.
+    ///
+    /// # Errors
+    ///
+    /// See [`AudioError`].
+    fn start(
+        &self,
+        sink: BoundedAudioSink,
+        cancel: CancellationToken,
+        faults: SourceFaultNotifier,
+    ) -> Result<Box<dyn CaptureHandle>, AudioError>;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Providers
+// ---------------------------------------------------------------------------------------------
+
+/// Non-sensitive description of a provider adapter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderDescriptor {
+    /// Configured provider.
+    pub id: ProviderId,
+    /// Local or remote.
+    pub locality: Locality,
+    /// Data categories the adapter sends.
+    pub data_categories: Vec<DataCategory>,
+}
+
+/// Provider failures, free of vendor types and session content.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum ProviderError {
+    /// No remote authorization covers the request (FR-046).
+    #[error("remote provider not authorized")]
+    AuthorizationRequired,
+    /// The provider cannot be reached or is not ready (e.g. model missing).
+    #[error("provider unavailable")]
+    Unavailable,
+    /// The request exceeded its deadline.
+    #[error("provider timed out")]
+    Timeout,
+    /// The output failed schema validation (FR-030).
+    #[error("provider returned invalid output")]
+    InvalidOutput,
+    /// Cancelled through the session token.
+    #[error("provider call cancelled")]
+    Cancelled,
+    /// Any other provider-side failure, described without content or secrets.
+    #[error("provider error: {0}")]
+    Other(String),
+}
+
+/// Transcriber output.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TranscriptUpdate {
+    /// Provisional text; never persisted (FR-017).
+    Partial {
+        /// Source of the audio.
+        source: AudioSourceKind,
+        /// Offset of the segment start.
+        start: Duration,
+        /// Provisional text.
+        text: Redacted<String>,
+    },
+    /// Final text, persisted on arrival.
+    Final {
+        /// Source of the audio.
+        source: AudioSourceKind,
+        /// Offset of the segment start.
+        start: Duration,
+        /// Offset of the segment end.
+        end: Duration,
+        /// Final text.
+        text: Redacted<SegmentText>,
+    },
+}
+
+/// Where a transcriber writes its updates.
+pub type TranscriptSink = mpsc::Sender<TranscriptUpdate>;
+
+/// Streaming speech-to-text.
+pub trait Transcriber: Send + Sync {
+    /// Non-sensitive description.
+    fn descriptor(&self) -> ProviderDescriptor;
+
+    /// Consumes chunks and emits partial and final updates until `input` closes or `cancel`
+    /// fires; honours `cancel` within 5 s.
+    fn run(
+        &self,
+        input: AudioChunkStream,
+        out: TranscriptSink,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'_, Result<(), ProviderError>>;
+}
+
+/// Builds the [`Transcriber`] for a configured transcription provider.
+///
+/// `create` must be cheap (no model loading or network I/O): it runs on the `session_start`
+/// path, which answers within 500 ms (SC-006). Heavy work happens inside
+/// [`Transcriber::run`].
+pub trait TranscriberFactory: Send + Sync {
+    /// Transcriber for `provider` transcribing `language`.
+    ///
+    /// # Errors
+    ///
+    /// [`ProviderError::Unavailable`] when the provider cannot transcribe on this machine
+    /// (e.g. its local model is not downloaded).
+    fn create(
+        &self,
+        provider: &Provider,
+        language: SessionLanguage,
+    ) -> Result<Arc<dyn Transcriber>, ProviderError>;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Measurement (002 research R7)
+// ---------------------------------------------------------------------------------------------
+
+/// Which transcriber update a [`SegmentTiming`] measures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TimingKind {
+    /// A partial update (published, never persisted).
+    Partial,
+    /// A final update (persisted).
+    Final,
+}
+
+impl TimingKind {
+    /// Stable lowercase code, as written to the metrics CSV.
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Partial => "partial",
+            Self::Final => "final",
+        }
+    }
+}
+
+/// Timing of one transcriber update, for latency measurement (002 FR-017).
+///
+/// It has no text field on purpose: session content cannot reach the metrics file by
+/// construction (Art. IV). All three instants are milliseconds on the session timeline
+/// (offsets from the first capture), so latency is `emitted_ms − speech_*_ms`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SegmentTiming {
+    /// Partial or final.
+    pub kind: TimingKind,
+    /// Start of the speech the update covers.
+    pub speech_start_ms: u64,
+    /// End of the speech the update covers. A partial has no end of its own, so it uses the
+    /// end of the audio handed to the transcriber so far. Always `≥ speech_start_ms`.
+    pub speech_end_ms: u64,
+    /// When the update reached the pipeline, by the monotonic clock.
+    pub emitted_ms: u64,
+    /// Transcription provider that produced the update. The model in use goes in the
+    /// measurement plan, not in each row.
+    pub provider: ProviderId,
+}
+
+/// Receives transcription timings when the opt-in metrics mode is on.
+///
+/// `record` runs on the transcription task, so implementations must not block: they drop
+/// timings rather than slow transcription down.
+pub trait MetricsSink: Send + Sync {
+    /// Records one timing.
+    fn record(&self, timing: SegmentTiming);
+}
+
+// ---------------------------------------------------------------------------------------------
+// App updates (002 US8, research R5)
+// ---------------------------------------------------------------------------------------------
+
+/// Largest number of characters of release notes kept from a manifest (data-model §1.2).
+pub const MAX_UPDATE_NOTES_CHARS: usize = 4_000;
+
+/// A newer, not yet downloaded app version announced by the update manifest.
+///
+/// `notes` is untrusted text from the manifest: it is shown as plain text, never rendered as
+/// HTML or Markdown. Plugin types never cross the [`AppUpdater`] port (Art. VI.2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AvailableUpdate {
+    /// Semver of the announced version, greater than the installed one.
+    pub version: String,
+    /// Release notes, at most [`MAX_UPDATE_NOTES_CHARS`] characters.
+    pub notes: String,
+    /// Publication instant, when the manifest has one.
+    pub published_at: Option<Timestamp>,
+}
+
+/// Why an update check, download or install failed. None of them changes the installed
+/// version (FR-008c).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Error)]
+pub enum UpdateFailure {
+    /// The manifest or package could not be fetched.
+    #[error("network")]
+    Network,
+    /// The package signature does not verify against the embedded public key.
+    #[error("signature_invalid")]
+    SignatureInvalid,
+    /// The manifest is malformed or announces an insecure URL.
+    #[error("manifest_invalid")]
+    ManifestInvalid,
+    /// The package download stopped before the end.
+    #[error("download_interrupted")]
+    DownloadInterrupted,
+    /// The verified package could not be installed.
+    #[error("install_failed")]
+    InstallFailed,
+}
+
+impl UpdateFailure {
+    /// Stable snake_case code (contracts/ipc-updates.md `failed.reason`).
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Network => "network",
+            Self::SignatureInvalid => "signature_invalid",
+            Self::ManifestInvalid => "manifest_invalid",
+            Self::DownloadInterrupted => "download_interrupted",
+            Self::InstallFailed => "install_failed",
+        }
+    }
+}
+
+/// Signed in-app updates, driven only by the core (research R5).
+///
+/// The adapter verifies the package signature before it reports a download as complete, and
+/// never installs a package it did not verify. Download and install are separate steps so the
+/// use case can check for active sessions between them (data-model §1.3).
+pub trait AppUpdater: Send + Sync {
+    /// Fetches the manifest. `None` when no version newer than the installed one exists.
+    ///
+    /// # Errors
+    ///
+    /// See [`UpdateFailure`].
+    fn check(&self) -> BoxFuture<'_, Result<Option<AvailableUpdate>, UpdateFailure>>;
+
+    /// Downloads and verifies the package of `update`, reporting `(received, total)` bytes.
+    /// Stops with [`UpdateFailure::DownloadInterrupted`] when `cancel` fires.
+    ///
+    /// # Errors
+    ///
+    /// See [`UpdateFailure`].
+    fn download<'a>(
+        &'a self,
+        update: &'a AvailableUpdate,
+        progress: &'a (dyn Fn(u64, Option<u64>) + Send + Sync),
+        cancel: CancellationToken,
+    ) -> BoxFuture<'a, Result<(), UpdateFailure>>;
+
+    /// Installs the package verified by the last [`AppUpdater::download`] of `update`. On
+    /// Windows the installer may end the process.
+    ///
+    /// # Errors
+    ///
+    /// [`UpdateFailure::InstallFailed`], or [`UpdateFailure::SignatureInvalid`] when no
+    /// verified package for `update` is held.
+    fn install(&self, update: &AvailableUpdate) -> Result<(), UpdateFailure>;
+
+    /// Restarts the app into the installed version.
+    fn restart(&self);
+}
+
+/// Tells whether a session could be capturing, so an update never interrupts one.
+pub trait SessionActivity: Send + Sync {
+    /// True while any session is `starting`, `capturing`, `paused` or `stopping`.
+    fn has_active_session(&self) -> bool;
+}
+
+/// A final segment sent for analysis.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnalysisSegment {
+    /// Segment id the model may cite as evidence.
+    pub id: SegmentId,
+    /// Source, when the session has two sources.
+    pub source: Option<AudioSourceKind>,
+    /// Start offset.
+    pub start: Duration,
+    /// Text, exactly as transcribed (never translated, FR-053b).
+    pub text: Redacted<SegmentText>,
+}
+
+/// Short summary of an existing record, so the model can point at duplicates and conflicts
+/// (research R7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordSummary {
+    /// Record id the model may reference in `relatesTo`.
+    pub id: RecordId,
+    /// Kind.
+    pub kind: RecordKind,
+    /// Status.
+    pub status: RecordStatus,
+    /// Text, possibly shortened.
+    pub text: Redacted<RecordText>,
+}
+
+/// Input of one analysis call. Everything in it is untrusted session content (FR-029).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnalysisRequest {
+    /// Analysed session.
+    pub session_id: SessionId,
+    /// Language of the session; proposals are written in it (FR-053b).
+    pub language: SessionLanguage,
+    /// New final segments, in `seq` order.
+    pub segments: Vec<AnalysisSegment>,
+    /// Existing records of the session.
+    pub records: Vec<RecordSummary>,
+}
+
+/// Schema-validated output of one analysis call.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct AnalysisOutput {
+    /// Proposed records; the application decides what becomes a record.
+    pub proposals: Vec<Proposal>,
+    /// Tokens consumed (prompt + completion), for the per-session budget (FR-028).
+    pub tokens_used: u32,
+}
+
+/// Input of one contextual question (FR-035): the question plus the session's authorized
+/// context, both sent as delimited data.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuestionRequest {
+    /// Session asked about.
+    pub session_id: SessionId,
+    /// Language the answer must be written in (FR-053b).
+    pub language: SessionLanguage,
+    /// The user's question.
+    pub question: Redacted<QuestionText>,
+    /// Final segments of the session, oldest first.
+    pub segments: Vec<AnalysisSegment>,
+    /// Records of the session.
+    pub records: Vec<RecordSummary>,
+}
+
+/// Schema-validated output of one question call; evidence is not yet checked against the
+/// session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnswerOutput {
+    /// The answer.
+    pub answer: Answer,
+    /// Tokens consumed (prompt + completion).
+    pub tokens_used: u32,
+}
+
+/// Technical analysis and contextual questions.
+///
+/// Implementations offer no tools or functions to the model, send session content only as
+/// delimited data, and accept only output valid against `analysis-output.schema.json`
+/// (contracts/provider-ports.md "Regras de segurança").
+pub trait AnalysisProvider: Send + Sync {
+    /// Non-sensitive description.
+    fn descriptor(&self) -> ProviderDescriptor;
+
+    /// Analyses `request`; honours `cancel` promptly.
+    ///
+    /// # Errors
+    ///
+    /// [`ProviderError::InvalidOutput`] when the output fails validation (FR-030);
+    /// [`ProviderError::Cancelled`], [`ProviderError::Timeout`], [`ProviderError::Unavailable`]
+    /// or [`ProviderError::Other`] otherwise.
+    fn analyze(
+        &self,
+        request: AnalysisRequest,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'_, Result<AnalysisOutput, ProviderError>>;
+
+    /// Answers `request` from the session content only (FR-035, FR-036); honours `cancel`
+    /// promptly.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::analyze`].
+    fn answer(
+        &self,
+        request: QuestionRequest,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'_, Result<AnswerOutput, ProviderError>>;
+}
+
+/// Builds the [`AnalysisProvider`] for a configured analysis provider. Cheap: no network I/O.
+pub trait AnalysisProviderFactory: Send + Sync {
+    /// Analysis provider for `provider`.
+    ///
+    /// # Errors
+    ///
+    /// [`ProviderError::Unavailable`] when the adapter is not supported on this build.
+    fn create(&self, provider: &Provider) -> Result<Arc<dyn AnalysisProvider>, ProviderError>;
+}
+
+/// Refusal by the [`RemoteGate`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum AuthorizationError {
+    /// No granted authorization covers destination and categories.
+    #[error("no authorization covers this request")]
+    NotAuthorized,
+}
+
+/// Single network enforcement point for remote adapters (R9).
+pub trait RemoteGate: Send + Sync {
+    /// `Ok` only when a granted authorization covers the provider's destination and every
+    /// category in `categories`.
+    ///
+    /// # Errors
+    ///
+    /// [`AuthorizationError::NotAuthorized`] otherwise.
+    fn check(
+        &self,
+        provider: &ProviderId,
+        categories: &[DataCategory],
+    ) -> Result<(), AuthorizationError>;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Storage
+// ---------------------------------------------------------------------------------------------
+
+/// Persistence failures, described without content.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum RepositoryError {
+    /// The requested row does not exist.
+    #[error("not found")]
+    NotFound,
+    /// The encryption key cannot be obtained (FR-039a).
+    #[error("secret store unavailable")]
+    SecretStoreUnavailable,
+    /// Stored data cannot be mapped back to domain types.
+    #[error("corrupt stored data in `{0}`")]
+    Corrupt(&'static str),
+    /// Database or file-system error.
+    #[error("storage error: {0}")]
+    Storage(String),
+}
+
+/// Sessions and their selected sources (data-model.md "Session").
+pub trait SessionRepository: Send + Sync {
+    /// Inserts a new session.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn create(&self, session: &Session) -> Result<(), RepositoryError>;
+
+    /// One session.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent.
+    fn get(&self, id: SessionId) -> Result<Session, RepositoryError>;
+
+    /// Stores the session's title, state, failure, timestamps and active duration.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent.
+    fn update(&self, session: &Session) -> Result<(), RepositoryError>;
+
+    /// Every session, newest first (cursor pagination arrives with US4, T105).
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn list(&self) -> Result<Vec<Session>, RepositoryError>;
+
+    /// Sessions stored in `starting`, `capturing`, `paused` or `stopping`.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn list_active(&self) -> Result<Vec<Session>, RepositoryError>;
+
+    /// Stores a session failed as `interrupted` on startup and, if it ever captured, appends a
+    /// trailing `gap(interrupted)` after its last persisted segment, in one transaction
+    /// (FR-007, US2.3).
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent.
+    fn save_interrupted(&self, session: &Session) -> Result<(), RepositoryError>;
+
+    /// Deletes the session and everything it owns (sources, transcript, records and their
+    /// history, runs, questions, export records) in one transaction, then moves the deleted
+    /// pages out of the write-ahead log so no copy of them stays behind in it (FR-042, FR-043).
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent; [`RepositoryError::Storage`].
+    fn delete(&self, id: SessionId) -> Result<(), RepositoryError>;
+}
+
+/// Final segments and gaps of a session's transcript. Each append is its own transaction, so
+/// a later failure or crash never removes what was stored (FR-017).
+pub trait SegmentRepository: Send + Sync {
+    /// Stores a final segment or gap.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the session does not exist; [`RepositoryError::Storage`]
+    /// (e.g. disk full, or a duplicate `seq`).
+    fn append(&self, segment: &TranscriptSegment) -> Result<(), RepositoryError>;
+
+    /// Every segment of `session`, in `seq` order.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn list_by_session(
+        &self,
+        session: SessionId,
+    ) -> Result<Vec<TranscriptSegment>, RepositoryError>;
+
+    /// The `seq` the next segment of `session` takes (0 for an empty transcript).
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn next_seq(&self, session: SessionId) -> Result<u64, RepositoryError>;
+}
+
+/// Technical records and their history (data-model.md "TechnicalRecord", "RecordChange").
+///
+/// Each write is one transaction: a record is never stored without its history entry.
+pub trait RecordRepository: Send + Sync {
+    /// Inserts a new record with its creation entry and evidence.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the session or a cited segment does not exist;
+    /// [`RepositoryError::Storage`].
+    fn insert(
+        &self,
+        record: &TechnicalRecord,
+        creation: &RecordChange,
+    ) -> Result<(), RepositoryError>;
+
+    /// Stores the mutable fields of an existing record (text, status, rationale, lists,
+    /// `updated_at`) and appends `changes`.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent; [`RepositoryError::Storage`].
+    fn update(
+        &self,
+        record: &TechnicalRecord,
+        changes: &[RecordChange],
+    ) -> Result<(), RepositoryError>;
+
+    /// One record.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent.
+    fn get(&self, id: RecordId) -> Result<TechnicalRecord, RepositoryError>;
+
+    /// Every record of `session`, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn list_by_session(&self, session: SessionId) -> Result<Vec<TechnicalRecord>, RepositoryError>;
+
+    /// History of `record`, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn history(&self, record: RecordId) -> Result<Vec<RecordChange>, RepositoryError>;
+}
+
+/// Contextual questions with their evidence (data-model.md "ContextQuestion", FR-038).
+pub trait QuestionRepository: Send + Sync {
+    /// Stores a new question.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the session does not exist.
+    fn insert(&self, question: &ContextQuestion) -> Result<(), RepositoryError>;
+
+    /// Stores the answer or failure of a question, with its evidence, in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the question does not exist.
+    fn update(&self, question: &ContextQuestion) -> Result<(), RepositoryError>;
+
+    /// One question.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the question does not exist.
+    fn get(&self, id: QuestionId) -> Result<ContextQuestion, RepositoryError>;
+
+    /// Questions of `session`, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::Storage`].
+    fn list_by_session(&self, session: SessionId) -> Result<Vec<ContextQuestion>, RepositoryError>;
+}
+
+/// Analysis runs (data-model.md "AnalysisRun").
+pub trait AnalysisRunRepository: Send + Sync {
+    /// Inserts a run.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the session does not exist;
+    /// [`RepositoryError::Storage`].
+    fn insert(&self, run: &AnalysisRun) -> Result<(), RepositoryError>;
+
+    /// Stores the outcome and end of a run.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent; [`RepositoryError::Storage`].
+    fn update(&self, run: &AnalysisRun) -> Result<(), RepositoryError>;
+
+    /// Every run of `session`, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn list_by_session(&self, session: SessionId) -> Result<Vec<AnalysisRun>, RepositoryError>;
+}
+
+/// Export events (data-model.md "ExportRecord"); file paths are never stored.
+pub trait ExportRepository: Send + Sync {
+    /// Stores an export event.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the session does not exist;
+    /// [`RepositoryError::Storage`].
+    fn insert(&self, export: &ExportRecord) -> Result<(), RepositoryError>;
+
+    /// Exports of `session`, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn list_by_session(&self, session: SessionId) -> Result<Vec<ExportRecord>, RepositoryError>;
+}
+
+/// Configured providers and their remote authorizations (data-model.md "Provider",
+/// "ProviderAuthorization").
+pub trait ProviderRepository: Send + Sync {
+    /// Every provider, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn list(&self) -> Result<Vec<Provider>, RepositoryError>;
+
+    /// One provider.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when absent.
+    fn get(&self, id: ProviderId) -> Result<Provider, RepositoryError>;
+
+    /// Inserts or replaces a provider.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn upsert(&self, provider: &Provider) -> Result<(), RepositoryError>;
+
+    /// The most recent authorization of `provider`, granted or revoked.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn latest_authorization(
+        &self,
+        provider: ProviderId,
+    ) -> Result<Option<ProviderAuthorization>, RepositoryError>;
+
+    /// Stores an authorization: a granted one is added as the provider's latest; a revoked one
+    /// updates the provider's latest authorization (history stays in storage).
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] when the provider does not exist, or when revoking
+    /// without a stored authorization.
+    fn save_authorization(
+        &self,
+        authorization: &ProviderAuthorization,
+    ) -> Result<(), RepositoryError>;
+}
+
+/// Non-sensitive key/value application settings.
+pub trait SettingsRepository: Send + Sync {
+    /// Stored value for `key`.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn get(&self, key: &str) -> Result<Option<String>, RepositoryError>;
+
+    /// Stores `value` under `key`.
+    ///
+    /// # Errors
+    ///
+    /// See [`RepositoryError`].
+    fn set(&self, key: &str, value: &str) -> Result<(), RepositoryError>;
+}
+
+/// Credential-store failures.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum SecretStoreError {
+    /// The OS credential store cannot be used (FR-039a).
+    #[error("secret store unavailable")]
+    Unavailable,
+    /// Platform failure, described without the secret.
+    #[error("secret store error: {0}")]
+    Backend(String),
+}
+
+/// OS credential store holding the database key and provider API keys (FR-049).
+pub trait SecretStore: Send + Sync {
+    /// Fails with [`SecretStoreError::Unavailable`] when the store cannot be used.
+    ///
+    /// # Errors
+    ///
+    /// See [`SecretStoreError`].
+    fn check_available(&self) -> Result<(), SecretStoreError>;
+
+    /// The secret stored under `reference`, if any.
+    ///
+    /// # Errors
+    ///
+    /// See [`SecretStoreError`].
+    fn get(&self, reference: &CredentialRef)
+    -> Result<Option<Redacted<Vec<u8>>>, SecretStoreError>;
+
+    /// Stores or replaces a secret.
+    ///
+    /// # Errors
+    ///
+    /// See [`SecretStoreError`].
+    fn set(
+        &self,
+        reference: &CredentialRef,
+        secret: &Redacted<Vec<u8>>,
+    ) -> Result<(), SecretStoreError>;
+
+    /// Deletes a secret; deleting a missing one succeeds.
+    ///
+    /// # Errors
+    ///
+    /// See [`SecretStoreError`].
+    fn delete(&self, reference: &CredentialRef) -> Result<(), SecretStoreError>;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Time and events
+// ---------------------------------------------------------------------------------------------
+
+/// Wall clock; injected so tests control time.
+pub trait Clock: Send + Sync {
+    /// Current instant.
+    fn now(&self) -> Timestamp;
+}
+
+/// Delivers session events to subscribers (the UI channel at the composition root).
+pub trait EventPublisher: Send + Sync {
+    /// Publishes `event` for `session`. Never blocks and never fails the caller.
+    fn publish(&self, session: SessionId, event: SessionEvent);
+}

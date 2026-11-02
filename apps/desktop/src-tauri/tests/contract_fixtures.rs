@@ -1,0 +1,278 @@
+//! Every shared fixture in `specs/001-meeting-sessions/contracts/fixtures/` and
+//! `specs/002-desktop-release-readiness/contracts/fixtures/` round-trips through its Rust DTO
+//! unchanged (research R11).
+
+// Test helpers outside `#[test]` fns are not covered by clippy.toml's test allowances.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use std::path::{Path, PathBuf};
+
+use devcopilot_desktop_lib::commands::IpcError;
+use devcopilot_desktop_lib::commands::audio::{AudioSourceDto, PermissionHelpDto};
+use devcopilot_desktop_lib::commands::diagnostics::{CspViolationDto, EmptyDto};
+use devcopilot_desktop_lib::commands::export::{ExportResultDto, ExportSessionDto};
+use devcopilot_desktop_lib::commands::providers::{
+    AuthorizationPreviewDto, JobIdDto, LocalModelDownloadDto, ProviderAuthorizationDto,
+    ProviderAuthorizeDto, ProviderDto, ProviderIdDto, ProviderSetDefaultDto, ProviderSetSecretDto,
+    ProviderUpsertDto,
+};
+use devcopilot_desktop_lib::commands::questions::{
+    QuestionAskDto, QuestionDto, QuestionToRecordDto,
+};
+use devcopilot_desktop_lib::commands::records::{
+    PlanDto, RecordCreateDto, RecordDto, RecordEditDto, RecordSetStatusDto, RunIdDto,
+};
+use devcopilot_desktop_lib::commands::sessions::{
+    SessionCreateDto, SessionDeleteDto, SessionDetailDto, SessionDto, SessionIdDto, SessionListDto,
+    SessionPageDto, SessionRenameDto, SessionStartDto,
+};
+use devcopilot_desktop_lib::commands::settings::{SettingsDto, SettingsUpdateDto};
+use devcopilot_desktop_lib::commands::updates::{UpdateEvent, UpdateInstallDto, UpdateStatusDto};
+use devcopilot_desktop_lib::events::IpcSessionEvent;
+use devcopilot_desktop_lib::models::{LocalModelDto, ModelDownloadEvent};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+use serde_json::Value;
+
+/// Fixture directories, by feature.
+const FEATURES: [&str; 2] = ["001-meeting-sessions", "002-desktop-release-readiness"];
+
+fn fixtures_dir(feature: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../specs")
+        .join(feature)
+        .join("contracts/fixtures")
+}
+
+/// The directory of `dto`, in whichever feature defines it.
+fn dto_dir(dto: &str) -> PathBuf {
+    FEATURES
+        .iter()
+        .map(|feature| fixtures_dir(feature).join(dto))
+        .find(|dir| dir.is_dir())
+        .unwrap_or_else(|| panic!("no fixture directory for {dto}"))
+}
+
+fn fixtures(dto: &str) -> Vec<(PathBuf, Value)> {
+    let dir = dto_dir(dto);
+    let mut files: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|err| panic!("{}: {err}", dir.display()))
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+        .collect();
+    files.sort();
+    assert!(!files.is_empty(), "no fixtures for {dto}");
+    files
+        .into_iter()
+        .map(|path| {
+            let value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap())
+                .unwrap_or_else(|err| panic!("{}: {err}", path.display()));
+            (path, value)
+        })
+        .collect()
+}
+
+fn assert_round_trip<T: DeserializeOwned + Serialize>(dto: &str) {
+    for (path, value) in fixtures(dto) {
+        let parsed: T = serde_json::from_value(value.clone())
+            .unwrap_or_else(|err| panic!("{}: {err}", path.display()));
+        let back = serde_json::to_value(&parsed).unwrap();
+        assert_eq!(back, value, "{} changed on round trip", path.display());
+    }
+}
+
+#[test]
+fn ipc_error() {
+    assert_round_trip::<IpcError>("IpcError");
+}
+
+#[test]
+fn export_and_delete() {
+    assert_round_trip::<ExportSessionDto>("ExportSessionDto");
+    assert_round_trip::<ExportResultDto>("ExportResultDto");
+    assert_round_trip::<SessionDeleteDto>("SessionDeleteDto");
+}
+
+#[test]
+fn settings() {
+    assert_round_trip::<SettingsDto>("SettingsDto");
+    assert_round_trip::<SettingsUpdateDto>("SettingsUpdateDto");
+}
+
+#[test]
+fn providers() {
+    assert_round_trip::<ProviderDto>("ProviderDto");
+    assert_round_trip::<ProviderUpsertDto>("ProviderUpsertDto");
+    assert_round_trip::<ProviderSetDefaultDto>("ProviderSetDefaultDto");
+}
+
+#[test]
+fn remote_authorization() {
+    assert_round_trip::<ProviderSetSecretDto>("ProviderSetSecretDto");
+    assert_round_trip::<ProviderIdDto>("ProviderIdDto");
+    assert_round_trip::<ProviderAuthorizeDto>("ProviderAuthorizeDto");
+    assert_round_trip::<AuthorizationPreviewDto>("AuthorizationPreviewDto");
+    assert_round_trip::<ProviderAuthorizationDto>("ProviderAuthorizationDto");
+}
+
+#[test]
+fn local_models() {
+    assert_round_trip::<LocalModelDto>("LocalModelDto");
+    assert_round_trip::<LocalModelDownloadDto>("LocalModelDownloadDto");
+    assert_round_trip::<JobIdDto>("JobIdDto");
+    assert_round_trip::<ModelDownloadEvent>("ModelDownloadEvent");
+}
+
+#[test]
+fn sessions() {
+    assert_round_trip::<SessionDto>("SessionDto");
+    assert_round_trip::<SessionCreateDto>("SessionCreateDto");
+    assert_round_trip::<SessionStartDto>("SessionStartDto");
+    assert_round_trip::<SessionIdDto>("SessionIdDto");
+}
+
+#[test]
+fn audio_sources() {
+    assert_round_trip::<AudioSourceDto>("AudioSourceDto");
+    assert_round_trip::<PermissionHelpDto>("PermissionHelpDto");
+}
+
+#[test]
+fn records() {
+    assert_round_trip::<RecordDto>("RecordDto");
+    assert_round_trip::<RecordSetStatusDto>("RecordSetStatusDto");
+    assert_round_trip::<RecordEditDto>("RecordEditDto");
+    assert_round_trip::<RecordCreateDto>("RecordCreateDto");
+    assert_round_trip::<PlanDto>("PlanDto");
+    assert_round_trip::<RunIdDto>("RunIdDto");
+}
+
+#[test]
+fn questions() {
+    assert_round_trip::<QuestionDto>("QuestionDto");
+    assert_round_trip::<QuestionAskDto>("QuestionAskDto");
+    assert_round_trip::<QuestionToRecordDto>("QuestionToRecordDto");
+}
+
+#[test]
+fn session_history() {
+    assert_round_trip::<SessionListDto>("SessionListDto");
+    assert_round_trip::<SessionPageDto>("SessionPageDto");
+    assert_round_trip::<SessionRenameDto>("SessionRenameDto");
+    assert_round_trip::<SessionDetailDto>("SessionDetailDto");
+}
+
+#[test]
+fn session_events() {
+    assert_round_trip::<IpcSessionEvent>("SessionEvent");
+}
+
+#[test]
+fn diagnostics() {
+    assert_round_trip::<CspViolationDto>("CspViolationDto");
+    assert_round_trip::<EmptyDto>("EmptyDto");
+}
+
+#[test]
+fn updates() {
+    assert_round_trip::<UpdateStatusDto>("UpdateStatusDto");
+    assert_round_trip::<UpdateEvent>("UpdateEvent");
+    assert_round_trip::<UpdateInstallDto>("UpdateInstallDto");
+}
+
+#[test]
+fn every_update_status_variant_has_a_fixture() {
+    let mut states: Vec<String> = fixtures("UpdateStatusDto")
+        .into_iter()
+        .map(|(_, value)| value["state"].as_str().unwrap().to_owned())
+        .collect();
+    states.sort();
+    states.dedup();
+    assert_eq!(
+        states,
+        [
+            "available",
+            "blocked_by_session",
+            "checking",
+            "disabled",
+            "downloading",
+            "failed",
+            "idle",
+            "installing",
+            "notice_pending",
+            "up_to_date"
+        ]
+    );
+}
+
+#[test]
+fn every_fixture_directory_is_covered() {
+    let covered = [
+        "AudioSourceDto",
+        "AuthorizationPreviewDto",
+        "CspViolationDto",
+        "EmptyDto",
+        "ExportResultDto",
+        "ExportSessionDto",
+        "IpcError",
+        "JobIdDto",
+        "LocalModelDownloadDto",
+        "LocalModelDto",
+        "ModelDownloadEvent",
+        "PermissionHelpDto",
+        "PlanDto",
+        "ProviderAuthorizationDto",
+        "ProviderAuthorizeDto",
+        "ProviderDto",
+        "ProviderIdDto",
+        "ProviderSetDefaultDto",
+        "ProviderSetSecretDto",
+        "ProviderUpsertDto",
+        "QuestionAskDto",
+        "QuestionDto",
+        "QuestionToRecordDto",
+        "RecordCreateDto",
+        "RecordDto",
+        "RecordEditDto",
+        "RecordSetStatusDto",
+        "RunIdDto",
+        "SessionCreateDto",
+        "SessionDeleteDto",
+        "SessionDetailDto",
+        "SessionDto",
+        "SessionEvent",
+        "SessionIdDto",
+        "SessionListDto",
+        "SessionPageDto",
+        "SessionRenameDto",
+        "SessionStartDto",
+        "SettingsDto",
+        "SettingsUpdateDto",
+        "UpdateEvent",
+        "UpdateInstallDto",
+        "UpdateStatusDto",
+    ];
+    let mut dirs: Vec<String> = FEATURES
+        .iter()
+        .flat_map(|feature| std::fs::read_dir(fixtures_dir(feature)).unwrap())
+        .map(|entry| entry.unwrap())
+        .filter(|entry| entry.path().is_dir())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    dirs.sort();
+    assert_eq!(
+        dirs, covered,
+        "add a round-trip test for new fixture directories"
+    );
+}
+
+#[test]
+fn invalid_values_are_rejected() {
+    let bad_event = serde_json::json!({ "type": "source_status", "seq": 1, "source": "microphone", "status": "muted" });
+    assert!(serde_json::from_value::<IpcSessionEvent>(bad_event).is_err());
+    let bad_question = serde_json::json!({ "id": "q", "sessionId": "s", "question": "?",
+        "evidence": [], "status": "answered", "certainty": "certain", "askedAt": 1 });
+    assert!(serde_json::from_value::<QuestionDto>(bad_question).is_err());
+    let bad_settings = serde_json::json!({ "uiLanguage": "pt-PT" });
+    assert!(serde_json::from_value::<SettingsUpdateDto>(bad_settings).is_err());
+}

@@ -1,14 +1,20 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Encrypted local persistence (SQLCipher) and the OS credential store.
+//!
+//! Session content is only written encrypted, with the key held in the OS credential store
+//! (FR-039a).
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod db;
+pub mod migrations;
+pub mod repos;
+pub mod secret_store;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use db::Database;
+pub use repos::analysis_run_repo::SqliteAnalysisRunRepository;
+pub use repos::export_repo::SqliteExportRepository;
+pub use repos::provider_repo::SqliteProviderRepository;
+pub use repos::question_repo::SqliteQuestionRepository;
+pub use repos::record_repo::SqliteRecordRepository;
+pub use repos::segment_repo::SqliteSegmentRepository;
+pub use repos::session_repo::SqliteSessionRepository;
+pub use repos::settings_repo::SqliteSettingsRepository;
+pub use secret_store::KeyringSecretStore;

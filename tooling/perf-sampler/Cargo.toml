@@ -1,0 +1,20 @@
+[package]
+name = "perf-sampler"
+description = "Release measurement tool: samples CPU/RSS of the app and summarizes latency CSVs (002 research R7). Never shipped."
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "perf-sampler"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+csv = "1.4.0"
+serde.workspace = true
+sysinfo = "0.40.1"
+
+[lints]
+workspace = true

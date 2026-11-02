@@ -1,14 +1,13 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! OS audio capture adapters implementing the application `AudioSource` port.
+//!
+//! Real-time callbacks only write to bounded ring buffers; resampling and any heavy work run
+//! outside the callback (Constitution Art. V.3).
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod cpal_mic;
+pub mod resample;
+pub mod system;
+pub mod unavailable;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use cpal_mic::CpalMicrophone;
+pub use system::system_source;
+pub use unavailable::UnavailableSource;

@@ -1,50 +1,93 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+
+import { Layout, type Page } from "./components/Layout";
+import { ProvidersPage } from "./features/providers/ProvidersPage";
+import { CaptureIndicator } from "./features/sessions/CaptureIndicator";
+import { SessionDetail } from "./features/sessions/SessionDetail";
+import { SessionHistory } from "./features/sessions/SessionHistory";
+import { SessionsPage } from "./features/sessions/SessionsPage";
+import { useSessionStore } from "./features/sessions/sessionStore";
+import { SettingsPage } from "./features/settings/SettingsPage";
+import { UpdateBanner } from "./features/updates/UpdateBanner";
+import { UpdateNotice } from "./features/updates/UpdateNotice";
+import { useUpdateStatus } from "./features/updates/useUpdateStatus";
+import { applyLanguage, DEFAULT_LANGUAGE } from "./i18n";
+import { ipc, toIpcError } from "./ipc/client";
+import type { IpcError, UiLanguage } from "./ipc/types";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const { t } = useTranslation();
+  const [page, setPage] = useState<Page>("sessions");
+  const [language, setLanguage] = useState<UiLanguage>(DEFAULT_LANGUAGE);
+  const [startupError, setStartupError] = useState<IpcError | null>(null);
+  const [openSession, setOpenSession] = useState<string | null>(null);
+  // Lives above the pages so the indicator stays visible on every screen (SC-003).
+  const sessionStore = useSessionStore(ipc);
+  const updates = useUpdateStatus(ipc);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  useEffect(() => {
+    ipc.settingsGet().then(
+      (settings) => {
+        setLanguage(settings.uiLanguage);
+        void applyLanguage(settings.uiLanguage);
+      },
+      (error: unknown) => setStartupError(toIpcError(error)),
+    );
+  }, []);
+
+  function changeLanguage(next: UiLanguage) {
+    setLanguage(next);
+    void applyLanguage(next);
+    // Persisting is best effort: without storage the choice still applies to this run.
+    ipc.settingsUpdate({ uiLanguage: next }).catch(() => undefined);
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
+    <Layout
+      page={page}
+      onNavigate={(next) => {
+        setOpenSession(null);
+        setPage(next);
+      }}
+      language={language}
+      onLanguageChange={changeLanguage}
+      captureIndicator={
+        <CaptureIndicator indicator={sessionStore.state.indicator} />
+      }
+    >
+      {startupError && <p role="alert">{t(startupError.messageKey)}</p>}
+      {updates.status?.state === "notice_pending" && (
+        <UpdateNotice onAcknowledge={updates.acknowledge} />
+      )}
+      <UpdateBanner
+        status={updates.status}
+        error={updates.error}
+        onInstall={updates.install}
+        onCancel={updates.cancel}
+      />
+      {page === "sessions" && (
+        <SessionsPage store={sessionStore} defaultLanguage={language} />
+      )}
+      {page === "history" &&
+        (openSession ? (
+          <SessionDetail
+            sessionId={openSession}
+            client={ipc}
+            onBack={() => setOpenSession(null)}
+          />
+        ) : (
+          <SessionHistory client={ipc} onOpen={setOpenSession} />
+        ))}
+      {page === "providers" && <ProvidersPage />}
+      {page === "settings" && (
+        <SettingsPage
+          onLanguageChange={changeLanguage}
+          updateStatus={updates.status}
+          onCheckUpdates={updates.check}
         />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      )}
+    </Layout>
   );
 }
 

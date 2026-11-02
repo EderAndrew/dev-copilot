@@ -1,0 +1,1 @@
+{ "uiLanguage": "en", "consentReminderDismissed": true, "analysisLimits": { "triggerFinals": 6, "triggerSpeechSecs": 90, "minIntervalSecs": 30, "maxCallsPerHour": 40, "maxTokensPerSession": 200000 }, "updateCheckEnabled": false, "updateNoticeAcknowledged": true, "updateLastCheckedAt": "2026-11-01T12:00:00Z" }

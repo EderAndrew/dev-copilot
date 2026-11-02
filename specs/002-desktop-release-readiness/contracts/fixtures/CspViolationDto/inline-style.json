@@ -1,0 +1,5 @@
+{
+  "effectiveDirective": "style-src-attr",
+  "blockedScheme": "inline",
+  "disposition": "enforce"
+}

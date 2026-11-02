@@ -1,0 +1,1 @@
+{"role": "analysis", "adapter": "anthropic", "endpoint": "https://api.anthropic.com", "model": "claude-opus-5-5", "dataCategories": ["transcript", "questions"]}

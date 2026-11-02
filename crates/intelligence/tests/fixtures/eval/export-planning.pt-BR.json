@@ -1,0 +1,33 @@
+{
+  "id": "export-planning-pt",
+  "language": "pt-BR",
+  "segments": [
+    "Bom dia, a pauta de hoje é o módulo de relatórios.",
+    "O cliente pediu que o export precisa suportar CSV além de PDF.",
+    "Decidimos usar Postgres como banco principal do módulo.",
+    "Os relatórios mensais precisam ficar prontos em até dois segundos.",
+    "Um risco é a biblioteca de PDF não suportar tabelas muito largas.",
+    "Ainda não sabemos se o cliente quer agendamento automático de envio.",
+    "A gente decidiu também que a autenticação vai usar o SSO da empresa.",
+    "Fica como tarefa criar o endpoint de export com paginação.",
+    "Ok, então encerramos por hoje."
+  ],
+  "expected": [
+    { "kind": "requirement", "keywords": ["csv"], "segments": [1] },
+    { "kind": "decision", "keywords": ["postgres"], "segments": [2] },
+    { "kind": "requirement", "keywords": ["dois segundos"], "segments": [3] },
+    { "kind": "decision", "keywords": ["sso"], "segments": [6] },
+    { "kind": "risk", "keywords": ["pdf"], "segments": [4] },
+    { "kind": "open_question", "keywords": ["agendamento"], "segments": [5] },
+    { "kind": "task", "keywords": ["endpoint"], "segments": [7] }
+  ],
+  "questions": [
+    { "question": "Qual banco de dados foi escolhido para o módulo?", "answerable": true, "keywords": ["postgres"], "segments": [2] },
+    { "question": "Quais formatos o export precisa suportar?", "answerable": true, "keywords": ["csv"], "segments": [1] },
+    { "question": "Como vai funcionar a autenticação?", "answerable": true, "keywords": ["sso"], "segments": [6] },
+    { "question": "Qual o prazo para os relatórios mensais ficarem prontos?", "answerable": true, "keywords": ["dois segundos"], "segments": [3] },
+    { "question": "Qual framework de frontend será usado?", "answerable": false, "forbidden": ["react", "angular", "vue", "svelte"] },
+    { "question": "Qual é o orçamento aprovado para o projeto?", "answerable": false, "forbidden": ["mil reais", "reais", "milhões"] },
+    { "question": "Em qual nuvem o módulo será hospedado?", "answerable": false, "forbidden": ["aws", "azure", "gcp", "google cloud"] }
+  ]
+}

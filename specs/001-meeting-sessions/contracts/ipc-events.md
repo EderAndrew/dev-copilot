@@ -1,0 +1,39 @@
+# Contract: Eventos de sessão (núcleo → frontend)
+
+Entregues por `tauri::ipc::Channel<SessionEvent>` aberto com `session_subscribe`. Eventos são ordenados por
+`seq` dentro da sessão; o frontend descarta eventos com `seq` menor que o último aplicado. Ao reconectar, o
+frontend chama `session_get` e volta a assinar.
+
+```ts
+type SessionEvent =
+  | { type: "state_changed"; seq: number; state: SessionState; failure?: FailureReason }
+  | { type: "capture_indicator"; seq: number; active: boolean; paused: boolean; sources: AudioSourceKind[] }
+  | { type: "partial_segment"; seq: number; source?: AudioSourceKind; startMs: number; text: string }
+  | { type: "final_segment"; seq: number; segment: SegmentDto }
+  | { type: "gap"; seq: number; reason: GapReason; startMs: number; durationMs: number }
+  | { type: "source_status"; seq: number; source: AudioSourceKind; status: "ok" | "lost" | "permission_revoked" }
+  | { type: "analysis_status"; seq: number; runId: string; status: "running" | "ok" | "invalid_output" | "provider_error" | "rate_limited"; created?: number }
+  | { type: "record_proposed"; seq: number; record: RecordDto }
+  | { type: "question_answered"; seq: number; question: QuestionDto }
+  | { type: "provider_in_use"; seq: number; role: "transcription" | "analysis" | "questions"; locality: "local" | "remote"; providerId: string }
+  | { type: "provider_fallback"; seq: number; role: "transcription" | "analysis" | "questions"; fromProviderId: string; toProviderId: string }
+  | { type: "transcription_lag"; seq: number; lagMs: number }
+  | { type: "storage_error"; seq: number; messageKey: string };
+```
+
+Garantias:
+- `capture_indicator.active = false` é emitido em até 1 s após `session_stop` (SC-002).
+- `partial_segment` nunca é persistido; é substituído pelo `final_segment` de mesmo `startMs` ou por um `gap`.
+- `provider_in_use` é emitido no início e em qualquer troca de provedor (FR-050, FR-045b).
+- `provider_fallback` é emitido quando um provedor remoto autorizado falha (inclusive por autorização revogada)
+  e um provedor local assume a etapa (FR-045b), seguido de `provider_in_use` do provedor local. Nunca há troca
+  para outro provedor remoto (FR-048).
+- `transcription_lag` é emitido quando o áudio captado e ainda não entregue ao transcritor passa de 15 s
+  (SC-005), e de novo com `lagMs = 0` quando volta a ≤ 5 s (FR-018 "atraso", US2.4). Silêncio não conta como
+  atraso: o transcritor consome o áudio mesmo quando não há fala.
+- `final_segment` e `gap` só são emitidos depois de persistidos; `segment.source` e `partial_segment.source`
+  aparecem apenas em sessões com duas fontes (FR-016). Lacunas podem chegar fora da ordem de `startMs` em
+  relação aos finais (ex.: `overload` é gravada no descarte); o frontend ordena por `startMs`.
+- `question_answered` é emitido depois de persistida a resposta ou a falha (`status = failed`) de uma
+  pergunta; `QuestionDto` está em [ipc-commands.md](./ipc-commands.md#perguntas).
+- Nenhum evento carrega segredos; conteúdo de sessão só é enviado à janela `main`.

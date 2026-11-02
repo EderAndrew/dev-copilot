@@ -14,6 +14,11 @@ node_modules
 
 # Testing
 coverage
+.vitest/
+
+# Local transcription models (downloaded at runtime, never committed)
+ggml-*.bin
+*.bin.part
 
 # Turbo
 .turbo
@@ -39,3 +44,16 @@ yarn-error.log*
 
 # Rust
 /target
+
+# Editors and misc
+*.rs.bk
+*.log
+*.swp
+.idea/
+
+# Release signing material (specs/002, contracts/release-artifacts.md): never committed
+*.p12
+*.pfx
+*.key
+secring.*
+private-keys-v1.d/

@@ -2,5 +2,33 @@
 name = "devcopilot-intelligence"
 edition.workspace = true
 version.workspace = true
+publish.workspace = true
 
+# `whisper-rs` builds whisper.cpp and needs CMake at build time (quickstart §1).
 [dependencies]
+devcopilot-application.workspace = true
+devcopilot-domain.workspace = true
+jsonschema.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "rt", "fs", "io-util", "macros"] }
+tokio-util.workspace = true
+tracing.workspace = true
+whisper-rs.workspace = true
+
+[features]
+# Test constructors for pinned catalog entries (`ModelSpec::for_test`).
+test-support = []
+
+[dev-dependencies]
+devcopilot-application = { workspace = true, features = ["test-support"] }
+devcopilot-intelligence = { path = ".", features = ["test-support"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+wiremock.workspace = true
+
+[lints]
+workspace = true

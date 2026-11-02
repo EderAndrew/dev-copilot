@@ -1,0 +1,11 @@
+{
+  "sessionId": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a70",
+  "sections": [
+    { "kind": "task", "items": [ { "id": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a90", "sessionId": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a70", "kind": "task", "text": "Implementar export CSV", "nature": "observed", "status": "confirmed", "rationale": "", "origin": "ai", "providerId": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a60", "analysisRunId": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a81", "evidence": ["019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a80"], "acceptanceCriteria": ["Exporta 10 mil linhas"], "alternatives": [], "createdAt": 1761600000000, "updatedAt": 1761600060000 } ] },
+    { "kind": "requirement", "items": [] },
+    { "kind": "decision", "items": [] },
+    { "kind": "assumption", "items": [ { "id": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a92", "sessionId": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a70", "kind": "assumption", "text": "Equipe de três pessoas", "nature": "suggested", "status": "confirmed", "rationale": "", "origin": "user", "evidence": [], "acceptanceCriteria": [], "alternatives": [], "createdAt": 1761600000000, "updatedAt": 1761600000000 } ] },
+    { "kind": "risk", "items": [] },
+    { "kind": "open_question", "items": [] }
+  ]
+}

@@ -1,0 +1,438 @@
+{
+  "app": {
+    "title": "Dev Copilot",
+    "loading": "Loading…"
+  },
+  "nav": {
+    "label": "Main navigation",
+    "sessions": "Sessions",
+    "history": "History",
+    "providers": "Providers",
+    "settings": "Settings"
+  },
+  "language": {
+    "label": "Interface language",
+    "pt-BR": "Português (Brasil)",
+    "en": "English"
+  },
+  "capture": {
+    "regionLabel": "Capture status",
+    "on": "Capturing: {{sources}}",
+    "paused": "Capture paused: {{sources}}",
+    "off": "Not capturing"
+  },
+  "sessions": {
+    "title": "Sessions",
+    "empty": "No sessions yet.",
+    "new": "New session",
+    "titleLabel": "Title",
+    "titleRequired": "Enter a title.",
+    "languageLabel": "Conversation language",
+    "sourcesLabel": "Audio sources",
+    "sourceRequired": "Select at least one available source.",
+    "create": "Create session",
+    "stateLabel": "State:",
+    "start": "Start capture",
+    "cancelStart": "Cancel start",
+    "stop": "Stop capture",
+    "stopping": "Stopping…",
+    "newAnother": "Create another session",
+    "state": {
+      "idle": "idle",
+      "starting": "starting",
+      "capturing": "capturing",
+      "paused": "paused",
+      "stopping": "stopping",
+      "ended": "ended",
+      "failed": "failed"
+    },
+    "failure": {
+      "permission_denied": "Capture stopped because audio permission was denied or revoked.",
+      "source_unavailable": "Capture stopped because the audio source became unavailable. Finalized content was kept.",
+      "no_transcriber": "No usable transcription provider was available.",
+      "storage_error": "The session could not be saved locally.",
+      "secret_store_unavailable": "The system credential store became unavailable.",
+      "interrupted": "The app closed during capture. Finalized content was kept.",
+      "internal": "Capture stopped because of an unexpected error."
+    },
+    "pause": "Pause capture",
+    "resume": "Resume capture",
+    "pausedHint": "Capture paused: nothing is captured or processed until you resume. The interval appears as a gap in the transcript."
+  },
+  "sources": {
+    "microphone": "Microphone",
+    "system": "System audio",
+    "unavailable": {
+      "platform_unsupported": "Not available on this platform.",
+      "not_validated_on_platform": "Not yet validated on this platform.",
+      "no_device": "No device found.",
+      "os_version": "Requires a newer operating system version."
+    },
+    "dualHint": "With two sources, each transcript passage shows which source it came from. If one source fails, the other keeps capturing.",
+    "dropped": {
+      "lost": "{{source}} stopped capturing (device lost or unavailable). The other sources continue; it is not reopened automatically.",
+      "permission_revoked": "{{source}} stopped capturing because its permission was denied or revoked. The other sources continue."
+    }
+  },
+  "consent": {
+    "title": "Before capturing",
+    "body": "You are responsible for following your organization's policies and for informing participants and obtaining their consent where applicable. Capture only starts after you confirm.",
+    "dontShowAgain": "Don't show again",
+    "confirm": "I understand, start capture",
+    "cancel": "Cancel"
+  },
+  "permissionHelp": {
+    "title": "How to grant the permission",
+    "generic": "Open the system privacy settings and allow Dev Copilot to use the microphone. Then start the capture again.",
+    "macos": {
+      "microphone": "Open System Settings › Privacy & Security › Microphone and turn on Dev Copilot. Then start the capture again.",
+      "system": "Open System Settings › Privacy & Security and allow system audio recording for Dev Copilot."
+    },
+    "windows": {
+      "microphone": "Open Settings › Privacy & security › Microphone, turn on microphone access and allow desktop apps. Then start the capture again.",
+      "system": "System audio capture on Windows needs no separate permission; check that the output device is active."
+    },
+    "linux": {
+      "microphone": "Check your sound settings (PipeWire/PulseAudio) that the microphone is not muted and the app can access it. In sandboxed installs (Flatpak/Snap), grant the microphone permission. Then start the capture again.",
+      "system": "Check your sound settings (PipeWire/PulseAudio) that a monitor source is available."
+    }
+  },
+  "providers": {
+    "title": "Providers",
+    "empty": "No providers configured.",
+    "help": "Local providers process everything on this computer. A remote provider only receives data after you authorize it, and you can revoke the authorization at any time.",
+    "name": "{{adapter}} ({{model}})",
+    "role": {
+      "transcription": "Transcription",
+      "analysis": "Analysis and questions"
+    },
+    "adapter": {
+      "whisper_local": "Local Whisper",
+      "openai_compatible_stt": "OpenAI-compatible transcription",
+      "anthropic": "Anthropic",
+      "openai_compatible_chat": "OpenAI-compatible chat",
+      "ollama": "Ollama (local)"
+    },
+    "category": {
+      "audio": "Audio",
+      "transcript": "Transcript",
+      "records": "Technical records",
+      "questions": "Questions"
+    },
+    "status": {
+      "not_required": "No remote sending",
+      "configured": "Not authorized: nothing is sent",
+      "authorized": "Authorized",
+      "revoked": "Authorization revoked: nothing is sent"
+    },
+    "credentialStored": "API key kept in the system credential store",
+    "isDefault": "Default",
+    "makeDefault": "Make {{name}} the default",
+    "edit": "Edit {{name}}",
+    "authorize": "Authorize {{name}}…",
+    "revoke": "Revoke authorization of {{name}}",
+    "revoked": "Authorization of {{name}} revoked. No new data will be sent.",
+    "authorized": "Provider authorized.",
+    "add": "Add provider",
+    "form": {
+      "newTitle": "New provider",
+      "editTitle": "Edit provider",
+      "adapter": "Type",
+      "remoteHint": "Remote provider: data leaves this computer only after your authorization. The address must use https.",
+      "localHint": "Local provider: the address must be this computer (127.0.0.1 or localhost).",
+      "finalsOnly": "In remote mode the transcript shows only the final text of each passage, without provisional text.",
+      "endpoint": "Address",
+      "model": "Model",
+      "categories": "Data sent",
+      "secret": "API key (optional)",
+      "secretReplace": "New API key (leave empty to keep the current one)",
+      "reauthorizeHint": "Changing the address or the data sent revokes the current authorization; you will need to authorize again.",
+      "save": "Save",
+      "cancel": "Cancel"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "general": "General",
+    "analysisLimits": "Analysis limits",
+    "analysisLimitsHelp": "They control how often incremental analysis runs and what it costs.",
+    "triggerFinals": "Analyze every N final segments",
+    "triggerSpeechSecs": "Or every N seconds of speech",
+    "minIntervalSecs": "Minimum interval between analyses (seconds)",
+    "maxCallsPerHour": "Maximum calls per hour",
+    "maxTokensPerSession": "Maximum tokens per session",
+    "save": "Save",
+    "saved": "Settings saved.",
+    "invalidNumber": "Enter a whole number.",
+    "updates": {
+      "title": "Updates",
+      "toggle": "Check for updates automatically",
+      "destinations": "Checks contact github.com and GitHub file storage (objects.githubusercontent.com). No session content is sent.",
+      "lastChecked": "Last check: {{when}}",
+      "neverChecked": "No check yet.",
+      "checkNow": "Check now",
+      "checking": "Checking…",
+      "upToDate": "You are on the latest version.",
+      "noticeFirst": "Dismiss the updates notice to be able to check."
+    }
+  },
+  "errors": {
+    "invalidInput": "Invalid value. Check the fields and try again.",
+    "notFound": "Item not found.",
+    "invalidState": "This action is not allowed in the current state.",
+    "permissionDenied": "The operating system denied capture permission.",
+    "sourceUnavailable": "Audio source unavailable.",
+    "noTranscriber": "No usable transcription provider is configured.",
+    "secretStoreUnavailable": "The system credential store is unavailable. Nothing will be saved until it can be accessed.",
+    "authorizationRequired": "This remote provider needs your authorization before it receives data.",
+    "providerError": "The provider failed. Try again later.",
+    "storageError": "Data could not be saved locally.",
+    "internal": "An unexpected error occurred.",
+    "modelDownloadNetwork": "The model could not be downloaded. Check your connection and try again.",
+    "modelVerificationFailed": "The downloaded file does not match the expected model and was discarded.",
+    "modelDownloadStorage": "The model could not be written to disk.",
+    "modelDownloadCancelled": "Download cancelled.",
+    "updatesDisabled": "Update checks are turned off in Settings.",
+    "noticePending": "Dismiss the updates notice first.",
+    "versionMismatch": "The confirmed version is not the last one checked. Check again before installing."
+  },
+  "transcript": {
+    "title": "Transcript",
+    "regionLabel": "Session transcript",
+    "empty": "The transcript appears here as soon as someone speaks.",
+    "at": "at {{time}}",
+    "partialLabel": "Partial, still being recognized:",
+    "gap": "Transcript gap ({{duration}}): {{reason}}",
+    "gapReason": {
+      "paused": "capture paused",
+      "overload": "audio dropped due to overload",
+      "provider_failure": "transcription provider failed",
+      "cancelled_on_stop": "transcription cut off when stopping",
+      "source_lost": "audio source lost",
+      "interrupted": "app closed during capture"
+    },
+    "lag": "The transcript is about {{seconds}} s behind the audio.",
+    "followLatest": "Jump to the latest segment"
+  },
+  "providerInUse": {
+    "label": "Providers in use",
+    "item": "{{stage}}: {{locality}}",
+    "stage": {
+      "transcription": "Transcription",
+      "analysis": "Analysis",
+      "questions": "Questions"
+    },
+    "locality": {
+      "local": "local (on this computer)",
+      "remote": "remote"
+    },
+    "fallback": "The remote {{stage}} provider failed; the local provider took over this stage."
+  },
+  "models": {
+    "title": "Local transcription models",
+    "help": "Local transcription uses a model downloaded once. The download only starts when you ask for it and sends no session data.",
+    "size": "{{size}} MB",
+    "origin": "source: {{origin}}",
+    "inUse": "(in use)",
+    "download": "Download {{name}}",
+    "downloading": "Downloading…",
+    "use": "Use {{name}} for transcription"
+  },
+  "records": {
+    "title": "Technical records",
+    "empty": "Proposals from the analysis show up here as the conversation goes on.",
+    "badgesLabel": "Classification",
+    "kind": {
+      "requirement": "Requirement",
+      "decision": "Decision",
+      "risk": "Risk",
+      "open_question": "Open question",
+      "task": "Task",
+      "assumption": "Assumption"
+    },
+    "nature": {
+      "observed": "Observed",
+      "inferred": "Inferred",
+      "suggested": "Suggested"
+    },
+    "status": {
+      "proposed": "Proposed",
+      "confirmed": "Confirmed",
+      "rejected": "Rejected",
+      "pending": "Pending"
+    },
+    "action": {
+      "confirmed": "Confirm",
+      "rejected": "Reject",
+      "pending": "Mark as pending",
+      "proposed": "Back to proposed"
+    },
+    "actionsLabel": "Review: {{text}}",
+    "userCreated": "Created by you",
+    "conflict": "Conflicts with another record",
+    "duplicate": "Possible duplicate",
+    "rationale": "Rationale:",
+    "acceptanceCriteria": "Acceptance criteria",
+    "alternatives": "Alternatives",
+    "evidence": "Evidence:",
+    "noEvidence": "No evidence segment (inferred or suggested).",
+    "segmentNumber": "segment {{number}}",
+    "segmentIndex": "evidence {{index}}",
+    "analysis": {
+      "running": "Analysing new segments…",
+      "ok_one": "Analysis finished: {{count}} new proposal.",
+      "ok_other": "Analysis finished: {{count}} new proposals.",
+      "invalid_output": "The analysis reply was not in the expected format and was discarded. Existing records were kept.",
+      "provider_error": "The analysis failed. Existing records were kept; the segments will be analysed again next time.",
+      "rate_limited": "Analysis limit reached. Capture continues; new segments wait for the next allowed analysis."
+    }
+  },
+  "history": {
+    "title": "Saved sessions",
+    "empty": "No saved sessions yet.",
+    "duration": "Duration: {{duration}}",
+    "more": "Load more"
+  },
+  "detail": {
+    "back": "Back to history",
+    "rename": "Rename",
+    "createdAt": "Created",
+    "activeDuration": "Active duration",
+    "active": "This session is still in progress; follow it on the Sessions page.",
+    "runFinal": "Run final analysis",
+    "export": "Export…",
+    "delete": "Delete session…"
+  },
+  "plan": {
+    "title": "Development plan",
+    "filter": "Show statuses",
+    "section": {
+      "task": "Technical tasks",
+      "requirement": "Requirements",
+      "decision": "Decisions",
+      "assumption": "Assumptions",
+      "risk": "Risks",
+      "open_question": "Open questions"
+    },
+    "sectionEmpty": "No items.",
+    "edit": "Edit",
+    "save": "Save",
+    "cancel": "Cancel",
+    "text": "Text",
+    "rationale": "Rationale",
+    "criteriaHint": "Acceptance criteria (one per line)",
+    "alternativesHint": "Alternatives (one per line)",
+    "addTitle": "Add item to the plan",
+    "kind": "Kind",
+    "initialStatus": "Status",
+    "add": "Add"
+  },
+  "questions": {
+    "title": "Questions about the session",
+    "label": "Your question",
+    "hint": "Answers use only this session's content. Ctrl+Enter sends.",
+    "waitPending": "Wait for the previous answer before asking again.",
+    "ask": "Ask",
+    "empty": "Ask, for example, what was decided about a topic. Capture continues while the answer is prepared.",
+    "you": "Question:",
+    "status": {
+      "pending": "Waiting for the answer… Capture and transcription continue normally.",
+      "failed": "The question could not be answered. Nothing was changed, and capture and transcription continue normally. Try asking again."
+    },
+    "certainty": {
+      "supported": "Supported by the session",
+      "partial": "Partly supported: part of the answer was not discussed",
+      "no_evidence": "No evidence in the session"
+    },
+    "citations": "Cited evidence",
+    "noCitations": "No excerpt or record of the session supports an answer.",
+    "segmentUnavailable": "excerpt unavailable",
+    "recordCitation": "Record ({{kind}}):",
+    "recordUnavailable": "Record unavailable.",
+    "kindLabel": "Item type",
+    "convert": "Turn into a proposed item",
+    "convertLabel": "Turn the answer into an item: {{question}}",
+    "converted": "Proposed item added to the plan. Review it before confirming."
+  },
+  "export": {
+    "title": "Export session",
+    "unencryptedWarning": "Exported files are not encrypted. Anyone with access to them can read the meeting content; keep them somewhere safe.",
+    "formats": "Formats",
+    "format": {
+      "markdown": "Markdown (readable)",
+      "json": "JSON (structured)"
+    },
+    "content": "Content",
+    "part": {
+      "plan": "Plan, questions and answers",
+      "transcript": "Transcript"
+    },
+    "chooseSomething": "Choose at least one format and one kind of content.",
+    "choosingDestination": "Choose where to save in the system window…",
+    "written": "Files written: {{files}}",
+    "cancelled": "Export cancelled; no file was written.",
+    "submit": "Export",
+    "close": "Close"
+  },
+  "deleteSession": {
+    "title": "Delete “{{title}}”?",
+    "stopFirst": "This session is still running. Stop capture before deleting it.",
+    "warning": {
+      "secureDeletion": "The content is removed from this computer's encrypted database, but secure removal is not guaranteed: SSDs, snapshots and the file system may keep copies of old data.",
+      "backups": "System backups made before the deletion still contain this session.",
+      "exportedFiles": "Files already exported are not deleted; remove them yourself if needed.",
+      "irreversible": "This cannot be undone."
+    },
+    "confirm": "Delete permanently",
+    "deleting": "Deleting…",
+    "cancel": "Cancel"
+  },
+  "authorization": {
+    "title": "Authorize sending data to {{destination}}?",
+    "titleLoading": "Authorize remote provider?",
+    "nothingSent": "Nothing is sent before you accept. If you decline, nothing is sent.",
+    "destination": "Destination",
+    "categories": "Data that will be sent",
+    "retention": "Retention",
+    "revocable": "You can revoke this authorization at any time under Providers.",
+    "accept": "Authorize",
+    "decline": "Decline"
+  },
+  "updates": {
+    "notice": {
+      "title": "Dev Copilot updates",
+      "body": "Once you dismiss this notice, the app checks for a new version at startup and every 24 hours. A check is a request without a body: it sends no session content or credentials, only what any download reveals (IP address and app version). Nothing is installed without your confirmation, and every package has its signature verified first.",
+      "destinationsLabel": "Hosts contacted:",
+      "destination": {
+        "manifest": "github.com: file with the latest version (latest.json)",
+        "assets": "objects.githubusercontent.com: GitHub file storage, to download the package you confirm"
+      },
+      "settingsHint": "You can turn checks off at any time in Settings › Updates.",
+      "acknowledge": "Got it"
+    },
+    "banner": {
+      "available": "Version {{version}} available",
+      "notesLabel": "What's new",
+      "install": "Install…",
+      "downloading": "Downloading version {{version}}…",
+      "progressLabel": "Download progress",
+      "cancel": "Cancel download",
+      "installing": "Installing version {{version}}. The app will restart.",
+      "blocked": "The update to version {{version}} waits for the session in progress to end. Stop the session and try again.",
+      "retry": "Try installing again"
+    },
+    "confirm": {
+      "title": "Install version {{version}}?",
+      "body": "The package will be downloaded and its signature verified before installing. The app restarts at the end. Installation never happens while a session is in progress.",
+      "confirm": "Download and install",
+      "cancel": "Not now"
+    },
+    "failed": {
+      "network": "Could not check for or download the update. Check your connection and try again.",
+      "signature_invalid": "The downloaded package does not have a valid signature and was discarded. The installed version is unchanged.",
+      "manifest_invalid": "The update information received is invalid. The installed version is unchanged.",
+      "download_interrupted": "The download was interrupted. The installed version is unchanged.",
+      "install_failed": "Could not install the update. The installed version is unchanged."
+    }
+  }
+}

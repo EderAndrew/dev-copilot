@@ -1,14 +1,25 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Dev Copilot use cases and the ports they depend on.
+//!
+//! Infrastructure crates implement these ports; they are wired at the composition root in
+//! `apps/desktop/src-tauri` (Constitution Art. II.3).
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod analysis_service;
+pub mod capture_pipeline;
+pub mod error;
+pub mod events;
+pub mod export_service;
+mod in_flight;
+pub mod plan;
+pub mod ports;
+pub mod provider_service;
+pub mod question_service;
+pub mod record_service;
+pub mod session_service;
+pub mod settings_service;
+pub mod transcription;
+pub mod update_service;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+#[cfg(any(test, feature = "test-support"))]
+pub mod testing;
+
+pub use error::{ApplicationError, ErrorCode};

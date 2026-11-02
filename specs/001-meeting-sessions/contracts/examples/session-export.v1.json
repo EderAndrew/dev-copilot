@@ -1,0 +1,171 @@
+{
+  "exportedAt": "2026-10-27T18:00:00Z",
+  "format": "devcopilot.session-export",
+  "questions": [
+    {
+      "answer": "CSV, conforme pedido na reunião.",
+      "askedAt": "2026-10-27T17:50:00Z",
+      "certainty": "supported",
+      "evidence": [
+        {
+          "id": "0192f3a1-0000-7000-8000-000000000011",
+          "type": "segment"
+        },
+        {
+          "id": "0192f3a1-0000-7000-8000-000000000021",
+          "type": "record"
+        }
+      ],
+      "id": "0192f3a1-0000-7000-8000-000000000041",
+      "question": "Qual formato de exportação foi pedido?"
+    }
+  ],
+  "records": [
+    {
+      "acceptanceCriteria": [],
+      "alternatives": [],
+      "createdAt": "2026-10-27T17:02:00Z",
+      "evidenceSegmentIds": [
+        "0192f3a1-0000-7000-8000-000000000011"
+      ],
+      "flags": {
+        "conflictsWith": null,
+        "duplicateOf": null
+      },
+      "history": [
+        {
+          "actor": "ai",
+          "at": "2026-10-27T17:02:00Z",
+          "field": "created",
+          "newValue": "proposed",
+          "oldValue": null
+        },
+        {
+          "actor": "user",
+          "at": "2026-10-27T17:30:00Z",
+          "field": "status",
+          "newValue": "confirmed",
+          "oldValue": "proposed"
+        }
+      ],
+      "id": "0192f3a1-0000-7000-8000-000000000021",
+      "kind": "requirement",
+      "nature": "observed",
+      "origin": {
+        "analysisRunId": "0192f3a1-0000-7000-8000-000000000031",
+        "type": "ai"
+      },
+      "rationale": "Pedido explícito.",
+      "status": "confirmed",
+      "text": "O export precisa suportar CSV",
+      "updatedAt": "2026-10-27T17:30:00Z"
+    },
+    {
+      "acceptanceCriteria": [],
+      "alternatives": [
+        "Criar uma fila nova"
+      ],
+      "createdAt": "2026-10-27T17:03:00Z",
+      "evidenceSegmentIds": [
+        "0192f3a1-0000-7000-8000-000000000013"
+      ],
+      "flags": {
+        "conflictsWith": null,
+        "duplicateOf": null
+      },
+      "history": [
+        {
+          "actor": "ai",
+          "at": "2026-10-27T17:03:00Z",
+          "field": "created",
+          "newValue": "proposed",
+          "oldValue": null
+        }
+      ],
+      "id": "0192f3a1-0000-7000-8000-000000000022",
+      "kind": "decision",
+      "nature": "inferred",
+      "origin": {
+        "analysisRunId": "0192f3a1-0000-7000-8000-000000000031",
+        "type": "ai"
+      },
+      "rationale": "",
+      "status": "proposed",
+      "text": "Usar a fila existente",
+      "updatedAt": "2026-10-27T17:03:00Z"
+    },
+    {
+      "acceptanceCriteria": [
+        "Gera um arquivo .csv válido",
+        "Inclui cabeçalho"
+      ],
+      "alternatives": [],
+      "createdAt": "2026-10-27T17:40:00Z",
+      "evidenceSegmentIds": [],
+      "flags": {
+        "conflictsWith": null,
+        "duplicateOf": null
+      },
+      "history": [
+        {
+          "actor": "user",
+          "at": "2026-10-27T17:40:00Z",
+          "field": "created",
+          "newValue": "pending",
+          "oldValue": null
+        }
+      ],
+      "id": "0192f3a1-0000-7000-8000-000000000023",
+      "kind": "task",
+      "nature": "suggested",
+      "origin": {
+        "type": "user"
+      },
+      "rationale": "",
+      "status": "pending",
+      "text": "Implementar exportação CSV",
+      "updatedAt": "2026-10-27T17:40:00Z"
+    }
+  ],
+  "session": {
+    "activeDurationSecs": 2580,
+    "endedAt": "2026-10-27T17:45:00Z",
+    "id": "0192f3a1-0000-7000-8000-000000000001",
+    "language": "pt-BR",
+    "sources": [
+      "microphone"
+    ],
+    "startedAt": "2026-10-27T17:00:00Z",
+    "state": "ended",
+    "title": "Revisão da API de exportação"
+  },
+  "transcript": [
+    {
+      "endMs": 4200,
+      "id": "0192f3a1-0000-7000-8000-000000000011",
+      "seq": 0,
+      "source": "microphone",
+      "startMs": 0,
+      "text": "O export precisa suportar CSV.",
+      "type": "final"
+    },
+    {
+      "durationMs": 60000,
+      "id": "0192f3a1-0000-7000-8000-000000000012",
+      "reason": "paused",
+      "seq": 1,
+      "startMs": 4200,
+      "type": "gap"
+    },
+    {
+      "endMs": 70000,
+      "id": "0192f3a1-0000-7000-8000-000000000013",
+      "seq": 2,
+      "source": "microphone",
+      "startMs": 64200,
+      "text": "Vamos usar a fila existente, sem <b>HTML</b> nem [links](http://exemplo).",
+      "type": "final"
+    }
+  ],
+  "version": 1
+}

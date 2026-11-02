@@ -1,0 +1,1 @@
+{"id": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a7d", "role": "analysis", "adapter": "anthropic", "locality": "remote", "endpoint": "https://api.anthropic.com", "model": "claude-opus-5-5", "dataCategories": ["transcript", "records", "questions"], "isDefault": true, "authorization": "authorized", "hasCredential": true}

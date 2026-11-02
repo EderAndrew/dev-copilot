@@ -1,0 +1,5 @@
+{
+  "effectiveDirective": "img-src",
+  "blockedScheme": "https",
+  "disposition": "enforce"
+}

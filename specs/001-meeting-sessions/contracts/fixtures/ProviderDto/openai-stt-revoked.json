@@ -1,0 +1,1 @@
+{"id": "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a7e", "role": "transcription", "adapter": "openai_compatible_stt", "locality": "remote", "endpoint": "https://api.openai.com/v1", "model": "whisper-1", "dataCategories": ["audio"], "isDefault": false, "authorization": "revoked", "hasCredential": false}
