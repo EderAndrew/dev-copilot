@@ -32,9 +32,22 @@ docs/adr/                  Architecture Decision Records
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cargo audit && cargo deny check
+pnpm --filter appsdesktop lint && pnpm --filter appsdesktop format:check
 pnpm --filter appsdesktop check
+pnpm --filter appsdesktop test
+pnpm --filter appsdesktop build && pnpm --filter appsdesktop test:dist   # production bundle has no inline styles
+node --test "tooling/release/*.test.mjs"
 pnpm --filter appsdesktop tauri dev
+
+# CPU/memory of the installed app (docs/release/v0.1.0/runbook-us5.md)
+cargo run -p perf-sampler --release -- sample --process "Dev Copilot" --interval 5 --out samples.csv
+cargo run -p perf-sampler --release -- summarize --samples samples.csv --warmup-min 10
+cargo run -p perf-sampler --release -- summarize --metrics metrics-<date>.csv   # DEVCOPILOT_METRICS=1 latencies
 ```
+
+Full CI gate list: `specs/002-desktop-release-readiness/quickstart.md` §1. Release tag procedure:
+`docs/release/signing-and-distribution.md` ("Cortar uma tag"); rollback: `docs/release/rollback.md`.
 
 ## Code Style
 

@@ -39,7 +39,9 @@ const remote: ProviderDto = {
   hasCredential: true,
 };
 
-const state: { emit: (event: SessionEvent) => void } = { emit: () => undefined };
+const state: { emit: (event: SessionEvent) => void } = {
+  emit: () => undefined,
+};
 
 vi.mock("./ipc/client", async (importActual) => {
   const actual = await importActual<typeof import("./ipc/client")>();
@@ -171,9 +173,7 @@ describe("accessibility", () => {
 
     await page(user, "Pausar captura");
     expect(ipc.sessionPause).toHaveBeenCalled();
-    act(() =>
-      state.emit({ type: "state_changed", seq: 3, state: "paused" }),
-    );
+    act(() => state.emit({ type: "state_changed", seq: 3, state: "paused" }));
     await page(user, "Parar captura");
     expect(ipc.sessionStop).toHaveBeenCalled();
   });

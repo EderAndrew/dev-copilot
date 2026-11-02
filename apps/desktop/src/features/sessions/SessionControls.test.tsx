@@ -62,7 +62,9 @@ describe("SessionControls", () => {
   it("pauses and resumes with the keyboard (US9)", async () => {
     const user = userEvent.setup();
     const capturing = renderControls("capturing");
-    expect(screen.queryByRole("button", { name: "Retomar captura" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Retomar captura" }),
+    ).toBeNull();
     await user.tab();
     expect(document.activeElement).toBe(
       screen.getByRole("button", { name: "Pausar captura" }),

@@ -702,9 +702,19 @@ test channel completes within 2 hours without local data loss.
   `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo audit`,
   `cargo deny check`, gitleaks, `pnpm --filter appsdesktop check`, `test:dist`). Record the results in
   `docs/release/v0.1.0/checklist.md` item 1.
+  *Local dry run in the Phase 11 prep (2026-11-02, commit after `28f7e99`), not evidence: every CI gate passed
+  except `format:check`, which flagged 4 frontend files (line wrapping only). They were reformatted with
+  Prettier 3.9.6. The task list above lacks gates that `ci.yml` runs: `pnpm audit --prod`, `format:check`,
+  `lint`, the Vitest suite and `node --test "tooling/release/*.test.mjs"`. Record those too. Run them with
+  Node ≥ 24; the dry run used Node 22, which pnpm only warns about. Still open: the run on the final
+  candidate commit, locally and in CI.*
 - [ ] T098 Run `specs/002-desktop-release-readiness/quickstart.md` §1–§8 end to end, fix any stale command or
   path in the quickstart, and mark the result in `docs/release/v0.1.0/checklist.md`.
-- [ ] T099 [P] Update the `CLAUDE.md` "Commands" section with `pnpm --filter appsdesktop test:dist`, the
+  *Phase 11 prep: §1 run in full and corrected (it now mirrors `ci.yml`, and `check` is only `tsc`; the
+  `style` rule is in `lint`). §2 log name corrected to the daily `devcopilot.log.<date>`. §7 `summarize` now
+  uses `cargo run -p perf-sampler`. §8 gains the rollback rehearsal and reproduction steps. §2–§8 still need
+  the signed candidate and real hardware.*
+- [X] T099 [P] Update the `CLAUDE.md` "Commands" section with `pnpm --filter appsdesktop test:dist`, the
   `perf-sampler` usage and the release tag procedure link.
 
 ---

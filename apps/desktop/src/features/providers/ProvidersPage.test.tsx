@@ -66,7 +66,9 @@ describe("ProvidersPage", () => {
     const item = await screen.findByRole("listitem", {
       name: "Anthropic (claude-opus-5-5)",
     });
-    expect(within(item).getByText("Não autorizado: nada é enviado")).toBeTruthy();
+    expect(
+      within(item).getByText("Não autorizado: nada é enviado"),
+    ).toBeTruthy();
     expect(
       within(item).getByText("Chave de API guardada no cofre do sistema"),
     ).toBeTruthy();
@@ -96,10 +98,12 @@ describe("ProvidersPage", () => {
     const user = userEvent.setup();
     const { client } = setup([]);
     await screen.findByText("Nenhum provedor configurado.");
-    await user.click(screen.getByRole("button", { name: "Adicionar provedor" }));
-    expect(
-      (screen.getByLabelText("Endereço") as HTMLInputElement).value,
-    ).toBe("https://api.anthropic.com");
+    await user.click(
+      screen.getByRole("button", { name: "Adicionar provedor" }),
+    );
+    expect((screen.getByLabelText("Endereço") as HTMLInputElement).value).toBe(
+      "https://api.anthropic.com",
+    );
     await user.type(screen.getByLabelText("Chave de API (opcional)"), "sk-xyz");
     await user.click(screen.getByRole("button", { name: "Salvar" }));
     expect(client.providerUpsert).toHaveBeenCalledWith({

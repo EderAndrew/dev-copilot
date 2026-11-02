@@ -42,7 +42,10 @@ const DEFAULTS: Record<
   { endpoint: string; model: string }
 > = {
   whisper_local: { endpoint: "", model: "" },
-  anthropic: { endpoint: "https://api.anthropic.com", model: "claude-opus-5-5" },
+  anthropic: {
+    endpoint: "https://api.anthropic.com",
+    model: "claude-opus-5-5",
+  },
   openai_compatible_chat: { endpoint: "https://api.openai.com/v1", model: "" },
   openai_compatible_stt: {
     endpoint: "https://api.openai.com/v1",
@@ -141,7 +144,9 @@ export function ProviderForm({
       onSubmit={(event) => void submit(event)}
     >
       <h3 id={`${ids}-title`}>
-        {provider ? t("providers.form.editTitle") : t("providers.form.newTitle")}
+        {provider
+          ? t("providers.form.editTitle")
+          : t("providers.form.newTitle")}
       </h3>
       <label>
         {t("providers.form.adapter")}
@@ -160,7 +165,9 @@ export function ProviderForm({
         </select>
       </label>
       <p>
-        {remote ? t("providers.form.remoteHint") : t("providers.form.localHint")}
+        {remote
+          ? t("providers.form.remoteHint")
+          : t("providers.form.localHint")}
       </p>
       {adapter === "openai_compatible_stt" && (
         <p>{t("providers.form.finalsOnly")}</p>

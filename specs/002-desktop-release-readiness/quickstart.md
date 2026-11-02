@@ -6,15 +6,27 @@ de teste não confidenciais (Art. IV.16).
 
 ## 1. Checagens automáticas (desenvolvimento e CI)
 
+Os mesmos gates do `.github/workflows/ci.yml`:
+
 ```sh
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace                       # inclui csp_policy, update_service e redação do CSV de métricas
-pnpm --filter appsdesktop check              # inclui a regra de lint que proíbe prop `style`
+cargo audit
+cargo deny check
+gitleaks detect --source . --redact
+pnpm install --frozen-lockfile
+pnpm audit --prod --audit-level high
+pnpm --filter appsdesktop lint               # inclui a regra que proíbe a prop `style`
+pnpm --filter appsdesktop format:check
+pnpm --filter appsdesktop check              # tsc --noEmit
+pnpm --filter appsdesktop test
 pnpm --filter appsdesktop build && pnpm --filter appsdesktop test:dist   # dist sem <style>/style=
+node --test "tooling/release/*.test.mjs"     # manifesto, coleta de pacotes e assinatura Windows
 ```
 
-Esperado: tudo verde; `csp_policy` falha se alguém reintroduzir `'unsafe-inline'`.
+Esperado: tudo verde; `csp_policy` falha se alguém reintroduzir `'unsafe-inline'`. Use Node ≥ 24, como no CI
+(`engines` do `package.json`); com uma versão menor o `pnpm` só avisa, mas o resultado não vale como evidência.
 
 ## 2. CSP estrita no build de produção local (antes de qualquer assinatura)
 
@@ -22,7 +34,8 @@ Esperado: tudo verde; `csp_policy` falha se alguém reintroduzir `'unsafe-inline
    A `devCsp` só vale em `tauri dev`, que não serve para esta validação.
 2. Percorra Sessões → nova sessão → consentimento → captura → pausa → parada → Histórico → Detalhe →
    Exportação (cancelar) → Exclusão (cancelar) → Provedores → Configurações.
-3. Confira no log (`devcopilot.log`, no diretório de logs do app; caminhos em `docs/local-data.md`):
+3. Confira no log do dia (`devcopilot.log.<AAAA-MM-DD>`, rotação diária, no diretório de logs do app; caminhos
+   em `docs/local-data.md`):
    esperado **zero** linhas `csp_violation`.
 4. Faça isso nos três SOs. Uma violação é um achado do R1: corrija ou siga o caminho de exceção.
 
@@ -79,7 +92,7 @@ cronometradas) e registre-os no arquivo de evidência da plataforma. Casos com a
    combinação; mais uma execução ao vivo.
 3. CPU e memória: `cargo run -p perf-sampler --release -- sample --process "Dev Copilot" --interval 5 --out <csv>`
    (ou `--pid <pid>` se o nome do processo instalado for outro ou não for único), depois
-   `perf-sampler summarize --samples <csv> --warmup-min 10`, durante uma sessão de 2 h no app instalado.
+   `cargo run -p perf-sampler --release -- summarize --samples <csv> --warmup-min 10`, durante uma sessão de 2 h no app instalado.
    Amostre também o processo da WebView (`docs/release/v0.1.0/runbook-us5.md` §5).
 4. Análise: `DEVCOPILOT_EVAL_PROVIDER=ollama DEVCOPILOT_EVAL_MODEL=<modelo> cargo test -p devcopilot-intelligence
    --release --test evaluation --test qa_evaluation --test prompt_injection -- --nocapture`, com o modelo e o
@@ -89,5 +102,9 @@ cronometradas) e registre-os no arquivo de evidência da plataforma. Casos com a
 
 ## 8. Decisão
 
-Preencha `docs/release/v0.1.0/checklist.md`. Com 12/12 itens resolvidos e zero `release-blocker`, registre
-`decision.md` e só então publique o rascunho do GitHub. Se um artefato for reconstruído, a aprovação caduca.
+1. Ensaie o rollback no canal de teste (`docs/release/rollback.md`; registro em
+   `docs/release/v0.1.0/rollback-rehearsal.md`, ≤ 2 h, SC-013).
+2. Outra pessoa do projeto reproduz um release de teste só com a documentação
+   (`docs/release/v0.1.0/reproduction.md`, SC-012).
+3. Preencha `docs/release/v0.1.0/checklist.md`. Com 12/12 itens resolvidos e zero `release-blocker`, registre
+   `decision.md` e só então publique o rascunho do GitHub. Se um artefato for reconstruído, a aprovação caduca.
