@@ -390,7 +390,7 @@ without bypassing any OS security control; a tampered artifact fails verificatio
 
 ### Tests for User Story 1 (REQUIRED) ⚠️
 
-- [ ] T048 [P] [US1] Write `apps/desktop/src-tauri/tests/bundle_config.rs`, which asserts in `tauri.conf.json`:
+- [X] T048 [P] [US1] Write `apps/desktop/src-tauri/tests/bundle_config.rs`, which asserts in `tauri.conf.json`:
   - `bundle.targets` is exactly `["app","dmg","nsis","deb","appimage"]` (no MSI).
   - `bundle.macOS.minimumSystemVersion == "13.0"`.
   - `bundle.macOS.entitlements` points to `Entitlements.plist`, and that plist contains **only**
@@ -398,17 +398,20 @@ without bypassing any OS security control; a tampered artifact fails verificatio
   - `bundle.windows.nsis.installMode == "currentUser"` and `webviewInstallMode.type == "embedBootstrapper"`.
   - `bundle.createUpdaterArtifacts == true`.
   - `Info.plist` keeps `NSMicrophoneUsageDescription`.
-- [ ] T049 [P] [US1] Write `tooling/release/make-manifest.test.mjs` (Node test runner) for T052:
+- [X] T049 [P] [US1] Write `tooling/release/make-manifest.test.mjs` (Node test runner) for T052:
   - It produces `latest.json` per `contracts/release-artifacts.md` with HTTPS URLs only.
   - It omits a platform when its `.sig` is missing.
   - `SHA256SUMS` covers every asset except `SHA256SUMS*`.
   - It fails if an asset is missing from the sums.
   Add a step `node --test tooling/release/` to the Policy job in `.github/workflows/ci.yml` and to the `gates`
   job of `.github/workflows/release.yml` (T051).
+  *Done: the step is `node --test "tooling/release/*.test.mjs"` (a bare directory is not a test pattern). It
+  runs in the Policy job, which `release.yml` reuses through `workflow_call`. Also covers `collect-bundle.mjs` and
+  `windows-sign.mjs`.*
 
 ### Implementation for User Story 1
 
-- [ ] T050 [US1] Create `apps/desktop/src-tauri/Entitlements.plist` with only
+- [X] T050 [US1] Create `apps/desktop/src-tauri/Entitlements.plist` with only
   `com.apple.security.device.audio-input`. Update the `bundle` section of
   `apps/desktop/src-tauri/tauri.conf.json`:
   - targets `["app","dmg","nsis","deb","appimage"]`.
@@ -419,7 +422,11 @@ without bypassing any OS security control; a tampered artifact fails verificatio
     `gnome-keyring | kwalletmanager`. A Secret Service provider is recommended, not required, because the app
     already blocks with an explanation when none is running (001/FR-039a, matrix case 13).
   T048 must pass.
-- [ ] T051 [US1] Write `.github/workflows/release.yml`:
+  *Done: `signCommand` runs `node ../../../tooling/release/windows-sign.mjs %1`. The provider comes from
+  `WINDOWS_SIGN_PROVIDER`, and only `artifact-signing` (Azure Artifact Signing, formerly Trusted Signing) is
+  implemented, through `artifact-signing-cli`. The script fails closed in CI or a release, and verifies with
+  `Get-AuthenticodeSignature`. If T005 picks OV, add that provider.*
+- [X] T051 [US1] Write `.github/workflows/release.yml`:
   - Trigger: tags `v*.*.*` (including `-rc.N`).
   - Job `gates` reuses the `ci.yml` steps, plus `RELEASE_TAG=$GITHUB_REF_NAME cargo test --test version_consistency`.
   - Matrix `build` (`macos-15` aarch64 and x86_64, `windows-latest`, `ubuntu-22.04`) under
@@ -432,13 +439,18 @@ without bypassing any OS security control; a tampered artifact fails verificatio
   - A final job runs `tooling/release/make-manifest.mjs` and creates a **draft** GitHub release with all
     assets.
   - Every signing step fails the job on error, and no step echoes secrets (FR-005, FR-006).
-- [ ] T052 [US1] Implement `tooling/release/make-manifest.mjs`, which builds `latest.json` and `SHA256SUMS`
+  *Done: `gates` is `ci.yml` via `workflow_call`. `release-config` runs `version_consistency`, `updater_config`
+  and `bundle_config` with `RELEASE_TAG`, so it fails until T006. Credentials are checked before the build, and
+  every signature, notarization and staple is checked after it. The DMG is signed, notarized and stapled
+  explicitly. Assets get canonical names via `collect-bundle.mjs`. No build cache is restored. Actions are
+  pinned by tag, like `ci.yml`.*
+- [X] T052 [US1] Implement `tooling/release/make-manifest.mjs`, which builds `latest.json` and `SHA256SUMS`
   from the downloaded build artifacts. T049 must pass.
-- [ ] T053 [P] [US1] Write `docs/release/signing-and-distribution.md`: prerequisites, each identity and key
+- [X] T053 [P] [US1] Write `docs/release/signing-and-distribution.md`: prerequisites, each identity and key
   and where it lives (names only), how to cut a tag, what each workflow job does, how to sign `SHA256SUMS`
   locally (`gpg --detach-sign --armor`), how to renew certificates, and how to rotate keys. It must be detailed
   enough for SC-012.
-- [ ] T054 [P] [US1] Write `docs/release/verify-downloads.md` per the user procedure in
+- [X] T054 [P] [US1] Write `docs/release/verify-downloads.md` per the user procedure in
   `contracts/release-artifacts.md`: commands for macOS (`shasum`, `spctl -a -vv`), Windows (`Get-FileHash`,
   file properties/UAC) and Linux (`gpg --verify`, `sha256sum -c --ignore-missing`), and the release key
   fingerprint. It must not contain any instruction to disable Gatekeeper, SmartScreen or other controls
@@ -448,6 +460,8 @@ without bypassing any OS security control; a tampered artifact fails verificatio
   - Jobs wait for environment approval.
   - Remove one signing secret → the job fails and no assets are attached.
   Record the results in `docs/release/v0.1.0/pipeline-rehearsal.md` and fix `release.yml`.
+  *Note: use `v0.0.1-rc.1` with the fork's version set to `0.0.1`. The version gate rejects `-test.N`
+  (`docs/release/signing-and-distribution.md`, "Ensaio do pipeline").*
 - [ ] T056 [US1] Manual: confirm on Windows 10 that the signed `-setup.exe` installs without admin rights,
   installs WebView2 via the embedded bootstrapper when it is missing, and shows the verified publisher in UAC.
   Record in `docs/release/v0.1.0/pipeline-rehearsal.md`. Depends on T005.

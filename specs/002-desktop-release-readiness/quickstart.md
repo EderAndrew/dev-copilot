@@ -28,7 +28,8 @@ Esperado: tudo verde; `csp_policy` falha se alguém reintroduzir `'unsafe-inline
 
 ## 3. Ensaio do pipeline de release num canal de teste
 
-1. Num fork ou repositório de teste com identidades de teste, crie a tag `v0.0.1-test.1`. O workflow
+1. Num fork ou repositório de teste com identidades de teste e versão `0.0.1`, crie a tag `v0.0.1-rc.1`
+   (o gate de versão só aceita `v<versão>` e `-rc.N`; passos em `docs/release/signing-and-distribution.md`). O workflow
    `release.yml` gera um rascunho com os artefatos, `SHA256SUMS`, `latest.json` e atestações.
 2. Confirme que, sem aprovação do environment `release`, nenhum job de assinatura roda.
 3. Remova de propósito um segredo de assinatura e verifique que o job falha e o rascunho fica sem artefatos

@@ -5,6 +5,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Reused as the `gates` job of release.yml.
+  workflow_call:
 
 permissions:
   contents: read
@@ -64,6 +66,10 @@ jobs:
         run: |
           pnpm --filter appsdesktop lint
           pnpm --filter appsdesktop format:check
+
+      # Release manifest, bundle collection and signing hook (specs/002 T049).
+      - name: Release tooling tests
+        run: node --test "tooling/release/*.test.mjs"
 
   build-test:
     name: Build and test (${{ matrix.os }})

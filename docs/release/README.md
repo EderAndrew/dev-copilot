@@ -8,8 +8,8 @@ pasta valem para todos os releases. Cada release tem uma pasta própria com as e
 | Documento | Conteúdo | Status |
 |-----------|----------|--------|
 | [checklist.md](checklist.md) | Os 12 critérios de publicação, cada um apontando para a evidência | modelo pronto (T011) |
-| [signing-and-distribution.md](signing-and-distribution.md) | Identidades, chaves, pipeline, assinatura local do `SHA256SUMS`, renovação e rotação | a criar (T008, T053) |
-| [verify-downloads.md](verify-downloads.md) | Como o usuário verifica os downloads em cada SO | a criar (T054) |
+| [signing-and-distribution.md](signing-and-distribution.md) | Identidades, chaves, pipeline, assinatura local do `SHA256SUMS`, renovação e rotação | pronto (T053); valores públicos pendentes (T005–T008) |
+| [verify-downloads.md](verify-downloads.md) | Como o usuário verifica os downloads em cada SO | pronto (T054); impressão digital pendente (T007) |
 | [rollback.md](rollback.md) | Gatilhos, passos, comunicação e chaves | a criar (T088) |
 | `release-key.asc` | Chave pública OpenPGP de release | a criar (T007) |
 
