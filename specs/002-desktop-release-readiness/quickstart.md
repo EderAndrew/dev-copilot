@@ -22,7 +22,7 @@ pnpm --filter appsdesktop format:check
 pnpm --filter appsdesktop check              # tsc --noEmit
 pnpm --filter appsdesktop test
 pnpm --filter appsdesktop build && pnpm --filter appsdesktop test:dist   # dist sem <style>/style=
-node --test "tooling/release/*.test.mjs"     # manifesto, coleta de pacotes e assinatura Windows
+node --test "tooling/release/*.test.mjs"     # manifesto, coleta de pacotes, plataformas do release e assinatura Windows
 ```
 
 Esperado: tudo verde; `csp_policy` falha se alguém reintroduzir `'unsafe-inline'`. Use Node ≥ 24, como no CI

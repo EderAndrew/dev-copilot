@@ -26,13 +26,13 @@ platform evidence) and FR-032 (declare only what was evidenced), **0.1.0 declare
   Windows/Linux parts of T021, T026 and T047) are **deferred** to a later release, not done. They stay
   unchecked. Checklist items that depend on them are marked ➖ with this decision as the reason.
 - Windows and Linux are listed in `docs/release/v0.1.0/limitations.md` as "não suportado no 0.1.0".
-- Windows and Linux artifacts are not shipped: they are removed from the draft, `latest.json` and
-  `SHA256SUMS` before signing, as described in `docs/release/signing-and-distribution.md` ("Build Intel não
-  validado"). An installed app on those platforms is therefore never offered an update.
-- The Windows half of T005 (Authenticode identity) is deferred with Windows. `release.yml` currently needs
-  that identity: its Windows job fails without the `AZURE_*` secrets and `fail-fast: true` stops the macOS
-  job too. The pipeline therefore needs a way to build only the declared platforms before T055/T057 (pending
-  change).
+- Windows and Linux artifacts are not shipped (see `RELEASE_PLATFORMS` below), so an installed app on those
+  platforms is never offered an update.
+- The Windows half of T005 (Authenticode identity) is deferred with Windows. `release.yml` builds only the
+  targets in the repository variable `RELEASE_PLATFORMS` (`tooling/release/release-platforms.mjs`, with tests).
+  0.1.0 sets `RELEASE_PLATFORMS=macos-aarch64`. Windows, Linux and macOS Intel are then not built, need no
+  signing credentials and stay out of `latest.json` and `SHA256SUMS` without manual post-processing. Set the
+  variable together with T008, before T055/T057.
 
 ## Format: `[ID] [P?] [Story] Description`
 

@@ -64,6 +64,22 @@ Variáveis do environment (não secretas):
 | `AZURE_ARTIFACT_SIGNING_ACCOUNT` | nome da conta de assinatura |
 | `AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE` | nome do perfil de certificado |
 
+### Variável de repositório `RELEASE_PLATFORMS`
+
+Em Settings → Secrets and variables → Actions → **Variables** (aba *Repository*, não a do environment, porque o
+job que a lê roda antes do environment). Não é segredo.
+
+| Valor | Efeito |
+|-------|--------|
+| ausente ou vazio | constrói os quatro alvos: `macos-aarch64`, `macos-x64`, `windows-x64`, `linux-amd64` |
+| lista de alvos ou plataformas, separados por vírgula ou espaço | constrói só esses (`macos` vale pelos dois alvos macOS) |
+| nome desconhecido | o release falha no job `platforms` |
+
+**0.1.0: `RELEASE_PLATFORMS=macos-aarch64`** (decisão de escopo em `specs/002-desktop-release-readiness/tasks.md`).
+Uma plataforma fora da lista não é construída, não precisa das credenciais de assinatura dela e fica fora do
+`latest.json` e do `SHA256SUMS`, sem pós-processamento manual. Declare na lista só o que tem evidência em
+hardware real (FR-032). O valor usado aparece no log do job `platforms` e é registrado no `candidate.md`.
+
 O `GITHUB_TOKEN` do workflow é o único token usado. Nenhum segredo de repositório fica fora do environment.
 
 ### Regras
@@ -97,7 +113,8 @@ O `GITHUB_TOKEN` do workflow é o único token usado. Nenhum segredo de reposit�
 |-----|---------|-----------|--------------|
 | `gates` | `ci.yml` reutilizado | fmt, clippy, testes Rust e frontend, `cargo audit`/`deny`, gitleaks, `pnpm audit`, testes de `tooling/release/`, `dist/` sem estilo inline | qualquer gate da CI falha |
 | `release-config` | `ubuntu-22.04` | `version_consistency`, `updater_config` e `bundle_config` com `RELEASE_TAG` | a tag não bate com a versão, a chave pública do updater ainda é o marcador ou não bate com o ADR-005, ou a configuração de bundle mudou |
-| `build` (×4) | `macos-15` aarch64 e x86_64, `windows-latest`, `ubuntu-22.04`, no environment `release` | confere os segredos antes do build; prepara a assinatura; `tauri build --target <triple> --bundles <formatos>`; verifica as assinaturas; copia os artefatos com nomes canônicos (`collect-bundle.mjs`) | falta segredo, a assinatura, a notarização ou o staple falham, ou falta um artefato ou seu `.sig` |
+| `platforms` | `ubuntu-latest` | monta a matriz do `build` a partir de `RELEASE_PLATFORMS` (`release-platforms.mjs`) | a variável tem um nome desconhecido |
+| `build` (×N) | um job por alvo selecionado: `macos-15` aarch64 e x86_64, `windows-latest`, `ubuntu-22.04`, no environment `release` | confere os segredos antes do build; prepara a assinatura; `tauri build --target <triple> --bundles <formatos>`; verifica as assinaturas; copia os artefatos com nomes canônicos (`collect-bundle.mjs`) | falta segredo, a assinatura, a notarização ou o staple falham, ou falta um artefato ou seu `.sig` |
 | `draft` | `ubuntu-latest` | junta os artefatos, gera `latest.json` e `SHA256SUMS` (`make-manifest.mjs`), atesta a proveniência de cada asset e cria o release **em rascunho** | o manifesto ficaria vazio, um asset fica fora do `SHA256SUMS`, ou já existe release para a tag |
 
 Detalhes por plataforma no job `build`:
@@ -146,7 +163,8 @@ SHA-256, estado de assinatura, notarização, timestamp e atestação).
 
 ### Build Intel não validado
 
-O build macOS x86_64 só é publicado se validado em hardware Intel real (FR-032). Se não for, antes de
+O build macOS x86_64 só é publicado se validado em hardware Intel real (FR-032). O caminho normal é
+deixá-lo fora de `RELEASE_PLATFORMS` antes da tag. Se o rascunho já tiver sido gerado com ele, antes de
 assinar:
 
 ```sh

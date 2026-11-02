@@ -57,35 +57,40 @@ jobs:
           cargo test -p devcopilot-desktop
           --test version_consistency --test updater_config --test bundle_config
 
+  # Targets this release builds. The repository variable RELEASE_PLATFORMS narrows them to the
+  # declared platforms (FR-032); unset builds all. 0.1.0 sets it to `macos-aarch64`
+  # (tasks.md "Scope decision for 0.1.0"). An unknown name fails the release.
+  platforms:
+    name: Release platforms
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - id: select
+        env:
+          RELEASE_PLATFORMS: ${{ vars.RELEASE_PLATFORMS }}
+        run: |
+          set -euo pipefail
+          matrix="$(node tooling/release/release-platforms.mjs --select "${RELEASE_PLATFORMS:-}")"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build and sign (${{ matrix.platform }} ${{ matrix.arch }})
-    needs: [gates, release-config]
+    needs: [gates, release-config, platforms]
     environment: release
     strategy:
       # One failed platform means no release: stop the others early.
       fail-fast: true
-      matrix:
-        include:
-          - os: macos-15
-            platform: macos
-            target: aarch64-apple-darwin
-            arch: aarch64
-            bundles: app,dmg
-          - os: macos-15
-            platform: macos
-            target: x86_64-apple-darwin
-            arch: x64
-            bundles: app,dmg
-          - os: windows-latest
-            platform: windows
-            target: x86_64-pc-windows-msvc
-            arch: x64
-            bundles: nsis
-          - os: ubuntu-22.04
-            platform: linux
-            target: x86_64-unknown-linux-gnu
-            arch: amd64
-            bundles: deb,appimage
+      # Targets from tooling/release/release-platforms.mjs: id, os, platform, target, arch, bundles.
+      matrix: ${{ fromJSON(needs.platforms.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:

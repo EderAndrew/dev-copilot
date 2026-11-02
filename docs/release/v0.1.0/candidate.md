@@ -5,6 +5,7 @@
 
 - Tag: `v0.1.0-rc.N` · Commit: `<sha completo>` · Workflow: <URL da execução>
 - Data do build: `<RFC 3339>`
+- `RELEASE_PLATFORMS`: `macos-aarch64` (alvos construídos, conforme o log do job `platforms`)
 
 | Artefato | SHA-256 | Assinatura | Notarização / timestamp | Atestação |
 |----------|---------|------------|-------------------------|-----------|
