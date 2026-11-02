@@ -23,6 +23,7 @@ Formatos: `specs/002-desktop-release-readiness/contracts/release-evidence.md` e 
 - `measurement-plan.md`: o plano de medição, congelado antes das medições.
 - `measurements.md`: os resultados das medições.
 - `evidence/<plataforma>.md`: as evidências de cada plataforma.
+- `runbook-us3.md`: o roteiro de execução da validação em hardware real (US3).
 - `limitations.md`: as limitações conhecidas.
 - `checklist.md`: o checklist preenchido.
 - `decision.md`: a decisão de publicação.

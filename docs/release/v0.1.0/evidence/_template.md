@@ -47,10 +47,55 @@ Mesma numeração e mesmos resultados esperados de `specs/001-meeting-sessions/a
 | 8 | Provedor remoto: configurar, autorizar, revogar (com proxy) | | | |
 | 9 | Exportação Markdown e JSON | | | |
 | 10 | Exclusão | | | |
-| 11 | Só teclado: iniciar, parar, revisar, exportar | | | |
-| 11b | Leitor de tela anuncia o estado da captura | | | |
+| 11 | Só teclado: iniciar, parar, revisar, exportar | | | Detalhe por leitor na seção Acessibilidade (US4) |
+| 11b | Leitor de tela anuncia o estado da captura | | | Detalhe por leitor na seção Acessibilidade (US4) |
 | 12 | Áudio do sistema (indisponível com motivo onde S1 não aprovou) | | | |
 | 13 | Cofre de credenciais indisponível | | | |
+
+## Acessibilidade (US4)
+
+Preenchido em T071–T073. Só teclado, com o leitor de tela ligado e o monitor desligado ou coberto a partir de
+A2. Copie o anúncio **literalmente** (o que o leitor falou ou mostrou no visualizador de fala). A9 e A10
+precisam de uma versão mais nova no canal de teste e podem ser feitos na rodada de T047. Detalhes e
+pontos de atenção: [`../runbook-us3.md`](../runbook-us3.md) §8.
+
+Versões: <leitor> <versão>.
+
+| # | Passo | <leitor>: resultado | <leitor>: anúncio literal |
+|---|---|---|---|
+| A1 | Nova sessão → consentimento, só teclado | | |
+| A2 | Iniciar: estado **capturando** anunciado | | |
+| A3 | Pausar: estado **pausada** anunciado | | |
+| A4 | Retomar: **capturando** anunciado de novo | | |
+| A5 | Parar: **sem captura** anunciado | | |
+| A6 | Revisar um registro da sessão salva | | |
+| A7 | Exportar (até o diálogo de salvar) | | |
+| A8 | Aviso de verificação de atualizações (primeira execução): encontrado, lido e dispensado | | |
+| A9 | Banner “atualização disponível” anunciado; botão Instalar alcançável | | |
+| A10 | Diálogo de confirmação: foco inicial em “Agora não”, Tab circula dentro, Esc fecha, foco volta ao botão | | |
+
+Estado de captura não anunciado (A2–A5) é `release-blocker`, salvo contorno documentado aprovado pelo
+responsável (T074).
+
+## Medições cronometradas (matriz da 001)
+
+Cinco tentativas por medição, cada uma com um participante que não conhece o app (SC-001) ou com o histórico
+já populado com pelo menos 10 sessões de teste (SC-017). Registre cada tempo. Com 5 tentativas, “≥ 90 %” exige 5/5 dentro da
+meta; com 10, exige 9/10. SC-006: 20 medições por controle, ✅ só com todas ≤ 500 ms.
+
+| Medição | Critério | Tempos medidos | Resultado | Evidência |
+|---------|----------|------------|-----------|-----------|
+| Novo usuário cria e inicia uma sessão (app aberto → indicador "capturando") | ≤ 60 s em ≥ 90 % (SC-001) | | | |
+| Encontrar e abrir uma sessão anterior pelo histórico | ≤ 30 s em ≥ 90 % (SC-017) | | | |
+| Latência de controle iniciar/pausar/parar, com análise ou provedor lento | ≤ 500 ms (SC-006) | | | |
+
+## Casos adicionais da plataforma (US3)
+
+| # | Caso | Resultado | Evidência | Observação |
+|---|------|-----------|-----------|------------|
+| P1 | Primeiro download do modelo de transcrição atrás de rede restritiva ou proxy corporativo | | | O app explica a falha (sem travar nem mensagem genérica). Sem contorno → limitação. Ver roteiro §5 |
+| W1 | *(Windows)* Configuração de privacidade “Permitir que apps da área de trabalho acessem o microfone” desligada | | | |
+| L1 | *(Linux)* Tela em branco do WebKitGTK (research R4) | | | |
 
 ## Atualização (US8)
 
