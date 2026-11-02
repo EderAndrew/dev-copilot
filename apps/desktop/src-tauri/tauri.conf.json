@@ -75,7 +75,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "PENDING-T006-updater-public-key",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhFMjQwNkI2NkQ1NThEQUEKUldTcWpWVnR0Z1lranJIZm5yUy8yOUc5RVliblpCZi9BbG9DV3hRT2ErT2JqTVk5aTR5VGNabisK",
       "endpoints": [
         "https://github.com/EderAndrew/dev-copilot/releases/latest/download/latest.json"
       ],

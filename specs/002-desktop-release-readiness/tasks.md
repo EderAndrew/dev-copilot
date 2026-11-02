@@ -17,6 +17,23 @@ priority. Everything that ships inside the binary (US2 CSP, US8 updater, the met
 before the release candidate is built in US1, and all real-hardware validation (US1 install, US3, US4, US5,
 US8 manual cases) runs on that same signed candidate. Priority labels are kept in each phase header.
 
+## Scope decision for 0.1.0 (2026-11-02)
+
+The project only has macOS Apple Silicon hardware available. Under FR-014 (CI and virtual machines are never
+platform evidence) and FR-032 (declare only what was evidenced), **0.1.0 declares macOS Apple Silicon only**.
+
+- Windows and Linux tasks (T056, T059, T060, T063–T067, T072, T073, T078, T079, T085, T086, and the
+  Windows/Linux parts of T021, T026 and T047) are **deferred** to a later release, not done. They stay
+  unchecked. Checklist items that depend on them are marked ➖ with this decision as the reason.
+- Windows and Linux are listed in `docs/release/v0.1.0/limitations.md` as "não suportado no 0.1.0".
+- Windows and Linux artifacts are not shipped: they are removed from the draft, `latest.json` and
+  `SHA256SUMS` before signing, as described in `docs/release/signing-and-distribution.md` ("Build Intel não
+  validado"). An installed app on those platforms is therefore never offered an update.
+- The Windows half of T005 (Authenticode identity) is deferred with Windows. `release.yml` currently needs
+  that identity: its Windows job fails without the `AZURE_*` secrets and `fail-fast: true` stops the macOS
+  job too. The pipeline therefore needs a way to build only the declared platforms before T055/T057 (pending
+  change).
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: can run in parallel (different files, no dependency on incomplete tasks)
@@ -76,6 +93,11 @@ in parallel with them.
 - [ ] T006 Manual: generate the minisign updater key pair with `pnpm --filter appsdesktop tauri signer generate`.
   Store the private key and its password as secrets of the GitHub environment `release`, plus an encrypted
   offline backup held by the release owner. Record the public key fingerprint in `docs/adr/ADR-005.md`.
+  *2026-11-02: key pair generated outside the repository (`~/.tauri/dev-copilot-updater.key`, password-
+  encrypted, mode 600). The password is in the macOS Passwords app and an encrypted disk image holds the
+  offline copy. Key ID `8E2406B66D558DAA` is recorded in ADR-005 and embedded in `plugins.updater.pubkey`
+  (T039). Still open: the `TAURI_SIGNING_PRIVATE_KEY*` secrets, set when the `release` environment exists
+  (T008).*
 - [ ] T007 Manual: generate the OpenPGP release key, kept on the release owner's machine or token and never
   in CI. Commit the public key as `docs/release/release-key.asc` and publish its fingerprint in `README.md`
   and `docs/adr/ADR-005.md`.
@@ -324,7 +346,7 @@ pending (quickstart §6).
   - Restarts via `AppHandle::restart`.
   Register the plugin with `tauri_plugin_updater::Builder` in `apps/desktop/src-tauri/src/lib.rs` **without**
   adding any capability permission. T029 and T030 must pass.
-- [ ] T039 [US8] Configure `plugins.updater` in `apps/desktop/src-tauri/tauri.conf.json`:
+- [X] T039 [US8] Configure `plugins.updater` in `apps/desktop/src-tauri/tauri.conf.json`:
   - `pubkey`: the public key from T006.
   - `endpoints`: `["https://github.com/EderAndrew/dev-copilot/releases/latest/download/latest.json"]`.
   - Windows `installMode` `passive`.
@@ -333,6 +355,8 @@ pending (quickstart §6).
   `requireSignedVersion: true` are set. `pubkey` holds the marker `PENDING-T006-updater-public-key` until T006.
   With the marker, every check fails with `manifest_invalid` and makes no request, and `updater_config.rs`
   fails when `RELEASE_TAG` is set.*
+  *`pubkey` set on 2026-11-02 from T006 (key ID `8E2406B66D558DAA`, recorded in ADR-005). `updater_config`
+  passes with and without `RELEASE_TAG`.*
 - [X] T039a [US8] Add `apps/desktop/src-tauri/tests/updater_config.rs`. It asserts that
   `plugins.updater.endpoints` is exactly
   `["https://github.com/EderAndrew/dev-copilot/releases/latest/download/latest.json"]`, that every endpoint is
