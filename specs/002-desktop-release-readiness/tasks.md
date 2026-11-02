@@ -646,7 +646,7 @@ source unavailable on every platform.
 **Independent Test**: a dry run with an open blocker yields "não publicar"; the rollback rehearsal in the
 test channel completes within 2 hours without local data loss.
 
-- [ ] T088 [P] [US6] Write `docs/release/rollback.md`:
+- [X] T088 [P] [US6] Write `docs/release/rollback.md`:
   - Triggers: critical defect, security incident, key compromise.
   - Roles.
   - Steps: unpublish or mark assets, republish the previous `latest.json` or remove a platform from it, ship a
@@ -656,6 +656,11 @@ test channel completes within 2 hours without local data loss.
     reinstall).
   - Local data compatibility (newer schema refusal from `docs/local-data.md`; a rollback must never delete or
     migrate user data).
+  *Done in the Phase 10 prep. Version suspension marks N−1 as *latest* again and N as pre-release, so the
+  `releases/latest` endpoint serves N−1's `latest.json` without editing any file. The updater packages of N are
+  also deleted, because an app that checked before the suspension keeps N as `available` and would download
+  it from the old URL. Per-incident template: `docs/release/rollback-record.md`. Scaffolds for T089
+  (`docs/release/v0.1.0/rollback-rehearsal.md`) and T090 (`docs/release/v0.1.0/reproduction.md`).*
 - [ ] T089 [US6] Manual: rehearse the rollback in the test fork (SC-013). Publish N+1, trigger, suspend via
   `latest.json`, publish the notice, and confirm that installed N clients no longer see the update and that
   local sessions are intact. Time it (≤ 2 h) and record it in `docs/release/v0.1.0/rollback-rehearsal.md`.

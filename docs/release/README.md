@@ -10,7 +10,8 @@ pasta valem para todos os releases. Cada release tem uma pasta própria com as e
 | [checklist.md](checklist.md) | Os 12 critérios de publicação, cada um apontando para a evidência | modelo pronto (T011) |
 | [signing-and-distribution.md](signing-and-distribution.md) | Identidades, chaves, pipeline, assinatura local do `SHA256SUMS`, renovação e rotação | pronto (T053); valores públicos pendentes (T005–T008) |
 | [verify-downloads.md](verify-downloads.md) | Como o usuário verifica os downloads em cada SO | pronto (T054); impressão digital pendente (T007) |
-| [rollback.md](rollback.md) | Gatilhos, passos, comunicação e chaves | a criar (T088) |
+| [rollback.md](rollback.md) | Gatilhos, papéis, passos, aviso público, chaves e dados locais | pronto (T088); ensaio pendente (T089) |
+| [rollback-record.md](rollback-record.md) | Modelo do registro de cada acionamento do rollback | modelo pronto (T088) |
 | `release-key.asc` | Chave pública OpenPGP de release | a criar (T007) |
 
 Formatos: `specs/002-desktop-release-readiness/contracts/release-evidence.md` e `release-artifacts.md`.
@@ -26,6 +27,8 @@ Formatos: `specs/002-desktop-release-readiness/contracts/release-evidence.md` e 
 - `runbook-us3.md`: o roteiro de execução da validação em hardware real (US3).
 - `runbook-us5.md`: o roteiro de medição de desempenho e qualidade (US5).
 - `limitations.md`: as limitações conhecidas.
+- `rollback-rehearsal.md`: o ensaio do rollback no canal de teste (SC-013).
+- `reproduction.md`: a reprodução da documentação de release por outra pessoa (SC-012).
 - `checklist.md`: o checklist preenchido.
 - `decision.md`: a decisão de publicação.
 
